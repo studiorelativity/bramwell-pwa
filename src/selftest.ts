@@ -461,6 +461,9 @@ const cases: Case[] = [
     try {
       await gcalCreate({ title: 'x', category: 'work', allDay: true, start: civilToDay(2026, 2, 20), end: civilToDay(2026, 2, 20), repeat: 'none' }, '9', 't')
       if ('recurrence' in (none.calls[0]?.body as object)) return 'repeat "none" still sent a recurrence'
+      const nb = none.calls[0]?.body as { start?: { date?: string }; end?: { date?: string } }
+      if (nb.start?.date !== '2026-02-20') return `start.date: ${nb.start?.date}`
+      if (nb.end?.date !== '2026-02-21') return `a single-day all-day event must go out as 20 -> 21 exclusive, got ${nb.end?.date}`
     } finally { none.restore() }
     return null
   }],
