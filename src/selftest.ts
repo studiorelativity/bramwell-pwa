@@ -1,7 +1,10 @@
 // STAGE 01 — pure self-test over the date core. No DOM. Cases 5–9 are added in Task 4.
 import type { DayNumber, StoredCategory, MoodId } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
-import { today, weekOf, dayAt, _setAnchorForTest } from './state.ts'
+import {
+  today, weekOf, dayAt, _setAnchorForTest, _resetForTest, _flushForTest,
+  prefs, savePrefs, monthState, eventsForMonth, spansForWeek,
+} from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, sanitize, themeCss } from './categories.ts'
 import { getToken, isSignedIn, signOut } from './auth.ts'
 import {
@@ -644,6 +647,93 @@ const cases: Case[] = [
       await signOut()   // idempotent with no token held
       if (g.revoked.length !== 1) return `a second signOut revoked again: ${g.revoked.length}`
     } finally { g.restore() }
+    return null
+  }],
+
+  ['state: cache and prefs persist; a version mismatch discards', () => {
+    const s = stubStorage()
+    try {
+      _resetForTest()
+      savePrefs({ mood: 'cool', fallbackCategory: 'other' })
+      _flushForTest()
+      if (localStorage.getItem('bramwell.prefs.v1') === null) return 'prefs were not written'
+      _resetForTest()
+      if (prefs().mood !== 'cool') return `prefs did not survive a reload: ${JSON.stringify(prefs())}`
+      // A cache blob of the wrong version is discarded, not trusted.
+      localStorage.setItem('bramwell.cache.v1', JSON.stringify({ v: 99, months: { '2026-02': { state: 'ready', events: [{ id: 'x' }], fetchedAt: 1 } } }))
+      _resetForTest()
+      if (monthState('2026-02') !== 'absent') return `stale version survived: ${monthState('2026-02')}`
+      // So is unparseable rubbish.
+      localStorage.setItem('bramwell.cache.v1', '{not json')
+      _resetForTest()
+      if (monthState('2026-02') !== 'absent') return 'unparseable cache did not discard'
+      if (eventsForMonth('2026-02').length !== 0) return 'unparseable cache yielded events'
+    } finally { s.restore(); _resetForTest() }
+    return null
+  }],
+
+  ['state: eventsForMonth resolves category from colorId at read time', () => {
+    const s = stubStorage()
+    try {
+      localStorage.setItem('bramwell.cache.v1', JSON.stringify({
+        v: 1,
+        months: { '2026-02': { state: 'ready', fetchedAt: 1, events: [
+          { id: 'a', title: 'W', allDay: true, colorId: '9', start: civilToDay(2026, 2, 10), end: civilToDay(2026, 2, 10) },
+          { id: 'b', title: 'Unknown', allDay: true, colorId: '1', start: civilToDay(2026, 2, 11), end: civilToDay(2026, 2, 11) },
+          { id: 'c', title: 'None', allDay: true, start: civilToDay(2026, 2, 12), end: civilToDay(2026, 2, 12) },
+        ] } },
+      }))
+      _resetForTest()
+      configure({})
+      if (monthState('2026-02') !== 'ready') return `state: ${monthState('2026-02')}`
+      const evs = eventsForMonth('2026-02')
+      if (evs[0]?.category !== 'work') return `colorId 9 -> ${evs[0]?.category}`
+      if (evs[1]?.category !== 'other') return `unknown colorId -> ${evs[1]?.category}`
+      if (evs[2]?.category !== 'other') return `absent colorId -> ${evs[2]?.category}`
+      // Re-resolution, not a stored value: change the prefs and read again without refetching.
+      configure({ categories: [{ name: 'ops', label: 'Ops', colorId: '9' }, { name: 'misc', label: 'Misc', colorId: '8' }], fallbackCategory: 'misc' })
+      const again = eventsForMonth('2026-02')
+      if (again[0]?.category !== 'ops') return `after reconfigure: ${again[0]?.category}`
+      if (again[1]?.category !== 'misc') return `deleted category did not fall back: ${again[1]?.category}`
+      configure({})
+    } finally { s.restore(); _resetForTest() }
+    return null
+  }],
+
+  ['state: spansForWeek clips, flags continuation, dedupes across a month boundary', () => {
+    const s = stubStorage()
+    try {
+      // 2026-01-26 (Mon) .. 2026-02-01 (Sun) is one row straddling the month boundary.
+      const anchor = civilToDay(2026, 1, 28)
+      const crossing = { id: 'cross', title: 'Long', allDay: true, colorId: '9', start: civilToDay(2026, 1, 30), end: civilToDay(2026, 2, 3) }
+      const timed = { id: 'timed', title: 'Late', allDay: false, colorId: '9', startMin: 1320, endMin: 30, start: civilToDay(2026, 1, 27), end: civilToDay(2026, 1, 28) }
+      const before = { id: 'before', title: 'Earlier', allDay: true, colorId: '9', start: civilToDay(2026, 1, 20), end: civilToDay(2026, 1, 27) }
+      localStorage.setItem('bramwell.cache.v1', JSON.stringify({
+        v: 1,
+        months: {
+          // An event crossing the boundary is stored in BOTH months, as types.ts requires.
+          '2026-01': { state: 'ready', fetchedAt: 1, events: [crossing, timed, before] },
+          '2026-02': { state: 'ready', fetchedAt: 1, events: [crossing] },
+        },
+      }))
+      _resetForTest()
+      configure({})
+      _setAnchorForTest(anchor)
+      const spans = spansForWeek(asWeek(0))
+      if (spans.filter(sp => sp.event.id === 'cross').length !== 1) return `crossing event drew ${spans.filter(sp => sp.event.id === 'cross').length} times`
+      const c = spans.find(sp => sp.event.id === 'cross')
+      if (c?.from !== 4) return `from: ${c?.from} (Fri the 30th is offset 4)`
+      if (c?.to !== 6) return `to: ${c?.to} (clipped to Sunday)`
+      if (c?.continuesBefore !== false) return 'continuesBefore should be false — it starts in this row'
+      if (c?.continuesAfter !== true) return 'continuesAfter should be true — it runs past Sunday'
+      const b = spans.find(sp => sp.event.id === 'before')
+      if (b?.from !== 0 || b.to !== 1) return `clipped span: ${b?.from}..${b?.to}`
+      if (b?.continuesBefore !== true) return 'continuesBefore should be true — it started last row'
+      // A timed event crossing midnight renders on its start day only.
+      const t = spans.find(sp => sp.event.id === 'timed')
+      if (t?.from !== 1 || t.to !== 1) return `timed span: ${t?.from}..${t?.to} — a timed event renders on its start day`
+      if (t?.continuesAfter !== false) return 'a midnight-crossing timed event claimed a continuation'
+    } finally { s.restore(); _resetForTest() }
     return null
   }],
 ]
