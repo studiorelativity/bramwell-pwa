@@ -33,7 +33,14 @@ let token: string | null = null
 let expiresAt = 0
 let pending: Promise<string> | null = null
 let client: TokenClient | null = null
-let settle: ((r: TokenResponse) => void) | null = null
+/** FIFO. GIS invokes the client callback exactly once per requestAccessToken, so the oldest
+ *  waiting settler owns the next response. A single slot cannot hold a gesture and a quiet
+ *  renewal at once: the second would overwrite the first and hang it forever. */
+const settlers: ((r: TokenResponse) => void)[] = []
+
+function deliver(r: TokenResponse): void {
+  settlers.shift()?.(r)
+}
 
 /** globalThis.google IS window.google in a browser. Read inside the function, never at
  *  module scope, so this module survives `npm run selftest` under bare node. */
@@ -65,8 +72,8 @@ async function ensureClient(): Promise<TokenClient> {
   client = g.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: SCOPE,
-    callback: r => settle?.(r),
-    error_callback: e => settle?.({ error: e.type ?? 'popup_failed' }),
+    callback: r => deliver(r),
+    error_callback: e => deliver({ error: e.type ?? 'popup_failed' }),
   })
   return client
 }
@@ -74,8 +81,11 @@ async function ensureClient(): Promise<TokenClient> {
 function request(prompt: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     ensureClient().then(c => {
-      settle = r => {
-        settle = null
+      let done = false
+      // Pushed immediately before requestAccessToken, so queue order is request order.
+      settlers.push(r => {
+        if (done) return
+        done = true
         if (r.access_token === undefined) {
           token = null
           expiresAt = 0
@@ -85,7 +95,7 @@ function request(prompt: string): Promise<string> {
         token = r.access_token
         expiresAt = Date.now() + (r.expires_in ?? 3600) * 1000 - SKEW_MS
         resolve(token)
-      }
+      })
       c.requestAccessToken({ prompt })
     }, reject)
   })
@@ -102,9 +112,12 @@ export function getToken(forceRefresh = false): Promise<string> {
 }
 
 /** Called from a click, so GIS may raise the account picker or the consent screen.
- *  The gesture is the only difference from a quiet renewal. */
+ *  The gesture is the only difference from a quiet renewal — and it is why this never joins
+ *  the `pending` renewal: that request was issued without user activation, so returning it
+ *  would swallow the click and, with no prior grant, prompt:'' could never open a popup.
+ *  A gesture therefore always issues its own requestAccessToken. */
 export function signIn(): Promise<void> {
-  return getToken(true).then(() => undefined)
+  return request('').then(() => undefined)
 }
 
 /** Revokes, never only clears: a local clear would quiet-renew straight back in.

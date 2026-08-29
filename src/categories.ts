@@ -83,6 +83,10 @@ export function brighten(hex: string): string {
 
 const HEX_RE = /^#[0-9a-f]{6}$/i
 const COLOR_ID_RE = /^(?:[1-9]|1[01])$/
+/** SPEC: a name is the slug of the label. It is interpolated unescaped into a
+ *  `[data-cat="…"]` selector and a `--cat-…` property by themeCss(), so a corrupted blob
+ *  must not be able to reach the sheet with a quote, a bracket or whitespace in it. */
+const NAME_RE = /^[a-z0-9-]{1,32}$/
 
 /** Untrusted-blob loader: drops invalid rows, dedupes name and colorId, caps at 11, first writer wins. */
 export function sanitize(raw: unknown): StoredCategory[] {
@@ -95,7 +99,7 @@ export function sanitize(raw: unknown): StoredCategory[] {
     if (typeof row !== 'object' || row === null) continue
     const r = row as Record<string, unknown>
     const { name, label, colorId, displayHex } = r
-    if (typeof name !== 'string' || name === '') continue
+    if (typeof name !== 'string' || !NAME_RE.test(name)) continue
     if (typeof label !== 'string' || label === '') continue
     if (typeof colorId !== 'string' || !COLOR_ID_RE.test(colorId)) continue
     if (names.has(name) || colorIds.has(colorId)) continue

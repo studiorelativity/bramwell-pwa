@@ -1,5 +1,9 @@
-// STAGE 01 — pure self-test over the date core. No DOM. Cases 5–9 are added in Task 4.
-import type { DayNumber, StoredCategory, MoodId } from './types.ts'
+// STAGE 02 — the whole in-repo suite, run by `npm run selftest` under bare node and by the
+// in-app selftest panel. No DOM. Sequential cases over the date core, categories and theme,
+// gcal wire mapping and transport, auth token handling, and state's cache, lazy loading,
+// 401 retry and optimistic writes. Cases share module state, so each restores what it stubs
+// (fetch, localStorage, GIS), the anchor it pins, and any token it acquired.
+import type { DayNumber, EventDraft, StoredCategory, MoodId } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
 import {
   today, weekOf, dayAt, _setAnchorForTest, _resetForTest, _flushForTest,
@@ -8,7 +12,7 @@ import {
   createEvent, updateEvent, deleteEvent,
 } from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, sanitize, themeCss } from './categories.ts'
-import { getToken, isSignedIn, signOut } from './auth.ts'
+import { getToken, isSignedIn, signIn, signOut } from './auth.ts'
 import {
   createEvent as gcalCreate, deleteEvent as gcalDelete, updateEvent as gcalUpdate,
   GcalError, listMonth, MAX_RESULTS,
@@ -18,7 +22,7 @@ export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
 type Case = [name: string, run: () => string | null | Promise<string | null>] // null = pass, string = failure detail
 
-export type StubResponse = { status?: number; body?: unknown }
+export type StubResponse = { status?: number; body?: unknown; delayMs?: number }
 export type FetchCall = { url: string; method: string; headers: Record<string, string>; body: unknown }
 
 /** Swaps globalThis.fetch. Responses are consumed in order; the last one repeats. */
@@ -37,11 +41,13 @@ function stubFetch(responses: StubResponse[]): { calls: FetchCall[]; restore: ()
     })
     const r = responses[Math.min(i++, responses.length - 1)] ?? {}
     const status = r.status ?? 200
-    if (status === 204) return Promise.resolve(new Response(null, { status }))
-    return Promise.resolve(new Response(JSON.stringify(r.body ?? {}), {
-      status,
-      headers: { 'content-type': 'application/json' },
-    }))
+    const make = (): Response => status === 204
+      ? new Response(null, { status })
+      : new Response(JSON.stringify(r.body ?? {}), { status, headers: { 'content-type': 'application/json' } })
+    // delayMs holds a response open so a later call can be observed while it is still in flight.
+    const delayMs = r.delayMs
+    if (delayMs !== undefined) return new Promise<Response>(done => { setTimeout(() => done(make()), delayMs) })
+    return Promise.resolve(make())
   }
   // why: the stub matches fetch's runtime contract, not its full overloaded type
   globalThis.fetch = fake as unknown as typeof fetch
@@ -224,6 +230,8 @@ const cases: Case[] = [
       { name: 'blank', label: '', colorId: '2' },                  // drop: empty label
       { name: 'bad', label: 'Bad', colorId: '12' },                // drop: colorId out of range
       { name: 'alsobad', label: 'Also', colorId: 9 },              // drop: colorId not a string
+      { name: 'ev"il]', label: 'Injected', colorId: '6' },          // drop: a name reaching a CSS selector
+      { name: 'Work Two', label: 'Spaced', colorId: '7' },          // drop: not a slug
       { name: 'work', label: 'Dup name', colorId: '3' },           // drop: duplicate name
       { name: 'dupcolor', label: 'Dup colour', colorId: '9' },     // drop: duplicate colorId
       { name: 'hexbad', label: 'Hex', colorId: '4', displayHex: 'red' },   // keep, field dropped
@@ -231,6 +239,7 @@ const cases: Case[] = [
     ])
     const got = rows.map(r => r.name).join(',')
     if (got !== 'work,hexbad,hexok') return `kept: ${got}`
+    if (rows.some(r => !/^[a-z0-9-]+$/.test(r.name))) return `a name that is not a slug survived: ${rows.map(r => r.name).join(',')}`
     if ('displayHex' in rows[1]!) return 'invalid displayHex was kept'
     if (rows[2]?.displayHex !== '#ABCDEF') return `valid displayHex: ${rows[2]?.displayHex}`
     const many = sanitize(Array.from({ length: 20 }, (_, i) => ({ name: `n${i}`, label: `L${i}`, colorId: String((i % 11) + 1) })))
@@ -600,24 +609,21 @@ const cases: Case[] = [
       if (await getToken(true) !== 'tok-2') return 'forceRefresh did not re-request'
       const n3: number = g.prompts.length
       if (n3 !== 2) return `forceRefresh requests: ${n3}`
-      await signOut()
-    } finally { g.restore() }
+    } finally { await signOut(); g.restore() }
     // A token whose expires_in has already been consumed by the skew is re-requested.
     const short = stubGis([{ access_token: 'x-1', expires_in: 0 }, { access_token: 'x-2', expires_in: 3600 }])
     try {
       if (await getToken() !== 'x-1') return 'short-lived token was not returned'
       if (isSignedIn()) return 'a token inside the 60s skew still reads as signed in'
       if (await getToken() !== 'x-2') return 'an expired token was served from cache'
-      await signOut()
-    } finally { short.restore() }
+    } finally { await signOut(); short.restore() }
     // Concurrent callers share one in-flight renewal rather than racing three popups.
     const dedupe = stubGis([{ access_token: 'd-1', expires_in: 3600 }])
     try {
       const [p, q, r] = await Promise.all([getToken(), getToken(), getToken()])
       if (p !== 'd-1' || q !== 'd-1' || r !== 'd-1') return `concurrent tokens: ${p}/${q}/${r}`
       if (dedupe.prompts.length !== 1) return `concurrent callers made ${dedupe.prompts.length} requests`
-      await signOut()
-    } finally { dedupe.restore() }
+    } finally { await signOut(); dedupe.restore() }
     return null
   }],
 
@@ -634,8 +640,7 @@ const cases: Case[] = [
       if (g.prompts.some(p => p !== '')) return `a failure escalated to a prompt: ${g.prompts.join(',')}`
       // The failure is not sticky: a later request (the user's click) can still succeed.
       if (await getToken() !== 'later') return 'a failed renewal poisoned the module'
-      await signOut()
-    } finally { g.restore() }
+    } finally { await signOut(); g.restore() }
     return null
   }],
 
@@ -703,6 +708,7 @@ const cases: Case[] = [
   }],
 
   ['state: spansForWeek clips, flags continuation, dedupes across a month boundary', () => {
+    const savedAnchor = today()
     const s = stubStorage()
     try {
       // 2026-01-26 (Mon) .. 2026-02-01 (Sun) is one row straddling the month boundary.
@@ -735,11 +741,12 @@ const cases: Case[] = [
       const t = spans.find(sp => sp.event.id === 'timed')
       if (t?.from !== 1 || t.to !== 1) return `timed span: ${t?.from}..${t?.to} — a timed event renders on its start day`
       if (t?.continuesAfter !== false) return 'a midnight-crossing timed event claimed a continuation'
-    } finally { s.restore(); _resetForTest() }
+    } finally { s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
 
   ['state: ensureMonthsFor fetches absent months, skips fresh ones, coalesces', async () => {
+    const savedAnchor = today()
     const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
     const f = stubFetch([{ body: { items: [{ id: 'e1', summary: 'E', start: { date: '2026-02-11' }, end: { date: '2026-02-12' } }] } }])
     try {
@@ -768,12 +775,12 @@ const cases: Case[] = [
       ensureMonthsFor([asWeek(0)])   // Mon 2026-01-26 .. Sun 2026-02-01
       await _settleForTest()
       if (f.calls.length !== 2) return `a straddling week fetched ${f.calls.length} months`
-      await signOut()
-    } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
+    } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
 
   ['state: a failed refresh sets error and keeps the prior events', async () => {
+    const savedAnchor = today()
     const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
     try {
       localStorage.setItem('bramwell.cache.v1', JSON.stringify({
@@ -789,12 +796,12 @@ const cases: Case[] = [
         if (monthState('2026-02') !== 'error') return `state after failure: ${monthState('2026-02')}`
         if (eventsForMonth('2026-02')[0]?.id !== 'old') return 'a failed refresh blanked a month that was on screen'
       } finally { f.restore() }
-      await signOut()
-    } finally { g.restore(); s.restore(); _resetForTest() }
+    } finally { await signOut(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
 
   ['state: withToken retries a 401 exactly once with a fresh token', async () => {
+    const savedAnchor = today()
     const s = stubStorage()
     const g = stubGis([{ access_token: 'stale', expires_in: 3600 }, { access_token: 'fresh', expires_in: 3600 }])
     const f = stubFetch([{ status: 401, body: {} }, { body: { items: [] } }])
@@ -806,8 +813,7 @@ const cases: Case[] = [
       if (f.calls[0]?.headers['authorization'] !== 'Bearer stale') return `first token: ${f.calls[0]?.headers['authorization']}`
       if (f.calls[1]?.headers['authorization'] !== 'Bearer fresh') return `retry token: ${f.calls[1]?.headers['authorization']}`
       if (monthState('2026-02') !== 'ready') return `state: ${monthState('2026-02')}`
-      await signOut()
-    } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
+    } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     // A second 401 surfaces rather than looping.
     const s2 = stubStorage()
     const g2 = stubGis([{ access_token: 'a', expires_in: 3600 }, { access_token: 'b', expires_in: 3600 }])
@@ -818,12 +824,12 @@ const cases: Case[] = [
       await _settleForTest()
       if (f2.calls.length !== 2) return `a repeated 401 made ${f2.calls.length} calls`
       if (monthState('2026-02') !== 'error') return `a repeated 401 left state ${monthState('2026-02')}`
-      await signOut()
-    } finally { f2.restore(); g2.restore(); s2.restore(); _resetForTest() }
+    } finally { await signOut(); f2.restore(); g2.restore(); s2.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
 
   ['state: onCacheChange notifies with changed keys and unsubscribes', async () => {
+    const savedAnchor = today()
     const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
     const f = stubFetch([{ body: { items: [] } }])
     try {
@@ -840,12 +846,12 @@ const cases: Case[] = [
       ensureMonthsFor([asWeek(0)])
       await _settleForTest()
       if (seen.length !== before) return 'an unsubscribed listener was still called'
-      await signOut()
-    } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
+    } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
 
   ['state: create applies optimistically, then reconciles from the server', async () => {
+    const savedAnchor = today()
     const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
     const f = stubFetch([
       { body: { id: 'real-1', summary: 'Trip', colorId: '9', start: { date: '2026-02-20' }, end: { date: '2026-02-23' } } },
@@ -877,12 +883,12 @@ const cases: Case[] = [
       // The colorId came from the category name, resolved by state.ts, not by gcal.ts.
       if ((f.calls[0]?.body as { colorId?: string }).colorId !== '9') return 'colorId was not resolved from the category'
       if (f.calls[1]?.method !== 'GET') return 'the touched month was not refetched'
-      await signOut()
-    } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
+    } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
 
   ['state: a failed create rolls the overlay back and rethrows', async () => {
+    const savedAnchor = today()
     const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
     const f = stubFetch([{ status: 403, body: { error: { errors: [{ reason: 'insufficientPermissions' }] } } }])
     try {
@@ -897,12 +903,12 @@ const cases: Case[] = [
       const after = eventsForMonth('2026-02')
       if (after.length !== before) return `rollback left ${after.length - before} extra event(s)`
       if (after.some(e => e.title === 'Doomed')) return 'the optimistic create survived the failure'
-      await signOut()
-    } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
+    } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
 
   ['state: scope picks the id, and a series write stales every resident month', async () => {
+    const savedAnchor = today()
     const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
     try {
       const inst = { id: 'inst-1', recurringEventId: 'series-1', title: 'Weekly', allDay: true, colorId: '9', start: civilToDay(2026, 2, 11), end: civilToDay(2026, 2, 11) }
@@ -948,8 +954,145 @@ const cases: Case[] = [
         if (!(del.calls[0]?.url ?? '').endsWith('/events/series-1')) return `delete url: ${del.calls[0]?.url}`
         if (eventsForMonth('2026-02').some(e => e.id === 'inst-1')) return 'the deleted event survived'
       } finally { del.restore() }
+    } finally { await signOut(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
+    return null
+  }],
+  ['state: a write forces a fresh fetch instead of joining the load already in flight', async () => {
+    const savedAnchor = today()
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    const oldWire = { id: 'old-1', summary: 'Old', colorId: '9', start: { date: '2026-02-20' }, end: { date: '2026-02-21' } }
+    const newWire = { id: 'real-9', summary: 'New', colorId: '9', start: { date: '2026-02-21' }, end: { date: '2026-02-22' } }
+    const f = stubFetch([
+      // GET 1: issued before the POST and held open past it, so its body CANNOT carry the write.
+      { delayMs: 20, body: { items: [oldWire] } },
+      { body: newWire },                              // POST
+      { body: { items: [oldWire, newWire] } },        // GET 2: the forced refetch, issued after the POST
+    ])
+    try {
+      localStorage.setItem('bramwell.cache.v1', JSON.stringify({
+        v: 1,
+        months: {
+          // ready but stale, so ensureMonthsFor starts a load rather than skipping the month.
+          '2026-02': {
+            state: 'ready', fetchedAt: Date.now() - 10 * 60_000,
+            events: [{ id: 'old-1', title: 'Old', allDay: true, colorId: '9', start: civilToDay(2026, 2, 20), end: civilToDay(2026, 2, 20) }],
+          },
+        },
+      }))
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      ensureMonthsFor([asWeek(0)])
+      if (monthState('2026-02') !== 'loading') return `no load in flight: ${monthState('2026-02')}`
+      const saved = await createEvent({
+        title: 'New', category: 'work', allDay: true,
+        start: civilToDay(2026, 2, 21), end: civilToDay(2026, 2, 21), repeat: 'none',
+      })
+      if (saved.id !== 'real-9') return `created id: ${saved.id}`
+      const ids = eventsForMonth('2026-02').map(e => e.id).join(',')
+      if (!ids.split(',').includes('real-9')) return `the write vanished behind the in-flight load: ${ids || 'none'}`
+      const methods = f.calls.map(c => c.method).join(',')
+      if (methods !== 'GET,POST,GET') return `call sequence: ${methods} — the refetch must not join the earlier GET`
+      await _settleForTest()
+    } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
+    return null
+  }],
+
+  ['state: an edit never sends recurrence, and a series edit never sends dates', async () => {
+    const savedAnchor = today()
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    try {
+      const inst = { id: 'inst-9', recurringEventId: 'series-9', title: 'Weekly', allDay: true, colorId: '9', start: civilToDay(2026, 2, 25), end: civilToDay(2026, 2, 25) }
+      const seed = () => {
+        localStorage.setItem('bramwell.cache.v1', JSON.stringify({
+          v: 1, months: { '2026-02': { state: 'ready', fetchedAt: Date.now(), events: [inst] } },
+        }))
+        _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      }
+      // The editor's draft still carries `repeat`; state.ts must not forward it.
+      const draft: EventDraft = {
+        title: 'Renamed', category: 'work', notes: 'n', allDay: true,
+        start: civilToDay(2026, 2, 25), end: civilToDay(2026, 2, 25), repeat: 'weekly',
+      }
+      seed()
+      const one = stubFetch([
+        { body: { id: 'inst-9', summary: 'Renamed', colorId: '9', start: { date: '2026-02-25' }, end: { date: '2026-02-26' } } },
+        { body: { items: [] } },
+      ])
+      try {
+        await updateEvent('inst-9', draft, 'instance')
+        const body = (one.calls[0]?.body ?? {}) as Record<string, unknown>
+        if ('recurrence' in body) return 'an instance edit sent recurrence against an instance id'
+        if (body['summary'] !== 'Renamed') return `instance summary: ${String(body['summary'])}`
+        if (!('start' in body) || !('end' in body)) return 'an instance edit dropped its own dates'
+      } finally { one.restore() }
+      seed()
+      const many = stubFetch([
+        // The master starts weeks before the edited occurrence; a date write here would move it.
+        { body: { id: 'series-9', summary: 'Renamed', colorId: '9', start: { date: '2026-02-04' }, end: { date: '2026-02-05' } } },
+        { body: { items: [] } },
+      ])
+      try {
+        await updateEvent('inst-9', draft, 'series')
+        const body = (many.calls[0]?.body ?? {}) as Record<string, unknown>
+        if ('recurrence' in body) return 'a series edit sent recurrence'
+        if ('start' in body || 'end' in body) return 'a series edit rewrote the master dates from one occurrence'
+        if (body['summary'] !== 'Renamed') return `series summary: ${String(body['summary'])}`
+        if (body['colorId'] !== '9') return `series colorId: ${String(body['colorId'])}`
+        if (body['description'] !== 'n') return `series notes: ${String(body['description'])}`
+      } finally { many.restore() }
+    } finally { await signOut(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
+    return null
+  }],
+
+  ['auth: a gesture issues its own request rather than joining a quiet renewal', async () => {
+    // A GIS stub that DEFERS its callback, so two requests are genuinely in flight at once.
+    const prompts: string[] = []
+    const held: { cb: ((r: StubToken) => void) | null } = { cb: null }
+    const fake = {
+      accounts: {
+        oauth2: {
+          initTokenClient: (cfg: { callback: (r: StubToken) => void }) => {
+            held.cb = cfg.callback
+            return { requestAccessToken: (req?: { prompt?: string }) => { prompts.push(req?.prompt ?? '<none>') } }
+          },
+          revoke: (_t: string, done?: () => void) => { done?.() },
+        },
+      },
+    }
+    const had = 'google' in globalThis
+    const real = had ? (globalThis as { google?: unknown }).google : undefined
+    Object.defineProperty(globalThis, 'google', { value: fake, configurable: true, writable: true })
+    const tick = () => new Promise<void>(r => { setTimeout(r, 0) })
+    try {
+      // (a) concurrent quiet renewals still share ONE request.
+      const a = getToken(), b = getToken(), c = getToken()
+      await tick()
+      // Widened to number: otherwise the first check narrows the literal type and the second
+      // comparison is rejected as having no overlap.
+      const quiet: number = prompts.length
+      if (quiet !== 1) return `three concurrent getToken() made ${quiet} requests`
+      // (b) a gesture raised in that window issues its OWN request rather than joining it.
+      const gesture = signIn()
+      await tick()
+      const total: number = prompts.length
+      if (total !== 2) return `a gesture during a quiet renewal made ${total} requests in total`
+      // FIFO: the quiet renewal asked first, so it owns the first reply.
+      held.cb?.({ access_token: 'quiet', expires_in: 3600 })
+      const [ta, tb, tc] = await Promise.all([a, b, c])
+      if (ta !== 'quiet' || tb !== 'quiet' || tc !== 'quiet') return `quiet renewal tokens: ${ta}/${tb}/${tc}`
+      held.cb?.({ access_token: 'gesture', expires_in: 3600 })
+      // A single settle slot would have been overwritten, leaving this pending forever.
+      const settled = await Promise.race([
+        gesture.then(() => 'ok'),
+        new Promise<string>(r => { setTimeout(() => r('never'), 250) }),
+      ])
+      if (settled !== 'ok') return 'the gesture promise never settled — its settler was overwritten'
+      if (!isSignedIn()) return 'the gesture left no live token'
+      if (await getToken() !== 'gesture') return 'the token held is not the gesture token'
+    } finally {
       await signOut()
-    } finally { g.restore(); s.restore(); _resetForTest() }
+      if (had) Object.defineProperty(globalThis, 'google', { value: real, configurable: true, writable: true })
+      else Reflect.deleteProperty(globalThis as object, 'google')
+    }
     return null
   }],
 ]

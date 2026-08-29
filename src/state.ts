@@ -1,5 +1,9 @@
-// STAGE 01 — event cache, today() anchor, DayNumber<->WeekIndex math, persistence, write orchestration, demo.
-// Only the anchor and the layout conversion are implemented in stage 01.
+// STAGE 02 — the event cache and every write to it: the today() anchor, the
+// DayNumber<->WeekIndex layout conversion, localStorage persistence of cache and prefs,
+// month reads (eventsForMonth / spansForWeek), lazy month loading with staleness and
+// coalescing, the 401 re-auth retry, and optimistic create/update/delete with rollback.
+// DOM-free: it notifies through onCacheChange and rethrows rather than toasting.
+// Only enableDemo() is still unimplemented (stage 06).
 import type {
   DayNumber, WeekIndex, DayOffset, MonthKey, MonthLoadState, MonthEntry, CalendarEvent,
   EventDraft, EventSpan, EventCache, StoredEvent, PendingWrite, Prefs, WriteScope,
@@ -263,10 +267,8 @@ function needsFetch(key: MonthKey): boolean {
   return true   // absent | error
 }
 
-function fetchMonth(key: MonthKey): Promise<void> {
-  const running = inflight.get(key)
-  if (running !== undefined) return running
-  if (!needsFetch(key)) return Promise.resolve()
+/** Unconditional: staleness and coalescing are decided by fetchMonth, never here. */
+function startFetch(key: MonthKey): Promise<void> {
   const prior = cache.months[key]
   cache.months[key] = { state: 'loading', events: prior?.events ?? [], fetchedAt: prior?.fetchedAt ?? 0 }
   notify([key])
@@ -288,17 +290,25 @@ function fetchMonth(key: MonthKey): Promise<void> {
   return p
 }
 
-async function refetch(keys: MonthKey[]): Promise<void> {
-  for (const k of keys) {
-    const m = cache.months[k]
-    if (m !== undefined) m.fetchedAt = 0
+/** `force` is the post-write path. A request already in flight was issued BEFORE the write
+ *  reached Google, so it cannot carry the result: a forced call queues behind it and then
+ *  starts its own, rather than joining it, and skips the staleness check. The requeue never
+ *  recurses — once the awaited promise settles its `finally` has cleared `inflight`, so it
+ *  either starts a fetch or joins one that was itself issued after the write. */
+function fetchMonth(key: MonthKey, force = false): Promise<void> {
+  const running = inflight.get(key)
+  if (running !== undefined) {
+    if (!force) return running
+    const behind = (): Promise<void> => inflight.get(key) ?? startFetch(key)
+    return running.then(behind, behind)
   }
-  await Promise.all(keys.map(k => fetchMonth(k)))
+  if (!force && !needsFetch(key)) return Promise.resolve()
+  return startFetch(key)
 }
 
-/** A series write invalidates every month held, not just the ones it touched. */
-function markAllStale(): void {
-  for (const m of Object.values(cache.months)) m.fetchedAt = 0
+/** The one staling rule: a write forces its months, whatever their fetchedAt says. */
+async function refetch(keys: MonthKey[]): Promise<void> {
+  await Promise.all(keys.map(k => fetchMonth(k, true)))
 }
 
 /** Stage 03 owns *when* to call this; stage 02 owns the rule. */
@@ -380,10 +390,23 @@ export async function updateEvent(id: string, draft: EventDraft, scope: WriteSco
   try {
     assertOnline()
     const wireId = scope === 'series' ? (prior.recurringEventId ?? prior.id) : prior.id
-    const saved = await withToken(t => gcalUpdate(wireId, draft, colorId, t))
+    // gcalUpdate takes CHANGED FIELDS ONLY, so the changes are built here rather than passing
+    // the draft. `repeat` is always omitted: DECISIONS "In force — auth and wire" — "`repeat`
+    // is disabled when editing an existing event" — and Google rejects an RRULE PATCHed
+    // against an instance id. A series edit also omits the dates: `wireId` is then the series
+    // master, and writing this occurrence's start/end would move the whole series onto it.
+    const changes: Partial<EventDraft> = { title: draft.title }
+    if (draft.notes !== undefined) changes.notes = draft.notes
+    if (scope !== 'series') {
+      changes.allDay = draft.allDay
+      changes.start = draft.start
+      changes.end = draft.end
+      if (draft.startMin !== undefined) changes.startMin = draft.startMin
+      if (draft.endMin !== undefined) changes.endMin = draft.endMin
+    }
+    const saved = await withToken(t => gcalUpdate(wireId, changes, colorId, t))
     pending.delete(id)
     if (scope === 'series') {
-      markAllStale()
       await refetch(Object.keys(cache.months))
     } else {
       await refetch([...new Set([...touched, ...monthsSpanned(saved.start, saved.end)])])
@@ -409,7 +432,6 @@ export async function deleteEvent(id: string, scope: WriteScope): Promise<void> 
     await withToken(t => gcalDelete(wireId, t))
     pending.delete(id)
     if (scope === 'series') {
-      markAllStale()
       await refetch(Object.keys(cache.months))
     } else {
       await refetch(touched)
