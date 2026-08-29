@@ -128,6 +128,17 @@ bar treatment, restraint).
 - Event bars: category colour at ~16% as fill, full colour for text and a
   3px left spine, 5px radius. Dark mode uses brightened category variants
   (light hues fail contrast on tinted dark fills).
+- **The four band tokens are `--band-a`, `--band-a-end`, `--band-b`,
+  `--band-b-end`** — month parity (`month % 2`) crossed with weekday/weekend.
+  A cell carries `data-band="a|b"` and `data-weekend`, so a week straddling a
+  month boundary shows both bands without special-casing. Keeping the weekend
+  shade as a token rather than an opacity is what stops moods reaching past
+  `--surface` and the bands.
+- **The ladder is fixed; a mood shifts hue and temperature only** — that is
+  what "band contrast is a property of the set" means. Dark, relative to the
+  ground: `--band-a-end` +2.5, `--band-a` +4, `--band-b-end` +4.5, `--band-b`
+  +6 points of lightness. Light inverts the surface logic (ground mid-light,
+  tiles lighter) at the same step ratios.
 - Restraint rule: the user's commitments are the only strong colour on
   screen. Mood tints only move the quiet ground beneath them.
 
@@ -157,6 +168,16 @@ the add/edit form, the habit checklist (`HABITS.md`), and the journal link
   `--ease-out: cubic-bezier(0.22, 1, 0.36, 1)`,
   `--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1)`. **No transition or
   animation value may appear outside the token layer.**
+- **Carve-out: the scroll engine's physics constants are not motion tokens.**
+  `PROJECT_MS`, `SETTLE_BASE/PER_WEEK/MAX_MS`, `WHEEL_GAIN`, `WHEEL_IDLE_MS`
+  and `easeOutCubic` drive imperative rAF math, not CSS transitions; they
+  cannot be expressed as custom properties and "Perpetual scroll mechanics"
+  requires them at the top of `scroll.ts`. The boundary: **a value that
+  drives a CSS transition or animation belongs in `motion.css`; a value that
+  drives per-frame arithmetic belongs in `scroll.ts`.** No third home, and
+  neither kind may appear as a literal at a use site.
+  (Stage 04 note: the expand row-height animation may be driven either way;
+  whichever it is decides which home its duration lives in.)
 - Hover enters `--t-fast --ease-out`, leaves `--t-base`. Expand runs
   `--t-open --ease-spring`; content staggers in 40ms apart (fade + 6px
   rise). Collapse runs `--t-base --ease-out`, content fades first, no
@@ -327,6 +348,54 @@ Entry: "Try the demo" on first-run, or `?demo`.
   on rows, `preventDefault` on `dblclick` and Safari's
   `gesturestart/change/end`. (`user-scalable=no` alone does nothing on
   iOS; the meta stays for installed-PWA and Android.)
+### Scroll engine API
+
+```
+scroll.mount(root: HTMLElement, host: ScrollHost): ScrollController
+ScrollHost      = { fillRow(node, week), onDock(week, day), onRangeChange(weeks) }
+ScrollController= { goToDay(day, animate), setSnapStep(15|30|45),
+                    invalidate(weeks?), destroy() }
+render.renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[]): void
+render.packLanes(spans: EventSpan[]): PackedSpan[]
+render.renderHeader(node: HTMLElement, weeks: WeekIndex[]): void
+year.mount(root: HTMLElement, host: YearHost): YearController
+```
+
+- **`scroll.ts` knows nothing about calendars.** It imports `types.ts` and
+  `dates.ts` only; `main.ts` injects `fillRow`, which is what calls
+  `render.renderWeek`. This is the seam stage 04 wraps to substitute an
+  expanded row, without either module knowing about the other.
+- `renderWeek` FILLS a recycled node; it does not create one. (Supersedes the
+  stage-01 stub's `renderWeek(week, spans): HTMLElement`.)
+- **The position math is pure and takes `expanded` as a parameter**, so the
+  variable-height row is testable under node before it is built:
+
+```
+rowHeightFor(viewportH, headerH)   heightOf(w, rowH, expanded)
+posOf(w, rowH, expanded)           weekAtY(y, rowH, expanded)
+snapTargetY(anchorWeek, rowH, expanded, viewportH)
+nearestAnchor(day, modulus, dir)   projectY(y, velocity)
+settleMs(distancePx, rowH)         easeOutCubic(t)
+Expanded = { week: WeekIndex; delta: number } | null
+```
+
+- **Anchors are a sequence, and 15/30/45 is a modulus over it.**
+  `n = (year*12 + month-1) * 2 + (day === 16 ? 1 : 0)`; an anchor is enabled
+  when `n % modulus === 0` for modulus 1/2/3. At 30 that is the 1st of each
+  month; at 45, every 1.5 months.
+- **The snap target is the TOP EDGE of the row containing the anchor date,
+  placed at `viewportH * SNAP_ALIGN`.** The month boundary is drawn as a rule
+  at the top of that row from the 1st rightward, so "boundary y equals
+  content centre" and "a stop on the 16th frames a whole month" are the same
+  statement.
+- Row height excludes the sticky header:
+  `clamp((viewportH - headerH) / VISIBLE_WEEKS, MIN_ROW_H, MAX_ROW_H)`.
+- Rows recycle by `pool[((w % 14) + 14) % 14]`, so a node keeps its week
+  identity across small scrolls and `fillRow` runs only when a node's
+  assigned week actually changes.
+- `scroll.ts` and `render.ts` keep browser globals inside functions only, so
+  the node selftest can import their pure cores (CONVENTIONS).
+
 - Tuned constants live at the top of `scroll.ts`: `VISIBLE_WEEKS 6.5`,
   `MIN/MAX_ROW_H 74/190`, `SNAP_ALIGN 0.5`, `PROJECT_MS 300`,
   `SETTLE_BASE/PER_WEEK/MAX_MS 280/42/760`, `WHEEL_GAIN 0.6`,

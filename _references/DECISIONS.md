@@ -311,3 +311,33 @@ real account. That file is now a record, not an input.
   INTERACTION". The `Cross-Origin-Opener-Policy … window.closed` console
   errors that accompany it are GIS's own `client.js` polling the window it
   opened — benign, and not ours.
+
+## Stage 03 rulings (2026-08-29, made at plan time)
+
+- **The virtualizer never writes `w * H` inline.** Every position and height
+  goes through `posOf(w, rowH, expanded)` / `heightOf(w, rowH, expanded)`,
+  and the scroll-offset inverse `weekAtY` carries the same three-way branch.
+  This is the single thing that, violated quietly, makes stage 04's inline
+  expansion impossible and forces the overlay `OPEN.md` warns about. The
+  scroller is SYNTHETIC — `y` is a number we own, not a browser-managed
+  scroll position — so a variable-height row costs one conditional offset and
+  stays O(1): no cumulative scan, no measurement, no layout read. Stage 03
+  ships with `expanded = null` throughout, so nothing is paid for a feature
+  that is not there yet, but the pure math is proven under node with a
+  non-null `expanded` this stage rather than on promise.
+- **Motion carve-out.** CSS transition/animation values live only in
+  `motion.css`; the scroll engine's per-frame physics constants live at the
+  top of `scroll.ts`. Two homes, chosen by what the value drives, and a
+  literal at a use site is wrong in either case. Resolves a contradiction
+  between SPEC "Motion" ("no animation value outside the token layer") and
+  SPEC "Perpetual scroll mechanics" (which mandates those constants in
+  `scroll.ts`).
+- **`render.renderWeek` fills a recycled node rather than creating one**,
+  superseding the stage-01 stub signature per stage-01 ruling 6.
+- **Lane packing is deterministic**: sort by span length descending, then
+  start day, then event id. Without the id tie-break, a repaint can reshuffle
+  lanes under the user.
+- **Bars cross the gaps between tiles.** Night Depth makes cells discrete
+  rounded tiles, so a multi-day commitment either reads as one run crossing
+  the gaps or as separate stubs; SPEC's "title once on the true start,
+  continuations drop the spine" only means anything as one run.

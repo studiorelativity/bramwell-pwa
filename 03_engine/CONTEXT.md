@@ -62,11 +62,15 @@ Read these as part of this stage's contract; do not go digging in stage 02's
 - Virtualizer with 14 recycled rows, transform placement, half-month
   anchors at `SNAP_ALIGN 0.5`, 15/30/45 modulus, the tuned constants at
   the top of `scroll.ts`, the iOS double-tap suppression set.
-- Lane packing (longest-first, wrapping bars, title once, continuations),
+- `render.renderWeek(node, week, spans)` — FILLS a recycled node (supersedes
+  the stage-01 stub's `renderWeek(week, spans): HTMLElement`). Lane packing
+  (longest-first, deterministic, wrapping bars, title once, continuations),
   timed chips, month badges, "+N", header range label with cross-fade,
-  Today button.
-- Year view: 28/14/7 columns, first-row indent, 3 bars per cell, hover
-  panel that survives repaints, tap-driven on touch, year steppers.
+  Today button, reserved avatar slot for stage 05.
+- Year view: 28/14/7 columns (**phone defaults to 14, not 7** — puts
+  `OPEN.md`'s "7 columns is a long scroll" question on this stage's gate),
+  first-row indent, 3 bars per cell, hover panel that survives repaints,
+  tap-driven on touch, year steppers.
 - Headless-Chrome evidence at 390×844, 1440×900, 1920×1200: row spacing
   equals row height; boundary y equals content centre; a 21-day event
   wraps three rows with one title; bands split mid-row at a month start.
