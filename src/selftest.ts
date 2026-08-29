@@ -1,7 +1,8 @@
 // STAGE 01 — pure self-test over the date core. No DOM. Cases 5–9 are added in Task 4.
-import type { DayNumber } from './types.ts'
+import type { DayNumber, StoredCategory } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
 import { today, weekOf, dayAt, _setAnchorForTest } from './state.ts'
+import { all, brighten, categoryFor, configure, fallback, sanitize } from './categories.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -169,6 +170,71 @@ const cases: Case[] = [
     const { y, m, d } = dayToCivil(t)
     const now = new Date()
     if (y !== now.getFullYear() || m !== now.getMonth() + 1 || d !== now.getDate()) return `today() is ${y}-${m}-${d}`
+    return null
+  }],
+
+  ['categories: sanitize rejects the malformed', () => {
+    if (sanitize(null).length !== 0) return 'null was not rejected'
+    if (sanitize({ name: 'x' }).length !== 0) return 'non-array object was not rejected'
+    const rows = sanitize([
+      { name: 'work', label: 'Work', colorId: '9' },              // keep
+      { label: 'No name', colorId: '1' },                          // drop: no name
+      { name: 'blank', label: '', colorId: '2' },                  // drop: empty label
+      { name: 'bad', label: 'Bad', colorId: '12' },                // drop: colorId out of range
+      { name: 'alsobad', label: 'Also', colorId: 9 },              // drop: colorId not a string
+      { name: 'work', label: 'Dup name', colorId: '3' },           // drop: duplicate name
+      { name: 'dupcolor', label: 'Dup colour', colorId: '9' },     // drop: duplicate colorId
+      { name: 'hexbad', label: 'Hex', colorId: '4', displayHex: 'red' },   // keep, field dropped
+      { name: 'hexok', label: 'Hex OK', colorId: '5', displayHex: '#ABCDEF' }, // keep, field kept
+    ])
+    const got = rows.map(r => r.name).join(',')
+    if (got !== 'work,hexbad,hexok') return `kept: ${got}`
+    if ('displayHex' in rows[1]!) return 'invalid displayHex was kept'
+    if (rows[2]?.displayHex !== '#ABCDEF') return `valid displayHex: ${rows[2]?.displayHex}`
+    const many = sanitize(Array.from({ length: 20 }, (_, i) => ({ name: `n${i}`, label: `L${i}`, colorId: String((i % 11) + 1) })))
+    if (many.length !== 11) return `cap: ${many.length}`
+    return null
+  }],
+
+  ['categories: brighten floors lightness, caps saturation', () => {
+    // Independent HSL measurement — the oracle, not the algorithm under test.
+    const measure = (hex: string): { h: number; s: number; l: number } => {
+      const n = parseInt(hex.slice(1), 16)
+      const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn
+      if (d === 0) return { h: 0, s: 0, l }
+      const s = d / (1 - Math.abs(2 * l - 1))
+      const h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4
+      return { h: h * 60, s, l }
+    }
+    const probes = ['#3056D3', '#17925A', '#D97706', '#64748B', '#000000', '#FFFFFF', '#7986CB', '#D50000']
+    for (const p of probes) {
+      const out = brighten(p)
+      if (!/^#[0-9A-F]{6}$/.test(out)) return `${p} -> ${out} is not a 6-digit hex`
+      const m = measure(out)
+      if (m.l < 0.62 - 1e-3) return `${p} -> ${out} lightness ${m.l.toFixed(3)} below floor`
+      if (m.s > 0.72 + 1e-3) return `${p} -> ${out} saturation ${m.s.toFixed(3)} above cap`
+      const src = measure(p)
+      if (src.s > 0.01 && Math.abs(((m.h - src.h + 540) % 360) - 180) > 2) return `${p} -> ${out} hue moved ${src.h.toFixed(1)} -> ${m.h.toFixed(1)}`
+      if (brighten(out) !== out) return `${p} not idempotent: ${out} -> ${brighten(out)}`
+    }
+    return null
+  }],
+
+  ['categories: resolution, fallback and seed substitution', () => {
+    configure({})
+    if (all().map(c => c.name).join(',') !== 'work,personal,financial,other') return `seed: ${all().map(c => c.name).join(',')}`
+    if (categoryFor('9').name !== 'work') return `colorId 9 -> ${categoryFor('9').name}`
+    if (categoryFor('1').name !== 'other') return `unknown colorId -> ${categoryFor('1').name}`
+    if (categoryFor(undefined).name !== 'other') return `absent colorId -> ${categoryFor(undefined).name}`
+    // A blob that sanitizes to nothing must not leave zero categories.
+    configure({ categories: [{ name: '', label: '', colorId: '99' }] as unknown as StoredCategory[] })
+    if (all().length !== 4) return `empty blob did not fall back to seed: ${all().length}`
+    // A fallbackCategory naming a category that is not present falls back to the first.
+    configure({ categories: [{ name: 'solo', label: 'Solo', colorId: '7' }], fallbackCategory: 'ghost' })
+    if (fallback().name !== 'solo') return `dangling fallback -> ${fallback().name}`
+    if (categoryFor('9').name !== 'solo') return `unknown colorId under one category -> ${categoryFor('9').name}`
+    configure({})
     return null
   }],
 

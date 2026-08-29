@@ -105,6 +105,12 @@ export type PendingWrite =
   | { kind: 'update'; event: CalendarEvent; prior: CalendarEvent }
   | { kind: 'delete'; id: string; prior: CalendarEvent }
 
+// ---------- Categories ----------
+
+/** One of Google's 11 event colours. `hex` is Google's own paint, used as the
+ *  light-mode colour of any category with no `displayHex`. */
+export type GoogleColor = { id: string; name: string; hex: string }
+
 // ---------- Prefs (localStorage bramwell.prefs.v1) ----------
 
 export type MoodId = 'warm' | 'paper' | 'cool' | 'sage' | 'dusk'
