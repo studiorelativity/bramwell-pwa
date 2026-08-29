@@ -3,6 +3,7 @@ import type { DayNumber, StoredCategory, MoodId } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
 import { today, weekOf, dayAt, _setAnchorForTest } from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, sanitize, themeCss } from './categories.ts'
+import { GcalError, listMonth, MAX_RESULTS } from './gcal.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -284,6 +285,154 @@ const cases: Case[] = [
     if (!over.includes('--cat-solo: #112233')) return 'displayHex did not override light'
     if (!over.includes(`--cat-solo: ${brighten('#112233')}`)) return 'displayHex did not override dark'
     configure({})
+    return null
+  }],
+
+  ['gcal: list query params and bearer token', async () => {
+    const f = stubFetch([{ body: { items: [] } }])
+    try {
+      await listMonth('2026-02', 'tok-123')
+      const call = f.calls[0]
+      if (call === undefined) return 'no request was made'
+      if (call.headers['authorization'] !== 'Bearer tok-123') return `auth header: ${call.headers['authorization']}`
+      if (!call.url.startsWith('https://www.googleapis.com/calendar/v3/calendars/primary/events?')) return `url: ${call.url}`
+      const q = new URL(call.url).searchParams
+      if (q.get('singleEvents') !== 'true') return `singleEvents: ${q.get('singleEvents')}`
+      if (q.get('orderBy') !== 'startTime') return `orderBy: ${q.get('orderBy')}`
+      if (q.get('maxResults') !== String(MAX_RESULTS)) return `maxResults: ${q.get('maxResults')}`
+      if (!q.get('timeMin')?.startsWith('2026-02-01T00:00:00')) return `timeMin: ${q.get('timeMin')}`
+      if (!q.get('timeMax')?.startsWith('2026-03-01T00:00:00')) return `timeMax: ${q.get('timeMax')}`
+      if (!/[+-]\d{2}:\d{2}$/.test(q.get('timeMin') ?? '')) return `timeMin carries no local offset: ${q.get('timeMin')}`
+      // December must roll the window into the next year.
+      f.calls.length = 0
+      await listMonth('2026-12', 'tok-123')
+      const dec = new URL(f.calls[0]?.url ?? '').searchParams
+      if (!dec.get('timeMax')?.startsWith('2027-01-01T00:00:00')) return `December timeMax: ${dec.get('timeMax')}`
+    } finally { f.restore() }
+    return null
+  }],
+
+  ['gcal: all-day read converts exclusive end to inclusive', async () => {
+    const f = stubFetch([{ body: { items: [
+      { id: 'a', summary: 'Trip', start: { date: '2026-02-20' }, end: { date: '2026-02-23' } },
+      { id: 'b', summary: 'One day', start: { date: '2026-02-25' }, end: { date: '2026-02-26' } },
+    ] } }])
+    try {
+      const evs = await listMonth('2026-02', 't')
+      const a = evs[0], b = evs[1]
+      if (a?.allDay !== true) return 'all-day event did not map to allDay: true'
+      if (a.start !== civilToDay(2026, 2, 20)) return `start: ${a.start}`
+      if (a.end !== civilToDay(2026, 2, 22)) return `3-day event end should be the 22nd inclusive, got day ${a.end}`
+      if (b?.start !== civilToDay(2026, 2, 25) || b.end !== civilToDay(2026, 2, 25)) return 'single all-day did not collapse to one day'
+      if (a.title !== 'Trip') return `title: ${a.title}`
+    } finally { f.restore() }
+    return null
+  }],
+
+  ['gcal: timed read maps to civil day and minutes', async () => {
+    // Built from local Date objects, so the assertion holds in any time zone.
+    const iso = (y: number, m: number, d: number, hh: number, mm: number) => new Date(y, m - 1, d, hh, mm).toISOString()
+    const f = stubFetch([{ body: { items: [
+      { id: 'a', summary: 'Standup', start: { dateTime: iso(2026, 2, 20, 9, 30) }, end: { dateTime: iso(2026, 2, 20, 10, 45) } },
+      { id: 'b', summary: 'Late', start: { dateTime: iso(2026, 2, 20, 22, 0) }, end: { dateTime: iso(2026, 2, 21, 0, 30) } },
+    ] } }])
+    try {
+      const evs = await listMonth('2026-02', 't')
+      const a = evs[0], b = evs[1]
+      if (a?.allDay !== false) return 'timed event did not map to allDay: false'
+      if (a.start !== civilToDay(2026, 2, 20) || a.end !== civilToDay(2026, 2, 20)) return `day: ${a.start}..${a.end}`
+      if (a.startMin !== 570 || a.endMin !== 645) return `minutes: ${a.startMin}..${a.endMin}`
+      if (b?.allDay !== false) return 'midnight-crossing event did not map to allDay: false'
+      if (b.start !== civilToDay(2026, 2, 20) || b.end !== civilToDay(2026, 2, 21)) return `crossing day: ${b.start}..${b.end}`
+      if (b.startMin !== 1320 || b.endMin !== 30) return `crossing minutes: ${b.startMin}..${b.endMin}`
+    } finally { f.restore() }
+    return null
+  }],
+
+  ['gcal: cancelled events are dropped', async () => {
+    const f = stubFetch([{ body: { items: [
+      { id: 'a', summary: 'Live', start: { date: '2026-02-20' }, end: { date: '2026-02-21' } },
+      { id: 'b', status: 'cancelled', summary: 'Gone', start: { date: '2026-02-21' }, end: { date: '2026-02-22' } },
+      { id: 'c', status: 'confirmed', summary: 'Also live', start: { date: '2026-02-22' }, end: { date: '2026-02-23' } },
+    ] } }])
+    try {
+      const ids = (await listMonth('2026-02', 't')).map(e => e.id).join(',')
+      if (ids !== 'a,c') return `kept: ${ids}`
+    } finally { f.restore() }
+    return null
+  }],
+
+  ['gcal: colorId, notes and recurringEventId pass through', async () => {
+    const f = stubFetch([{ body: { items: [
+      { id: 'a', summary: 'Coloured', colorId: '9', description: 'note text', recurringEventId: 'series-1', start: { date: '2026-02-20' }, end: { date: '2026-02-21' } },
+      { id: 'b', summary: 'Plain', start: { date: '2026-02-21' }, end: { date: '2026-02-22' } },
+    ] } }])
+    try {
+      const evs = await listMonth('2026-02', 't')
+      if (evs[0]?.colorId !== '9') return `colorId: ${evs[0]?.colorId}`
+      if (evs[0]?.notes !== 'note text') return `notes: ${evs[0]?.notes}`
+      if (evs[0]?.recurringEventId !== 'series-1') return `recurringEventId: ${evs[0]?.recurringEventId}`
+      if ('colorId' in evs[1]!) return 'absent colorId was invented'
+      if ('category' in evs[1]!) return 'gcal resolved a category; that is state.ts’s job'
+    } finally { f.restore() }
+    return null
+  }],
+
+  ['gcal: pagination follows nextPageToken and is capped', async () => {
+    const f = stubFetch([
+      { body: { items: [{ id: 'a', start: { date: '2026-02-01' }, end: { date: '2026-02-02' } }], nextPageToken: 'P2' } },
+      { body: { items: [{ id: 'b', start: { date: '2026-02-02' }, end: { date: '2026-02-03' } }] } },
+    ])
+    try {
+      const evs = await listMonth('2026-02', 't')
+      if (evs.map(e => e.id).join(',') !== 'a,b') return `pages not concatenated: ${evs.map(e => e.id).join(',')}`
+      if (f.calls.length !== 2) return `calls: ${f.calls.length}`
+      if (new URL(f.calls[1]?.url ?? '').searchParams.get('pageToken') !== 'P2') return 'second request carried no pageToken'
+      if (new URL(f.calls[0]?.url ?? '').searchParams.has('pageToken')) return 'first request carried a pageToken'
+    } finally { f.restore() }
+    // A stub that never stops paging must fail, not hang.
+    const loop = stubFetch([{ body: { items: [], nextPageToken: 'SAME' } }])
+    try {
+      await listMonth('2026-02', 't')
+      return 'an endless nextPageToken did not throw'
+    } catch (e) {
+      if (!(e instanceof GcalError)) return `wrong error: ${(e as Error).message}`
+      if (loop.calls.length > 20) return `page cap did not hold: ${loop.calls.length} calls`
+    } finally { loop.restore() }
+    return null
+  }],
+
+  ['gcal: retries rate limits and 5xx once, never a permissions 403', async () => {
+    const rateLimit = { error: { errors: [{ reason: 'rateLimitExceeded' }] } }
+    const forbidden = { error: { errors: [{ reason: 'insufficientPermissions' }] } }
+    const ok = { items: [] }
+    for (const [label, first] of [
+      ['500', { status: 500, body: {} }],
+      ['429', { status: 429, body: {} }],
+      ['403 rate limit', { status: 403, body: rateLimit }],
+    ] as const) {
+      const f = stubFetch([first, { body: ok }])
+      try {
+        await listMonth('2026-02', 't')
+        if (f.calls.length !== 2) return `${label}: expected one retry, saw ${f.calls.length} calls`
+      } catch (e) { return `${label}: threw ${(e as Error).message}` } finally { f.restore() }
+    }
+    const perm = stubFetch([{ status: 403, body: forbidden }, { body: ok }])
+    try {
+      await listMonth('2026-02', 't')
+      return 'a permissions 403 did not surface'
+    } catch (e) {
+      if (!(e instanceof GcalError) || e.status !== 403) return `wrong error: ${(e as Error).message}`
+      if (perm.calls.length !== 1) return `a permissions 403 was retried: ${perm.calls.length} calls`
+    } finally { perm.restore() }
+    const twice = stubFetch([{ status: 503, body: {} }])
+    try {
+      await listMonth('2026-02', 't')
+      return 'a repeated 5xx did not surface'
+    } catch (e) {
+      if (!(e instanceof GcalError) || e.status !== 503) return `wrong error: ${(e as Error).message}`
+      if (twice.calls.length !== 2) return `expected exactly one retry, saw ${twice.calls.length} calls`
+    } finally { twice.restore() }
     return null
   }],
 ]
