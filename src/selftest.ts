@@ -3,7 +3,10 @@ import type { DayNumber, StoredCategory, MoodId } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
 import { today, weekOf, dayAt, _setAnchorForTest } from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, sanitize, themeCss } from './categories.ts'
-import { GcalError, listMonth, MAX_RESULTS } from './gcal.ts'
+import {
+  createEvent as gcalCreate, deleteEvent as gcalDelete, updateEvent as gcalUpdate,
+  GcalError, listMonth, MAX_RESULTS,
+} from './gcal.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -433,6 +436,110 @@ const cases: Case[] = [
       if (!(e instanceof GcalError) || e.status !== 503) return `wrong error: ${(e as Error).message}`
       if (twice.calls.length !== 2) return `expected exactly one retry, saw ${twice.calls.length} calls`
     } finally { twice.restore() }
+    return null
+  }],
+
+  ['gcal: create sends an exclusive end, the colorId and one RRULE', async () => {
+    const f = stubFetch([{ body: { id: 'new-1', summary: 'Trip', colorId: '9', start: { date: '2026-02-20' }, end: { date: '2026-02-23' } } }])
+    try {
+      await gcalCreate({
+        title: 'Trip', category: 'work', allDay: true,
+        start: civilToDay(2026, 2, 20), end: civilToDay(2026, 2, 22), repeat: 'weekly',
+      }, '9', 't')
+      const call = f.calls[0]
+      if (call?.method !== 'POST') return `method: ${call?.method}`
+      if (!call.url.endsWith('/calendars/primary/events')) return `url: ${call.url}`
+      if (call.headers['content-type'] !== 'application/json') return `content-type: ${call.headers['content-type']}`
+      const b = call.body as { summary?: string; colorId?: string; start?: { date?: string }; end?: { date?: string }; recurrence?: string[] }
+      if (b.summary !== 'Trip') return `summary: ${b.summary}`
+      if (b.colorId !== '9') return `colorId: ${b.colorId}`
+      if (b.start?.date !== '2026-02-20') return `start.date: ${b.start?.date}`
+      if (b.end?.date !== '2026-02-23') return `a 3-day event must go out as 20 -> 23 exclusive, got ${b.end?.date}`
+      if (b.recurrence?.length !== 1 || b.recurrence[0] !== 'RRULE:FREQ=WEEKLY') return `recurrence: ${JSON.stringify(b.recurrence)}`
+    } finally { f.restore() }
+    const none = stubFetch([{ body: { id: 'n', start: { date: '2026-02-20' }, end: { date: '2026-02-21' } } }])
+    try {
+      await gcalCreate({ title: 'x', category: 'work', allDay: true, start: civilToDay(2026, 2, 20), end: civilToDay(2026, 2, 20), repeat: 'none' }, '9', 't')
+      if ('recurrence' in (none.calls[0]?.body as object)) return 'repeat "none" still sent a recurrence'
+    } finally { none.restore() }
+    return null
+  }],
+
+  ['gcal: create timed sends local dateTime with a timeZone', async () => {
+    const f = stubFetch([{ body: { id: 'n', start: { dateTime: new Date(2026, 1, 20, 9, 30).toISOString() }, end: { dateTime: new Date(2026, 1, 20, 10, 45).toISOString() } } }])
+    try {
+      await gcalCreate({
+        title: 'Standup', category: 'work', allDay: false,
+        start: civilToDay(2026, 2, 20), end: civilToDay(2026, 2, 20),
+        startMin: 570, endMin: 645, repeat: 'none',
+      }, '9', 't')
+      const b = f.calls[0]?.body as { start?: { dateTime?: string; timeZone?: string }; end?: { dateTime?: string } }
+      if (!b.start?.dateTime?.startsWith('2026-02-20T09:30:00')) return `start.dateTime: ${b.start?.dateTime}`
+      if (!/[+-]\d{2}:\d{2}$/.test(b.start.dateTime)) return `start.dateTime carries no local offset: ${b.start.dateTime}`
+      if (!b.end?.dateTime?.startsWith('2026-02-20T10:45:00')) return `end.dateTime: ${b.end?.dateTime}`
+      if (b.start.timeZone === undefined || b.start.timeZone === '') return 'no timeZone sent'
+      if ('date' in b.start) return 'a timed event sent a date field'
+    } finally { f.restore() }
+    return null
+  }],
+
+  ['gcal: all-day round-trip identity', async () => {
+    // Draft -> wire -> back must land on exactly the DayNumbers it started with.
+    const start = civilToDay(2026, 2, 20), end = civilToDay(2026, 2, 22)
+    const f = stubFetch([{ body: { id: 'rt', summary: 'Trip', colorId: '9', start: { date: '2026-02-20' }, end: { date: '2026-02-23' } } }])
+    try {
+      const back = await gcalCreate({ title: 'Trip', category: 'work', allDay: true, start, end, repeat: 'none' }, '9', 't')
+      if (back.allDay !== true) return 'round-trip lost allDay'
+      if (back.start !== start) return `start ${back.start} !== ${start}`
+      if (back.end !== end) return `end ${back.end} !== ${end} — the exclusive/inclusive conversion is not symmetric`
+      if (back.id !== 'rt') return `id: ${back.id}`
+      if (back.colorId !== '9') return `colorId: ${back.colorId}`
+    } finally { f.restore() }
+    return null
+  }],
+
+  ['gcal: update PATCHes changed fields onto the id it is given', async () => {
+    const f = stubFetch([{ body: { id: 'inst-9', summary: 'Renamed', start: { date: '2026-02-20' }, end: { date: '2026-02-21' } } }])
+    try {
+      await gcalUpdate('inst-9', { title: 'Renamed' }, undefined, 't')
+      const call = f.calls[0]
+      if (call?.method !== 'PATCH') return `method: ${call?.method}`
+      if (!call.url.endsWith('/calendars/primary/events/inst-9')) return `url: ${call.url}`
+      const b = call.body as Record<string, unknown>
+      if (b['summary'] !== 'Renamed') return `summary: ${String(b['summary'])}`
+      if ('start' in b || 'end' in b) return 'a title-only change sent dates'
+      if ('colorId' in b) return 'an undefined colorId was sent'
+    } finally { f.restore() }
+    // The caller chooses the id; a series edit is the same call against the series id.
+    const s = stubFetch([{ body: { id: 'series-1', summary: 'S', start: { date: '2026-02-20' }, end: { date: '2026-02-21' } } }])
+    try {
+      await gcalUpdate('series-1', { title: 'S' }, '5', 't')
+      if (!(s.calls[0]?.url ?? '').endsWith('/events/series-1')) return `series url: ${s.calls[0]?.url}`
+      if ((s.calls[0]?.body as Record<string, unknown>)['colorId'] !== '5') return 'colorId was not sent'
+    } finally { s.restore() }
+    return null
+  }],
+
+  ['gcal: delete targets the id it is given and tolerates 204', async () => {
+    const f = stubFetch([{ status: 204 }])
+    try {
+      await gcalDelete('inst-9', 't')
+      if (f.calls[0]?.method !== 'DELETE') return `method: ${f.calls[0]?.method}`
+      if (!(f.calls[0]?.url ?? '').endsWith('/calendars/primary/events/inst-9')) return `url: ${f.calls[0]?.url}`
+    } catch (e) { return `204 was not tolerated: ${(e as Error).message}` } finally { f.restore() }
+    const s = stubFetch([{ status: 204 }])
+    try {
+      await gcalDelete('series-1', 't')
+      if (!(s.calls[0]?.url ?? '').endsWith('/events/series-1')) return `series url: ${s.calls[0]?.url}`
+    } finally { s.restore() }
+    const gone = stubFetch([{ status: 404, body: { error: { errors: [{ reason: 'notFound' }] } } }])
+    try {
+      await gcalDelete('missing', 't')
+      return 'a 404 delete did not throw'
+    } catch (e) {
+      if (!(e instanceof GcalError) || e.status !== 404) return `wrong error: ${(e as Error).message}`
+      if (gone.calls.length !== 1) return `a 404 was retried: ${gone.calls.length} calls`
+    } finally { gone.restore() }
     return null
   }],
 ]

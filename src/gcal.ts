@@ -178,7 +178,28 @@ export async function listMonth(key: MonthKey, token: string): Promise<StoredEve
   throw new GcalError(0, `nextPageToken did not terminate after ${MAX_PAGES} pages`)
 }
 
-const E = () => new Error('STAGE 02: not implemented')
-export function createEvent(_draft: EventDraft, _colorId: string, _token: string): Promise<StoredEvent> { throw E() }
-export function updateEvent(_id: string, _changes: Partial<EventDraft>, _colorId: string | undefined, _token: string): Promise<StoredEvent> { throw E() }
-export function deleteEvent(_id: string, _token: string): Promise<void> { throw E() }
+export async function createEvent(draft: EventDraft, colorId: string, token: string): Promise<StoredEvent> {
+  const res = await request(`/calendars/${CAL}/events`, token, {
+    method: 'POST',
+    body: JSON.stringify(toWire(draft, colorId)),
+  })
+  const ev = fromWire(res as WireEvent)
+  if (ev === null) throw new GcalError(0, 'create returned an event that could not be mapped')
+  return ev
+}
+
+/** `id` is the caller's choice: the instance id for this occurrence, `recurringEventId`
+ *  for the whole series. Only state.ts holds the event carrying both. */
+export async function updateEvent(id: string, changes: Partial<EventDraft>, colorId: string | undefined, token: string): Promise<StoredEvent> {
+  const res = await request(`/calendars/${CAL}/events/${encodeURIComponent(id)}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(toWire(changes, colorId)),
+  })
+  const ev = fromWire(res as WireEvent)
+  if (ev === null) throw new GcalError(0, 'update returned an event that could not be mapped')
+  return ev
+}
+
+export async function deleteEvent(id: string, token: string): Promise<void> {
+  await request(`/calendars/${CAL}/events/${encodeURIComponent(id)}`, token, { method: 'DELETE' })
+}
