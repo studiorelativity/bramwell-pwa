@@ -344,6 +344,7 @@ Entry: "Try the demo" on first-run, or `?demo`.
 /src/habits.ts            — Supabase client; the ONLY file calling Supabase (HABITS.md)
 /src/journal.ts           — journal link/index resolution, no network of its own (JOURNAL.md)
 /src/dates.ts             — anchorless civil-date core: brands, civilToDay/dayToCivil, monthKey; imports nothing
+/src/selftest.ts          — pure selfTest() over dates.ts and state.ts; loaded only by main.ts under ?selftest
 /src/state.ts             — event cache, today() anchor, DayNumber<->WeekIndex math, persistence, write orchestration, demo
 /src/scroll.ts            — virtualizer, snap physics, the one variable-height row
 /src/render.ts            — week rows, bars, chips, lane packing, month badges, header

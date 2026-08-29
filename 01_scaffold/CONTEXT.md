@@ -33,8 +33,9 @@ Do not read the rest of the spec in this stage.
 - The anchorless date core in `src/dates.ts` (brands and constructors,
   `civilToDay`, `dayToCivil`, `monthKey`) implemented with `Date.UTC`
   math, importing nothing; the anchored functions (`today`, `weekOf`,
-  `dayAt`) implemented in `state.ts`; a `selfTest()` covering both,
-  reachable at `/?selftest`. Everything else in `state.ts` stays a stub.
+  `dayAt`) implemented in `state.ts`; a `selfTest()` in `src/selftest.ts`
+  covering both, dynamically imported by `main.ts` under `/?selftest`.
+  Everything else in `state.ts` stays a stub.
 - `manifest.webmanifest`, `public/icon-*.png`, `public/_headers`.
 
 ## Process
