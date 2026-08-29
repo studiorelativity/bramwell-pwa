@@ -1,6 +1,6 @@
 # Stage 01 — Scaffold
 
-**Status: OPEN.** First stage of the rebuild. Nothing exists yet.
+**Status: VERIFIED — awaiting human gate.** Verification in output/verification.md.
 
 ## What this stage is
 The repo skeleton, the type system, and the date core — the only stage

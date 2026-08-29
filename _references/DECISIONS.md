@@ -177,4 +177,28 @@ why. New rulings made during the rebuild go at the bottom, dated.
   named days (more mapping for no extra safety once there is one vocabulary).
 - `Prefs` holds exactly the four fields stage 01 was permitted to read,
   all optional; later prefs are added to `SPEC.md` first.
+- Stage 01 execution rulings (2026-08-29):
+  - `selftest.ts` added to the file layout; dynamically imported so it is
+    not in the main chunk.
+  - `_setAnchorForTest` is a test-only export of `state.ts`; the spec's
+    "exports exactly" rule applies to `auth.ts` only.
+  - `sw.ts` is an empty module, not a throwing stub (an installed
+    throwing SW wedges every load).
+  - Seed `--surface`/`--ink` in `index.html` are placeholders; stage 03
+    replaces them from "Visual direction".
+  - `public/_headers` is a two-line placeholder; stage 05 owns it.
+  - Stub signatures for scroll/render/year/day/chrome are minimal
+    (`mount`, `renderWeek`, `expand`, `toast`); the owning stage adds the
+    interface to SPEC.md before widening.
+  - `CalendarEvent` all-day arm carries `startMin?: never; endMin?: never`
+    so a spread of a flat `EventDraft` cannot smuggle a time into an
+    all-day event (excess-property checks only catch literals).
+  - `manifest.webmanifest` lives in `public/` (served at
+    `/manifest.webmanifest`); a root file never reaches `dist/` under
+    Vite. SPEC "File layout" already updated.
+  - The selftest does not pin `TZ`: pinning to UTC would neuter the DST
+    case. The local-time-constructor guard therefore only bites in a DST
+    zone — listed under "Not tested".
+  - Selftest case 3's 801-day span crosses one leap day (2024-02-29) and
+    three year boundaries, not the two leap days the plan first claimed.
 
