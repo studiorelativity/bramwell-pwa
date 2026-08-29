@@ -30,7 +30,7 @@ const cases: Case[] = [
   }],
 
   ['801-day weekday oracle', () => {
-    // Oracle: Date.getUTCDay() (0=Sun) remapped to 0=Mon. 801 days crosses two Feb 29s from 2023-12-01.
+    // Oracle: Date.getUTCDay() (0=Sun) remapped to 0=Mon. 801 days from 2023-12-01 crosses one Feb 29 and two year boundaries.
     let day = civilToDay(2023, 12, 1)
     for (let i = 0; i < 801; i++) {
       const { y, m, d } = dayToCivil(day)
