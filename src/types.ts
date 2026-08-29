@@ -44,7 +44,7 @@ type EventBase = {
 }
 
 export type CalendarEvent =
-  | (EventBase & { allDay: true })
+  | (EventBase & { allDay: true; startMin?: never; endMin?: never })
   | (EventBase & {
       allDay: false
       /** Minutes from local midnight of `start`, 0..1439. */
