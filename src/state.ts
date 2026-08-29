@@ -6,6 +6,8 @@ import type {
 } from './types.ts'
 import { asDay, asOffset, asWeek, addDays, civilToDay, monthKey, offsetOf } from './dates.ts'
 import { all as allCategories, categoryFor } from './categories.ts'
+import { getToken } from './auth.ts'
+import { GcalError, listMonth } from './gcal.ts'
 
 // ---------- Anchor ----------
 
@@ -210,6 +212,7 @@ export function _resetForTest(): void {
   prefsValue = {}
   pending.clear()
   loaded = false
+  inflight.clear()
 }
 
 export function _flushForTest(): void {
@@ -217,12 +220,101 @@ export function _flushForTest(): void {
   writeCacheNow()
 }
 
-// ---------- Stubs: tasks 8 and 9 ----------
+export async function _settleForTest(): Promise<void> {
+  while (inflight.size > 0) await Promise.all([...inflight.values()])
+}
+
+// ---------- Notification ----------
+
+const listeners = new Set<(months: MonthKey[]) => void>()
+
+export function onCacheChange(fn: (months: MonthKey[]) => void): () => void {
+  listeners.add(fn)
+  return () => { listeners.delete(fn) }
+}
+
+function notify(months: MonthKey[]): void {
+  for (const fn of [...listeners]) fn(months)
+}
+
+// ---------- Network ----------
+
+/** The one place the 401 rule lives. gcal.ts owns the transport retry; this owns identity. */
+async function withToken<T>(fn: (t: string) => Promise<T>): Promise<T> {
+  const t = await getToken()
+  try {
+    return await fn(t)
+  } catch (e) {
+    if (!(e instanceof GcalError) || e.status !== 401) throw e
+    return await fn(await getToken(true))
+  }
+}
+
+const inflight = new Map<MonthKey, Promise<void>>()
+
+function needsFetch(key: MonthKey): boolean {
+  const m = cache.months[key]
+  if (m === undefined) return true
+  if (m.state === 'loading') return false
+  if (m.state === 'ready') return Date.now() - m.fetchedAt > STALE_MS
+  return true   // absent | error
+}
+
+function fetchMonth(key: MonthKey): Promise<void> {
+  const running = inflight.get(key)
+  if (running !== undefined) return running
+  if (!needsFetch(key)) return Promise.resolve()
+  const prior = cache.months[key]
+  cache.months[key] = { state: 'loading', events: prior?.events ?? [], fetchedAt: prior?.fetchedAt ?? 0 }
+  notify([key])
+  const p = withToken(t => listMonth(key, t)).then(
+    events => {
+      cache.months[key] = { state: 'ready', events, fetchedAt: Date.now() }
+      saveCache()
+    },
+    () => {
+      // Keep whatever was on screen: a refresh failure must not blank a month.
+      const kept = cache.months[key]
+      cache.months[key] = { state: 'error', events: kept?.events ?? [], fetchedAt: kept?.fetchedAt ?? 0 }
+    },
+  ).finally(() => {
+    inflight.delete(key)
+    notify([key])
+  })
+  inflight.set(key, p)
+  return p
+}
+
+async function refetch(keys: MonthKey[]): Promise<void> {
+  for (const k of keys) {
+    const m = cache.months[k]
+    if (m !== undefined) m.fetchedAt = 0
+  }
+  await Promise.all(keys.map(k => fetchMonth(k)))
+}
+
+/** A series write invalidates every month held, not just the ones it touched. */
+function markAllStale(): void {
+  for (const m of Object.values(cache.months)) m.fetchedAt = 0
+}
+
+// ---------- Stubs: task 9 ----------
 
 const NOT_IMPLEMENTED = 'STAGE 02: not implemented'
-export function ensureMonthsFor(_weeks: WeekIndex[]): void { throw new Error(NOT_IMPLEMENTED) }
+
+/** Stage 03 owns *when* to call this; stage 02 owns the rule. */
+export function ensureMonthsFor(weeks: WeekIndex[]): void {
+  ensureLoaded()
+  const keys = new Set<MonthKey>()
+  for (const w of weeks) {
+    const mon = dayAt(w, asOffset(0))
+    keys.add(monthKey(mon))
+    keys.add(monthKey(addDays(mon, 6)))
+  }
+  for (const key of keys) void fetchMonth(key)
+}
+
 export function createEvent(_draft: EventDraft): Promise<CalendarEvent> { throw new Error(NOT_IMPLEMENTED) }
 export function updateEvent(_id: string, _draft: EventDraft, _scope: WriteScope): Promise<CalendarEvent> { throw new Error(NOT_IMPLEMENTED) }
 export function deleteEvent(_id: string, _scope: WriteScope): Promise<void> { throw new Error(NOT_IMPLEMENTED) }
-export function onCacheChange(_fn: (months: MonthKey[]) => void): () => void { throw new Error(NOT_IMPLEMENTED) }
 export function enableDemo(): void { throw new Error('STAGE 06: not implemented') }

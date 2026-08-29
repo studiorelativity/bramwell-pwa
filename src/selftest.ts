@@ -4,6 +4,7 @@ import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, mon
 import {
   today, weekOf, dayAt, _setAnchorForTest, _resetForTest, _flushForTest,
   prefs, savePrefs, monthState, eventsForMonth, spansForWeek,
+  ensureMonthsFor, onCacheChange, _settleForTest,
 } from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, sanitize, themeCss } from './categories.ts'
 import { getToken, isSignedIn, signOut } from './auth.ts'
@@ -734,6 +735,112 @@ const cases: Case[] = [
       if (t?.from !== 1 || t.to !== 1) return `timed span: ${t?.from}..${t?.to} — a timed event renders on its start day`
       if (t?.continuesAfter !== false) return 'a midnight-crossing timed event claimed a continuation'
     } finally { s.restore(); _resetForTest() }
+    return null
+  }],
+
+  ['state: ensureMonthsFor fetches absent months, skips fresh ones, coalesces', async () => {
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    const f = stubFetch([{ body: { items: [{ id: 'e1', summary: 'E', start: { date: '2026-02-11' }, end: { date: '2026-02-12' } }] } }])
+    try {
+      _resetForTest(); configure({})
+      _setAnchorForTest(civilToDay(2026, 2, 11))   // week 0 = Mon 9th .. Sun 15th, all in 2026-02
+      if (monthState('2026-02') !== 'absent') return `before: ${monthState('2026-02')}`
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (monthState('2026-02') !== 'ready') return `after: ${monthState('2026-02')}`
+      if (f.calls.length !== 1) return `calls: ${f.calls.length}`
+      if (eventsForMonth('2026-02')[0]?.id !== 'e1') return 'fetched events were not stored'
+      // A month fetched seconds ago is not refetched.
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (f.calls.length !== 1) return `a fresh month was refetched: ${f.calls.length} calls`
+      // Concurrent callers for the same key coalesce into one request.
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      f.calls.length = 0
+      ensureMonthsFor([asWeek(0)])
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (f.calls.length !== 1) return `concurrent callers made ${f.calls.length} requests`
+      // A week straddling a boundary pulls both months.
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 1, 28))
+      f.calls.length = 0
+      ensureMonthsFor([asWeek(0)])   // Mon 2026-01-26 .. Sun 2026-02-01
+      await _settleForTest()
+      if (f.calls.length !== 2) return `a straddling week fetched ${f.calls.length} months`
+      await signOut()
+    } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
+    return null
+  }],
+
+  ['state: a failed refresh sets error and keeps the prior events', async () => {
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    try {
+      localStorage.setItem('bramwell.cache.v1', JSON.stringify({
+        v: 1,
+        months: { '2026-02': { state: 'ready', fetchedAt: 1, events: [{ id: 'old', title: 'Old', allDay: true, start: civilToDay(2026, 2, 11), end: civilToDay(2026, 2, 11) }] } },
+      }))
+      _resetForTest(); configure({})
+      _setAnchorForTest(civilToDay(2026, 2, 11))
+      const f = stubFetch([{ status: 404, body: { error: { errors: [{ reason: 'notFound' }] } } }])
+      try {
+        ensureMonthsFor([asWeek(0)])
+        await _settleForTest()
+        if (monthState('2026-02') !== 'error') return `state after failure: ${monthState('2026-02')}`
+        if (eventsForMonth('2026-02')[0]?.id !== 'old') return 'a failed refresh blanked a month that was on screen'
+      } finally { f.restore() }
+      await signOut()
+    } finally { g.restore(); s.restore(); _resetForTest() }
+    return null
+  }],
+
+  ['state: withToken retries a 401 exactly once with a fresh token', async () => {
+    const s = stubStorage()
+    const g = stubGis([{ access_token: 'stale', expires_in: 3600 }, { access_token: 'fresh', expires_in: 3600 }])
+    const f = stubFetch([{ status: 401, body: {} }, { body: { items: [] } }])
+    try {
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (f.calls.length !== 2) return `expected one retry, saw ${f.calls.length} calls`
+      if (f.calls[0]?.headers['authorization'] !== 'Bearer stale') return `first token: ${f.calls[0]?.headers['authorization']}`
+      if (f.calls[1]?.headers['authorization'] !== 'Bearer fresh') return `retry token: ${f.calls[1]?.headers['authorization']}`
+      if (monthState('2026-02') !== 'ready') return `state: ${monthState('2026-02')}`
+      await signOut()
+    } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
+    // A second 401 surfaces rather than looping.
+    const s2 = stubStorage()
+    const g2 = stubGis([{ access_token: 'a', expires_in: 3600 }, { access_token: 'b', expires_in: 3600 }])
+    const f2 = stubFetch([{ status: 401, body: {} }])
+    try {
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (f2.calls.length !== 2) return `a repeated 401 made ${f2.calls.length} calls`
+      if (monthState('2026-02') !== 'error') return `a repeated 401 left state ${monthState('2026-02')}`
+      await signOut()
+    } finally { f2.restore(); g2.restore(); s2.restore(); _resetForTest() }
+    return null
+  }],
+
+  ['state: onCacheChange notifies with changed keys and unsubscribes', async () => {
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    const f = stubFetch([{ body: { items: [] } }])
+    try {
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      const seen: string[] = []
+      const off = onCacheChange(keys => { seen.push(keys.join('+')) })
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (seen.length === 0) return 'no notification was delivered'
+      if (!seen.every(k => k === '2026-02')) return `keys: ${seen.join(' / ')}`
+      off()
+      const before = seen.length
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (seen.length !== before) return 'an unsubscribed listener was still called'
+      await signOut()
+    } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
     return null
   }],
 ]
