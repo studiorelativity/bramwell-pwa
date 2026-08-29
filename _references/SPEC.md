@@ -336,7 +336,7 @@ Entry: "Try the demo" on first-run, or `?demo`.
 
 ```
 /index.html               — seed tokens, GIS <script>, viewport meta
-/manifest.webmanifest
+/public/manifest.webmanifest — served at /manifest.webmanifest; Vite copies public/ to dist/ root
 /public/                  — icons, _headers
 /src/main.ts              — bootstrapping and wiring; owns the theme <style>
 /src/auth.ts              — GIS token client; the ONLY file that knows about Google auth
