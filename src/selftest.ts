@@ -3,6 +3,7 @@ import type { DayNumber, StoredCategory, MoodId } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
 import { today, weekOf, dayAt, _setAnchorForTest } from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, sanitize, themeCss } from './categories.ts'
+import { getToken, isSignedIn, signOut } from './auth.ts'
 import {
   createEvent as gcalCreate, deleteEvent as gcalDelete, updateEvent as gcalUpdate,
   GcalError, listMonth, MAX_RESULTS,
@@ -61,6 +62,38 @@ function stubStorage(): { restore: () => void } {
     restore: () => {
       if (had) Object.defineProperty(globalThis, 'localStorage', { value: real, configurable: true, writable: true })
       else Reflect.deleteProperty(globalThis as object, 'localStorage')
+    },
+  }
+}
+
+type StubToken = { access_token?: string; expires_in?: number; error?: string }
+
+/** Fake Google Identity Services. Installs globalThis.google, which is what auth.ts reads. */
+function stubGis(replies: StubToken[]): { prompts: string[]; revoked: string[]; restore: () => void } {
+  const prompts: string[] = []
+  const revoked: string[] = []
+  let i = 0
+  const fake = {
+    accounts: {
+      oauth2: {
+        initTokenClient: (cfg: { callback: (r: StubToken) => void }) => ({
+          requestAccessToken: (req?: { prompt?: string }) => {
+            prompts.push(req?.prompt ?? '<none>')
+            cfg.callback(replies[Math.min(i++, replies.length - 1)] ?? { error: 'no reply configured' })
+          },
+        }),
+        revoke: (t: string, done?: () => void) => { revoked.push(t); done?.() },
+      },
+    },
+  }
+  const had = 'google' in globalThis
+  const real = had ? (globalThis as { google?: unknown }).google : undefined
+  Object.defineProperty(globalThis, 'google', { value: fake, configurable: true, writable: true })
+  return {
+    prompts, revoked,
+    restore: () => {
+      if (had) Object.defineProperty(globalThis, 'google', { value: real, configurable: true, writable: true })
+      else Reflect.deleteProperty(globalThis as object, 'google')
     },
   }
 }
@@ -543,6 +576,74 @@ const cases: Case[] = [
       if (!(e instanceof GcalError) || e.status !== 404) return `wrong error: ${(e as Error).message}`
       if (gone.calls.length !== 1) return `a 404 was retried: ${gone.calls.length} calls`
     } finally { gone.restore() }
+    return null
+  }],
+
+  ['auth: token is cached, renewals dedupe, force and expiry re-request', async () => {
+    const g = stubGis([{ access_token: 'tok-1', expires_in: 3600 }, { access_token: 'tok-2', expires_in: 3600 }, { access_token: 'tok-3', expires_in: 3600 }])
+    try {
+      if (isSignedIn()) return 'signed in before any token was requested'
+      const a = await getToken()
+      if (a !== 'tok-1') return `first token: ${a}`
+      if (!isSignedIn()) return 'isSignedIn false after a successful token'
+      const n1: number = g.prompts.length
+      if (n1 !== 1) return `one request expected, saw ${n1}`
+      if (g.prompts[0] !== '') return `quiet renewal must send prompt '', sent '${g.prompts[0]}'`
+      if (await getToken() !== 'tok-1') return 'a valid token was not served from cache'
+      const n2: number = g.prompts.length
+      if (n2 !== 1) return `cached call still hit GIS: ${n2} requests`
+      if (await getToken(true) !== 'tok-2') return 'forceRefresh did not re-request'
+      const n3: number = g.prompts.length
+      if (n3 !== 2) return `forceRefresh requests: ${n3}`
+      await signOut()
+    } finally { g.restore() }
+    // A token whose expires_in has already been consumed by the skew is re-requested.
+    const short = stubGis([{ access_token: 'x-1', expires_in: 0 }, { access_token: 'x-2', expires_in: 3600 }])
+    try {
+      if (await getToken() !== 'x-1') return 'short-lived token was not returned'
+      if (isSignedIn()) return 'a token inside the 60s skew still reads as signed in'
+      if (await getToken() !== 'x-2') return 'an expired token was served from cache'
+      await signOut()
+    } finally { short.restore() }
+    // Concurrent callers share one in-flight renewal rather than racing three popups.
+    const dedupe = stubGis([{ access_token: 'd-1', expires_in: 3600 }])
+    try {
+      const [p, q, r] = await Promise.all([getToken(), getToken(), getToken()])
+      if (p !== 'd-1' || q !== 'd-1' || r !== 'd-1') return `concurrent tokens: ${p}/${q}/${r}`
+      if (dedupe.prompts.length !== 1) return `concurrent callers made ${dedupe.prompts.length} requests`
+      await signOut()
+    } finally { dedupe.restore() }
+    return null
+  }],
+
+  ['auth: a failed renewal clears state and never escalates to a popup', async () => {
+    const g = stubGis([{ error: 'access_denied' }, { access_token: 'later', expires_in: 3600 }])
+    try {
+      try {
+        await getToken()
+        return 'a failed renewal resolved'
+      } catch (e) {
+        if ((e as Error).name !== 'AuthError') return `wrong error: ${(e as Error).name}`
+      }
+      if (isSignedIn()) return 'isSignedIn true after a failed renewal'
+      if (g.prompts.some(p => p !== '')) return `a failure escalated to a prompt: ${g.prompts.join(',')}`
+      // The failure is not sticky: a later request (the user's click) can still succeed.
+      if (await getToken() !== 'later') return 'a failed renewal poisoned the module'
+      await signOut()
+    } finally { g.restore() }
+    return null
+  }],
+
+  ['auth: signOut revokes rather than only clearing', async () => {
+    const g = stubGis([{ access_token: 'tok-r', expires_in: 3600 }])
+    try {
+      await getToken()
+      await signOut()
+      if (g.revoked.join(',') !== 'tok-r') return `revoked: ${g.revoked.join(',')}`
+      if (isSignedIn()) return 'still signed in after signOut'
+      await signOut()   // idempotent with no token held
+      if (g.revoked.length !== 1) return `a second signOut revoked again: ${g.revoked.length}`
+    } finally { g.restore() }
     return null
   }],
 ]
