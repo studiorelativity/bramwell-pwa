@@ -5,6 +5,7 @@ import {
   today, weekOf, dayAt, _setAnchorForTest, _resetForTest, _flushForTest,
   prefs, savePrefs, monthState, eventsForMonth, spansForWeek,
   ensureMonthsFor, onCacheChange, _settleForTest,
+  createEvent, updateEvent, deleteEvent,
 } from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, sanitize, themeCss } from './categories.ts'
 import { getToken, isSignedIn, signOut } from './auth.ts'
@@ -841,6 +842,103 @@ const cases: Case[] = [
       if (seen.length !== before) return 'an unsubscribed listener was still called'
       await signOut()
     } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
+    return null
+  }],
+
+  ['state: create applies optimistically, then reconciles from the server', async () => {
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    const f = stubFetch([
+      { body: { id: 'real-1', summary: 'Trip', colorId: '9', start: { date: '2026-02-20' }, end: { date: '2026-02-23' } } },
+      { body: { items: [{ id: 'real-1', summary: 'Trip', colorId: '9', start: { date: '2026-02-20' }, end: { date: '2026-02-23' } }] } },
+    ])
+    try {
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      const saved = await createEvent({
+        title: 'Trip', category: 'work', allDay: true,
+        start: civilToDay(2026, 2, 20), end: civilToDay(2026, 2, 22), repeat: 'none',
+      })
+      if (saved.id !== 'real-1') return `reconciled id: ${saved.id}`
+      if (saved.category !== 'work') return `category: ${saved.category}`
+      const evs = eventsForMonth('2026-02')
+      if (evs.filter(e => e.id === 'real-1').length !== 1) return `after reconcile: ${evs.map(e => e.id).join(',')}`
+      if (evs.some(e => e.id.startsWith('tmp:'))) return 'the optimistic entry was not dropped'
+      if (f.calls[0]?.method !== 'POST') return `first call: ${f.calls[0]?.method}`
+      // The colorId came from the category name, resolved by state.ts, not by gcal.ts.
+      if ((f.calls[0]?.body as { colorId?: string }).colorId !== '9') return 'colorId was not resolved from the category'
+      if (f.calls[1]?.method !== 'GET') return 'the touched month was not refetched'
+      await signOut()
+    } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
+    return null
+  }],
+
+  ['state: a failed create rolls the overlay back and rethrows', async () => {
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    const f = stubFetch([{ status: 403, body: { error: { errors: [{ reason: 'insufficientPermissions' }] } } }])
+    try {
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      const before = eventsForMonth('2026-02').length
+      try {
+        await createEvent({ title: 'Doomed', category: 'work', allDay: true, start: civilToDay(2026, 2, 20), end: civilToDay(2026, 2, 20), repeat: 'none' })
+        return 'a failed create resolved'
+      } catch (e) {
+        if (!(e instanceof GcalError) || e.status !== 403) return `wrong error: ${(e as Error).message}`
+      }
+      const after = eventsForMonth('2026-02')
+      if (after.length !== before) return `rollback left ${after.length - before} extra event(s)`
+      if (after.some(e => e.title === 'Doomed')) return 'the optimistic create survived the failure'
+      await signOut()
+    } finally { f.restore(); g.restore(); s.restore(); _resetForTest() }
+    return null
+  }],
+
+  ['state: scope picks the id, and a series write stales every resident month', async () => {
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    try {
+      const inst = { id: 'inst-1', recurringEventId: 'series-1', title: 'Weekly', allDay: true, colorId: '9', start: civilToDay(2026, 2, 11), end: civilToDay(2026, 2, 11) }
+      const seed = () => {
+        localStorage.setItem('bramwell.cache.v1', JSON.stringify({
+          v: 1,
+          months: {
+            '2026-02': { state: 'ready', fetchedAt: Date.now(), events: [inst] },
+            '2026-03': { state: 'ready', fetchedAt: Date.now(), events: [] },
+          },
+        }))
+        _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      }
+      // Instance scope PATCHes the occurrence id and refetches only the touched month.
+      seed()
+      const one = stubFetch([
+        { body: { id: 'inst-1', summary: 'Renamed', colorId: '9', start: { date: '2026-02-11' }, end: { date: '2026-02-12' } } },
+        { body: { items: [] } },
+      ])
+      try {
+        await updateEvent('inst-1', { title: 'Renamed', category: 'work', allDay: true, start: civilToDay(2026, 2, 11), end: civilToDay(2026, 2, 11), repeat: 'none' }, 'instance')
+        if (!(one.calls[0]?.url ?? '').endsWith('/events/inst-1')) return `instance url: ${one.calls[0]?.url}`
+        const refetched = one.calls.filter(c => c.method === 'GET').length
+        if (refetched !== 1) return `instance scope refetched ${refetched} months`
+      } finally { one.restore() }
+      // Series scope PATCHes the series id and refetches every resident month.
+      seed()
+      const many = stubFetch([
+        { body: { id: 'series-1', summary: 'Renamed', colorId: '9', start: { date: '2026-02-11' }, end: { date: '2026-02-12' } } },
+        { body: { items: [] } },
+      ])
+      try {
+        await updateEvent('inst-1', { title: 'Renamed', category: 'work', allDay: true, start: civilToDay(2026, 2, 11), end: civilToDay(2026, 2, 11), repeat: 'none' }, 'series')
+        if (!(many.calls[0]?.url ?? '').endsWith('/events/series-1')) return `series url: ${many.calls[0]?.url}`
+        const refetched = many.calls.filter(c => c.method === 'GET').length
+        if (refetched !== 2) return `series scope refetched ${refetched} months, expected every resident month (2)`
+      } finally { many.restore() }
+      // Delete follows the same id choice and removes the event optimistically.
+      seed()
+      const del = stubFetch([{ status: 204 }, { body: { items: [] } }])
+      try {
+        await deleteEvent('inst-1', 'series')
+        if (!(del.calls[0]?.url ?? '').endsWith('/events/series-1')) return `delete url: ${del.calls[0]?.url}`
+        if (eventsForMonth('2026-02').some(e => e.id === 'inst-1')) return 'the deleted event survived'
+      } finally { del.restore() }
+      await signOut()
+    } finally { g.restore(); s.restore(); _resetForTest() }
     return null
   }],
 ]

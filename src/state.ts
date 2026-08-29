@@ -7,7 +7,10 @@ import type {
 import { asDay, asOffset, asWeek, addDays, civilToDay, monthKey, offsetOf } from './dates.ts'
 import { all as allCategories, categoryFor } from './categories.ts'
 import { getToken } from './auth.ts'
-import { GcalError, listMonth } from './gcal.ts'
+import {
+  createEvent as gcalCreate, deleteEvent as gcalDelete, updateEvent as gcalUpdate,
+  GcalError, listMonth,
+} from './gcal.ts'
 
 // ---------- Anchor ----------
 
@@ -298,10 +301,6 @@ function markAllStale(): void {
   for (const m of Object.values(cache.months)) m.fetchedAt = 0
 }
 
-// ---------- Stubs: task 9 ----------
-
-const NOT_IMPLEMENTED = 'STAGE 02: not implemented'
-
 /** Stage 03 owns *when* to call this; stage 02 owns the rule. */
 export function ensureMonthsFor(weeks: WeekIndex[]): void {
   ensureLoaded()
@@ -314,7 +313,112 @@ export function ensureMonthsFor(weeks: WeekIndex[]): void {
   for (const key of keys) void fetchMonth(key)
 }
 
-export function createEvent(_draft: EventDraft): Promise<CalendarEvent> { throw new Error(NOT_IMPLEMENTED) }
-export function updateEvent(_id: string, _draft: EventDraft, _scope: WriteScope): Promise<CalendarEvent> { throw new Error(NOT_IMPLEMENTED) }
-export function deleteEvent(_id: string, _scope: WriteScope): Promise<void> { throw new Error(NOT_IMPLEMENTED) }
+// ---------- Writes ----------
+
+function colorIdFor(name: string): string {
+  return (allCategories().find(c => c.name === name) ?? categoryFor(undefined)).colorId
+}
+
+function findEvent(id: string): CalendarEvent | null {
+  const p = pending.get(id)
+  if (p !== undefined && p.kind !== 'create') return p.kind === 'update' ? p.event : p.prior
+  for (const key of Object.keys(cache.months)) {
+    for (const ev of eventsForMonth(key)) if (ev.id === id) return ev
+  }
+  return null
+}
+
+/** Field by field, never by spreading the draft: a spread can smuggle startMin into an all-day event. */
+function build(id: string, draft: EventDraft, colorId: string, recurringEventId: string | undefined): CalendarEvent {
+  const ev: CalendarEvent = draft.allDay
+    ? { id, title: draft.title, category: draft.category, colorId, start: draft.start, end: draft.end, allDay: true }
+    : {
+        id, title: draft.title, category: draft.category, colorId,
+        start: draft.start, end: draft.end, allDay: false,
+        startMin: draft.startMin ?? 0, endMin: draft.endMin ?? 0,
+      }
+  if (draft.notes !== undefined) ev.notes = draft.notes
+  if (recurringEventId !== undefined) ev.recurringEventId = recurringEventId
+  return ev
+}
+
+function assertOnline(): void {
+  const nav = (globalThis as { navigator?: { onLine?: boolean } }).navigator
+  if (nav?.onLine === false) throw new Error('Offline — this change was not saved.')
+}
+
+export async function createEvent(draft: EventDraft): Promise<CalendarEvent> {
+  ensureLoaded()
+  const colorId = colorIdFor(draft.category)
+  const tempId = `tmp:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+  const event = build(tempId, draft, colorId, undefined)
+  const touched = monthsSpanned(event.start, event.end)
+  pending.set(tempId, { kind: 'create', tempId, event })
+  notify(touched)
+  try {
+    assertOnline()   // inside the try, after the apply, so the rollback path really runs
+    const saved = await withToken(t => gcalCreate(draft, colorId, t))
+    pending.delete(tempId)
+    await refetch([...new Set([...touched, ...monthsSpanned(saved.start, saved.end)])])
+    return resolve(saved)
+  } catch (e) {
+    pending.delete(tempId)
+    notify(touched)
+    throw e   // the caller raises the toast; state.ts stays DOM-free
+  }
+}
+
+export async function updateEvent(id: string, draft: EventDraft, scope: WriteScope): Promise<CalendarEvent> {
+  ensureLoaded()
+  const prior = findEvent(id)
+  if (prior === null) throw new Error(`unknown event ${id}`)
+  const colorId = colorIdFor(draft.category)
+  const event = build(id, draft, colorId, prior.recurringEventId)
+  const touched = [...new Set([...monthsSpanned(prior.start, prior.end), ...monthsSpanned(event.start, event.end)])]
+  pending.set(id, { kind: 'update', event, prior })
+  notify(touched)
+  try {
+    assertOnline()
+    const wireId = scope === 'series' ? (prior.recurringEventId ?? prior.id) : prior.id
+    const saved = await withToken(t => gcalUpdate(wireId, draft, colorId, t))
+    pending.delete(id)
+    if (scope === 'series') {
+      markAllStale()
+      await refetch(Object.keys(cache.months))
+    } else {
+      await refetch([...new Set([...touched, ...monthsSpanned(saved.start, saved.end)])])
+    }
+    return resolve(saved)
+  } catch (e) {
+    pending.delete(id)
+    notify(touched)
+    throw e
+  }
+}
+
+export async function deleteEvent(id: string, scope: WriteScope): Promise<void> {
+  ensureLoaded()
+  const prior = findEvent(id)
+  if (prior === null) throw new Error(`unknown event ${id}`)
+  const touched = monthsSpanned(prior.start, prior.end)
+  pending.set(id, { kind: 'delete', id, prior })
+  notify(touched)
+  try {
+    assertOnline()
+    const wireId = scope === 'series' ? (prior.recurringEventId ?? prior.id) : prior.id
+    await withToken(t => gcalDelete(wireId, t))
+    pending.delete(id)
+    if (scope === 'series') {
+      markAllStale()
+      await refetch(Object.keys(cache.months))
+    } else {
+      await refetch(touched)
+    }
+  } catch (e) {
+    pending.delete(id)
+    notify(touched)
+    throw e
+  }
+}
+
 export function enableDemo(): void { throw new Error('STAGE 06: not implemented') }
