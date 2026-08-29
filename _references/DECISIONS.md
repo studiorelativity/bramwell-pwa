@@ -201,4 +201,16 @@ why. New rulings made during the rebuild go at the bottom, dated.
     zone — listed under "Not tested".
   - Selftest case 3's 801-day span crosses one leap day (2024-02-29) and
     three year boundaries, not the two leap days the plan first claimed.
+  - `StoredEvent` is the persisted event shape (`CalendarEvent` minus derived
+    `category`, both arms written out); `MonthEntry.events` is
+    `StoredEvent[]`. A cache read re-resolves `category`. Rejected:
+    `Omit<CalendarEvent,'category'>`, which collapses the union.
+  - Brand constructors throw `RangeError` on non-finite input, so a
+    malformed wire date fails at the boundary, not in the virtualizer.
+  - Modules reachable from `selftest.ts` keep browser globals out of module
+    scope (CONVENTIONS), so the node runner survives stage 02.
+  - `MonthKey` stays a plain `string` alias; `monthKey()` shapes it and
+    selftest case 4 guards it.
+  - The DST selftest case is made non-vacuous by a second gate run under
+    `TZ=America/New_York`; the default run stays unpinned.
 

@@ -29,14 +29,15 @@ Do not read the rest of the spec in this stage.
   `StoredCategory`, `Prefs`, `EventCache`, `MonthLoadState`, `Habit`,
   `HabitLog`, `HabitCache`; plus the shapes the design added
   (`DECISIONS.md` "stage 01 types"): `MonthKey`, `MoodId`, `RepeatRule`,
-  `WriteScope`, `PendingWrite`, `Cadence`.
+  `WriteScope`, `PendingWrite`, `Cadence`, `StoredEvent`, `MonthEntry`,
+  `HabitMonthEntry`.
 - The anchorless date core in `src/dates.ts` (brands and constructors,
   `civilToDay`, `dayToCivil`, `monthKey`) implemented with `Date.UTC`
   math, importing nothing; the anchored functions (`today`, `weekOf`,
   `dayAt`) implemented in `state.ts`; a `selfTest()` in `src/selftest.ts`
   covering both, dynamically imported by `main.ts` under `/?selftest`.
   Everything else in `state.ts` stays a stub.
-- `manifest.webmanifest`, `public/icon-*.png`, `public/_headers`.
+- `public/manifest.webmanifest`, `public/icon-*.png`, `public/_headers`.
 
 ## Process
 Run the superpowers workflow inside this stage: `brainstorming` on the

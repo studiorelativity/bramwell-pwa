@@ -6,7 +6,7 @@
 | `npm run dev` serves without errors | PASS | `VITE v6.4.3  ready in 104 ms`, `➜  Local:   http://localhost:5173/` — no error output on start or on subsequent `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5173/` → `200` |
 | `tsc --noEmit` clean | PASS | `npx tsc --noEmit && echo TSC_CLEAN` → `TSC_CLEAN` (no diagnostics printed) |
 | `npm run build` clean | PASS | ```\nvite v6.4.3 building for production...\ntransforming...\n✓ 10 modules transformed.\nrendering chunks...\ncomputing gzip size...\ndist/index.html                   1.34 kB │ gzip: 0.67 kB\ndist/assets/index-tn0RQdqM.css    0.00 kB │ gzip: 0.02 kB\ndist/assets/index-B5sA6vUk.js     2.36 kB │ gzip: 1.22 kB\ndist/assets/selftest-BeEyxkOt.js  3.33 kB │ gzip: 1.49 kB\n✓ built in 71ms\n``` `dist/` listing: `_headers`, `assets/` (`index-B5sA6vUk.js`, `index-tn0RQdqM.css`, `selftest-BeEyxkOt.js`), `icon-192.png`, `icon-512.png`, `index.html`, `manifest.webmanifest` — confirms `manifest.webmanifest` reaches `dist/` from `public/` (see ruling 8) |
-| `/?selftest` 9/9 in the browser | PASS | `npm run selftest` (Node, via `--experimental-strip-types`): ```\nPASS  civil round-trip incl. leap day\nPASS  epoch anchoring\nPASS  801-day weekday oracle\nPASS  month keys across a boundary\nPASS  Monday start\nPASS  year boundary in one row\nPASS  DST-safe stepping across two local years\nPASS  weekOf/dayAt round-trip\nPASS  week 0 contains today\n9/9\n``` Headless Chrome (`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --headless=new --disable-gpu --dump-dom --virtual-time-budget=3000 "http://localhost:5173/?selftest"`), `grep -o 'data-selftest="[a-z]*"'` → `data-selftest="pass"` (single root attribute, one match); the dumped `<pre data-selftest="pass">` block contains all nine `PASS` lines and the trailing `9/9`, identical to the Node run. |
+| `/?selftest` 9/9 in the browser | PASS | `npm run selftest` (Node, via `--experimental-strip-types`): ```\nPASS  civil round-trip incl. leap day\nPASS  epoch anchoring\nPASS  801-day weekday oracle\nPASS  month keys across a boundary\nPASS  Monday start\nPASS  year boundary in one row\nPASS  DST-safe stepping across two local years\nPASS  weekOf/dayAt round-trip\nPASS  week 0 contains today\n9/9\n``` Headless Chrome (`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --headless=new --disable-gpu --dump-dom --virtual-time-budget=3000 "http://localhost:5173/?selftest"`), `grep -o 'data-selftest="[a-z]*"'` → `data-selftest="pass"` (single root attribute, one match); the dumped `<pre data-selftest="pass">` block contains all nine `PASS` lines and the trailing `9/9`, identical to the Node run. `TZ=America/New_York npm run selftest`: ```\nPASS  civil round-trip incl. leap day\nPASS  epoch anchoring\nPASS  801-day weekday oracle\nPASS  month keys across a boundary\nPASS  Monday start\nPASS  year boundary in one row\nPASS  DST-safe stepping across two local years\nPASS  weekOf/dayAt round-trip\nPASS  week 0 contains today\n9/9\n``` — same 9/9, run under a DST-observing zone so case 7 is non-vacuous. |
 | `types.ts` reviewed against SPEC API + HABITS schema | HUMAN | |
 
 ### Browser-render checks (light/dark, both headless)
@@ -25,6 +25,11 @@
 8. `manifest.webmanifest` lives in `public/` (served at `/manifest.webmanifest`); a root file never reaches `dist/` under Vite. SPEC "File layout" already updated.
 9. The selftest does not pin `TZ`: pinning to UTC would neuter the DST case. The local-time-constructor guard therefore only bites in a DST zone — listed under "Not tested".
 10. Selftest case 3's 801-day span crosses one leap day (2024-02-29) and three year boundaries, not the two leap days the plan first claimed.
+11. `StoredEvent` is the persisted event shape (`CalendarEvent` minus derived `category`, both arms written out); `MonthEntry.events` is `StoredEvent[]`. A cache read re-resolves `category`. Rejected: `Omit<CalendarEvent,'category'>`, which collapses the union.
+12. Brand constructors throw `RangeError` on non-finite input, so a malformed wire date fails at the boundary, not in the virtualizer.
+13. Modules reachable from `selftest.ts` keep browser globals out of module scope (CONVENTIONS), so the node runner survives stage 02.
+14. `MonthKey` stays a plain `string` alias; `monthKey()` shapes it and selftest case 4 guards it.
+15. The DST selftest case is made non-vacuous by a second gate run under `TZ=America/New_York`; the default run stays unpinned.
 
 ## Not tested
 - Nothing touches the network; auth, gcal, habits are throwing stubs.
@@ -33,3 +38,5 @@
 - Icons are solid squares; maskable safe-zone not checked.
 - The `week 0 contains today` case compares against a fresh `new Date()`, so re-running `/?selftest` in a tab left open across midnight reports a spurious FAIL (by design of the anchor).
 - Interactive browser view of `/?selftest`: not opened by hand here; the human's gate run is that check.
+- `scripts/selftest.ts` is outside `tsconfig` `include`; the `tsc --noEmit` row does not cover the node runner.
+- Brand constructors reject only non-finite input; range (e.g. year 0–99 remapping by `Date.UTC`) is not validated.

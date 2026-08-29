@@ -27,6 +27,10 @@ twice, the rule goes here.
 - The file layout in `SPEC.md` is the layout. A file it lacks is added
   **there first**, then created. Do not quietly add one and do not contort
   code to avoid one.
+- Any module reachable from `src/selftest.ts` (today: `dates.ts`, `state.ts`,
+  and whatever they import) touches browser globals (`window`, `document`,
+  `localStorage`) inside functions only, never at module scope — `npm run
+  selftest` runs that graph under node.
 
 ## Recurring-edit rules
 - **Grep the whole `src/` tree for a bare class token before adding a CSS

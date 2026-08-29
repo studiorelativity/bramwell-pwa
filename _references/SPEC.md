@@ -343,7 +343,7 @@ Entry: "Try the demo" on first-run, or `?demo`.
 /src/gcal.ts              — Calendar API; the ONLY file calling googleapis.com
 /src/habits.ts            — Supabase client; the ONLY file calling Supabase (HABITS.md)
 /src/journal.ts           — journal link/index resolution, no network of its own (JOURNAL.md)
-/src/dates.ts             — anchorless civil-date core: brands, civilToDay/dayToCivil, monthKey; imports nothing
+/src/dates.ts             — anchorless civil-date core: brands, civilToDay/dayToCivil, monthKey; imports no runtime code
 /src/selftest.ts          — pure selfTest() over dates.ts and state.ts; loaded only by main.ts under ?selftest
 /src/state.ts             — event cache, today() anchor, DayNumber<->WeekIndex math, persistence, write orchestration, demo
 /src/scroll.ts            — virtualizer, snap physics, the one variable-height row
@@ -430,7 +430,7 @@ DayNumber; `Date` objects appear only at API and display boundaries.
 `startMin`/`endMin` (minutes from local midnight). `category` is derived
 from `colorId` at read time and never serialized. `EventSpan` (one per
 week row an event touches) is built in `state.ts`; `render.ts` adds the
-lane.
+lane. `StoredEvent` is the persisted form of `CalendarEvent` with `category` stripped.
 
 ## Definition of done
 
