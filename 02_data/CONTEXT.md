@@ -20,8 +20,9 @@ from the previous `verification.md`.
 ## Outputs
 - `auth.ts`: exactly `getToken(forceRefresh?)`, `signIn`, `signOut`,
   `isSignedIn`.
-- `gcal.ts`: `listMonth`, `createEvent`, `updateEvent(id, changes, token)`,
-  `deleteEvent(id, token)` — no `WriteScope` on the wire; returns
+- `gcal.ts`: `listMonth`, `createEvent(draft, colorId, token)`,
+  `updateEvent(id, changes, colorId, token)`, `deleteEvent(id, token)` —
+  no `WriteScope` on the wire; returns
   `StoredEvent`, not `CalendarEvent`; inclusive/exclusive conversion at
   this boundary; pagination; one retry on 403-rate-limit/429/5xx;
   throws `GcalError { status, body }`.

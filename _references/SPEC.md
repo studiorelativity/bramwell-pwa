@@ -441,8 +441,10 @@ Base `https://www.googleapis.com/calendar/v3`, bearer token, calendar
 - **Instance-vs-series is an id choice, made by the caller.** `WriteScope`
   does not reach the wire: only `state.ts` holds the `CalendarEvent` that
   carries both `id` and `recurringEventId`, so it picks which id to send.
-  `gcal.updateEvent(id, changes, token)` and `gcal.deleteEvent(id, token)`
-  take no scope.
+  `gcal.updateEvent(id, changes, colorId, token)` and
+  `gcal.deleteEvent(id, token)` take no scope. `colorId` stays an explicit
+  argument: `EventDraft.category` is a category *name*, and `gcal.ts` may
+  not import `categories.ts` to resolve it.
 - 403 rate-limit / 5xx / 429: one retry with backoff, then surface. A 403
   is retried **only** when the body's error reason is `rateLimitExceeded`
   or `userRateLimitExceeded`; a permissions 403 surfaces immediately.
