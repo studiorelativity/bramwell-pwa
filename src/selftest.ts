@@ -853,10 +853,21 @@ const cases: Case[] = [
     ])
     try {
       _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
-      const saved = await createEvent({
+      const inflight = createEvent({
         title: 'Trip', category: 'work', allDay: true,
         start: civilToDay(2026, 2, 20), end: civilToDay(2026, 2, 22), repeat: 'none',
       })
+      // The optimistic apply is synchronous (pending.set + notify before the first await),
+      // so the overlay is observable right now, before the write settles.
+      const overlay = eventsForMonth('2026-02').filter(e => e.id.startsWith('tmp:'))
+      if (overlay.length !== 1) return `optimistic overlay entries: ${overlay.map(e => e.id).join(',') || 'none'}`
+      const opt = overlay[0]
+      if (opt === undefined) return 'optimistic overlay entry missing'
+      if (opt.title !== 'Trip') return `optimistic title: ${opt.title}`
+      if (opt.category !== 'work') return `optimistic category: ${opt.category}`
+      if (opt.allDay !== true) return `optimistic allDay: ${opt.allDay}`
+      if ('startMin' in opt) return `optimistic entry carried startMin: ${String((opt as { startMin?: number }).startMin)}`
+      const saved = await inflight
       if (saved.id !== 'real-1') return `reconciled id: ${saved.id}`
       if (saved.category !== 'work') return `category: ${saved.category}`
       const evs = eventsForMonth('2026-02')
