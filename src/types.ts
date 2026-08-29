@@ -53,6 +53,12 @@ export type CalendarEvent =
       endMin: number
     })
 
+/** CalendarEvent as persisted in bramwell.cache.v1: `category` is derived from colorId
+ *  and never serialized. Two arms written out — Omit<> over a union collapses the discriminant. */
+export type StoredEvent =
+  | (Omit<EventBase, 'category'> & { allDay: true; startMin?: never; endMin?: never })
+  | (Omit<EventBase, 'category'> & { allDay: false; startMin: number; endMin: number })
+
 /** In-progress form state. Deliberately flat so toggling allDay keeps the times;
  *  the CalendarEvent is built from it field by field in state.ts. */
 export type EventDraft = {
@@ -82,8 +88,8 @@ export type EventSpan = {
 
 export type MonthEntry = {
   state: MonthLoadState
-  /** Server truth only. An event that spans a month boundary appears in both months. */
-  events: CalendarEvent[]
+  /** Server truth only, category stripped; eventsForMonth() re-resolves it. Only 'ready' months are persisted. An event spanning a month boundary appears in both months. */
+  events: StoredEvent[]
   /** Date.now() of the last successful fetch; 0 when never fetched. */
   fetchedAt: number
 }

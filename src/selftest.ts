@@ -1,4 +1,4 @@
-// STAGE 01 — pure self-test over the date core. No DOM. Cases 5–8 are added in Task 4.
+// STAGE 01 — pure self-test over the date core. No DOM. Cases 5–9 are added in Task 4.
 import type { DayNumber } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
 import { today, weekOf, dayAt, _setAnchorForTest } from './state.ts'
@@ -28,6 +28,7 @@ const cases: Case[] = [
     if (civilToDay(1969, 12, 31) !== -1) return `1969-12-31 = ${civilToDay(1969, 12, 31)}`
     if (civilToDay(2000, 1, 1) !== 10957) return `2000-01-01 = ${civilToDay(2000, 1, 1)}`
     if (offsetOf(asDay(-4)) !== 6) return `1969-12-28 offset ${offsetOf(asDay(-4))}`
+    try { civilToDay(Number.NaN, 1, 1); return 'NaN year was branded' } catch (e) { if (!(e instanceof RangeError)) return `wrong error: ${(e as Error).message}` }
     return null
   }],
 

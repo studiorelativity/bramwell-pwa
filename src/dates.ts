@@ -1,4 +1,4 @@
-// STAGE 01 — anchorless civil-date core. Imports nothing. Anything may import this.
+// STAGE 01 — anchorless civil-date core. Imports no runtime code. Anything may import this.
 // Date objects appear here only as Date.UTC scratch; none escape.
 import type { DayNumber, WeekIndex, DayOffset, MonthKey } from './types.ts'
 
@@ -6,9 +6,13 @@ const MS_PER_DAY = 86_400_000
 /** 1970-01-01 was a Thursday: DayOffset 3 under 0=Mon. */
 const EPOCH_OFFSET = 3
 
-export const asDay = (n: number): DayNumber => n as DayNumber
-export const asWeek = (n: number): WeekIndex => n as WeekIndex
-export const asOffset = (n: number): DayOffset => n as DayOffset
+function finite(n: number, what: string): number {
+  if (!Number.isFinite(n)) throw new RangeError(`${what}: not a finite number (${n})`)
+  return n
+}
+export const asDay = (n: number): DayNumber => finite(n, 'DayNumber') as DayNumber
+export const asWeek = (n: number): WeekIndex => finite(n, 'WeekIndex') as WeekIndex
+export const asOffset = (n: number): DayOffset => finite(n, 'DayOffset') as DayOffset
 
 /** m is 1..12. Out-of-range d normalises the way Date.UTC does (Feb 29 in a common year -> Mar 1). */
 export function civilToDay(y: number, m: number, d: number): DayNumber {
