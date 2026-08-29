@@ -63,10 +63,14 @@ why. New rulings made during the rebuild go at the bottom, dated.
 ## In force — auth and wire
 
 - `getToken(forceRefresh)` is how a 401 invalidates a token still unexpired
-  by its own clock, without adding an export.
+  by its own clock. **Superseded in part at the stage-02 gate close:** a
+  fifth export, `invalidateToken()`, was needed after all — see "Stage 02
+  gate close" below and SPEC "Auth".
 - A failed quiet renewal does not auto-escalate to a popup (browsers block
   it outside a gesture); it surfaces the reconnect pill instead.
-- The GIS `<script>` lives in `index.html`; `auth.ts` polls `window.google`.
+- The GIS `<script>` lives in `index.html`; `auth.ts` polls for GIS. **Read
+  through `globalThis.google`** (the same binding as `window.google` in a
+  browser) so a node test can install a fake — stage-02 gate close.
 - `signOut` must revoke, not just clear.
 - No profile scope: the account row names the connection, not the person.
 - Write orchestration lives in `state.ts`; the day module never touches
@@ -214,3 +218,96 @@ why. New rulings made during the rebuild go at the bottom, dated.
   - The DST selftest case is made non-vacuous by a second gate run under
     `TZ=America/New_York`; the default run stays unpinned.
 
+
+## Stage 02 gate close (2026-08-29)
+
+Promoted from `02_data/output/verification.md` after the gate passed on the
+real account. That file is now a record, not an input.
+
+### Module boundaries and shapes
+- `gcal.ts` returns `StoredEvent`, never `CalendarEvent`. Resolving
+  `category` there would make it import `categories.ts` and depend on
+  `configure()` having run; a pre-configure read would silently resolve
+  every event to the wrong fallback. Resolution lives in `state.ts` alone,
+  which makes "category is never serialized" structural rather than
+  remembered. Rejected: `gcal.ts` importing `categories.ts`.
+- `WriteScope` never reaches the wire. Instance-vs-series is purely a choice
+  of which id to send, and only `state.ts` holds the event carrying both
+  `id` and `recurringEventId`. `gcal.updateEvent(id, changes, colorId,
+  token)` and `gcal.deleteEvent(id, token)` take no scope. `colorId` stays
+  an explicit argument because `EventDraft.category` is a *name*.
+- `state.ts` rolls back and **rethrows but does not toast**. SPEC's prose
+  says "roll back, toast, rethrow", but `chrome.toast` is DOM-bearing and
+  `state.ts` is loaded by the node selftest. The caller raises the toast;
+  stage 04 wires it.
+- `auth.ts` reads `globalThis.google` — the same binding as `window.google`
+  in a browser — so a node test can install a fake without clobbering the
+  page's real `window` during `/?selftest`.
+
+### Wire behaviour
+- Retry is split and neither layer retries the other's case: `gcal.ts` owns
+  the transport retry (one retry on 403-rate-limit / 429 / 5xx), `state.ts`
+  owns the identity retry (401 → `getToken(true)` once). 429 joins the set;
+  a 403 is retried ONLY on reason `rateLimitExceeded`/`userRateLimitExceeded`.
+- `listMonth` caps the `nextPageToken` loop at 20 pages, so a server or stub
+  returning a fixed token fails loudly instead of hanging.
+- `MAX_RESULTS` stays an exported `const`. It cannot be lowered from the
+  console — an ES module namespace object's properties are non-writable — so
+  a gate lowers it by editing the source and letting HMR reload. Rejected: a
+  runtime setter in a production module to serve a test.
+- A timed event's span is its start day only, even when its end crosses
+  midnight.
+
+### Cache and state
+- Cache staleness is 5 minutes; `saveCache` is debounced 250ms; `savePrefs`
+  writes immediately. No eviction — quota failures stay swallowed.
+- A failed refresh sets `error` but KEEPS the prior events, so a refresh
+  failure never blanks a month already on screen.
+- `refetch` must FORCE a fetch rather than joining one already in flight.
+  Joining it silently discarded a write's result: the running request was
+  issued before the write reached Google, and its success handler then reset
+  `fetchedAt`, hiding the new event for up to 5 minutes with no error.
+- A user gesture must never join an in-flight quiet renewal. `getToken(true)`
+  skipping the cache check but not the `pending` dedupe made `signIn()`
+  return a non-gesture promise, which GIS cannot escalate to a popup. The
+  settler slot is a FIFO queue, not a single slot — two concurrent requests
+  through one slot would clobber each other and hang the first.
+- `state.updateEvent` builds the changes object explicitly: `repeat` is
+  always omitted (DECISIONS "repeat is disabled when editing an existing
+  event"), and for `scope === 'series'` the dates are omitted too. Sending
+  the whole draft made an instance edit carry `recurrence` against an
+  instance id, and made a series edit rewrite the series master's start to
+  the edited occurrence's date, destroying earlier occurrences.
+
+### Categories
+- `brighten()`'s spec constants stand: lightness floor 0.62, saturation cap
+  0.72. A test that measures the emitted 8-bit hex must tolerate ~1/255 of
+  quantization error; the tolerance is the thing to widen, never the
+  constant. Rejected: lowering the cap to 0.71 to fit a tight tolerance.
+- Dark twins are keyed on the LIGHT hex, not on category identity, so they
+  survive a rename or a colorId change with no bookkeeping.
+- `sanitize()` also validates `name` against `/^[a-z0-9-]{1,32}$/`. `name`
+  reaches a `[data-cat="…"]` selector and a `--cat-…` property, so a
+  corrupted prefs blob could otherwise break or override the theme sheet.
+- The Google colour table is exported from `categories.ts`. **The
+  transcribed hexes were confirmed at the gate**: events written with
+  colorIds 9/10/5/8 render in the Google Calendar app as blue-indigo, green,
+  yellow-amber and grey respectively.
+- Mood values beyond `warm` are deferred to stage 03; the four band tokens
+  are not emitted at all. No palette was invented in stage 02.
+
+### Testing and verification
+- `selfTest()` is async and covers `gcal.ts` under a stubbed `fetch` — one
+  surface, run by both `npm run selftest` and `/?selftest`. Rejected: a
+  second `wiretest.ts` module and a second runner.
+- `state.ts` carries `_resetForTest`, `_flushForTest`, `_settleForTest`,
+  extending stage-01 ruling 2. `auth.ts` carries no test-only export.
+- Every anchor-pinning selftest case saves and restores the anchor, so the
+  suite is order-independent (verified by running it reversed).
+- **A criterion is about user-visible behaviour, not mechanism.** "Renews
+  quietly with no popup" was unachievable as literally written: GIS's token
+  model always opens a popup window, and on the silent path it confirms the
+  grant server-side and closes itself. The criterion is "renews WITHOUT USER
+  INTERACTION". The `Cross-Origin-Opener-Policy … window.closed` console
+  errors that accompany it are GIS's own `client.js` polling the window it
+  opened — benign, and not ours.

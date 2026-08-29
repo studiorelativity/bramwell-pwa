@@ -96,8 +96,10 @@ const RRULE: Record<RepeatRule, string | null> = {
   yearly: 'RRULE:FREQ=YEARLY',
 }
 
-/** Changed fields only. A change to dates must carry allDay, start and end together;
- *  state.ts passes the whole draft, so that holds by construction. */
+/** Changed fields only. A change to dates must carry allDay, start and end together:
+ *  the dates block below fires only when start and end are both present, and state.ts
+ *  builds its changes object so they are set together or not at all. It does NOT pass
+ *  the whole draft — it omits `repeat` always, and omits the dates for a series edit. */
 function toWire(draft: Partial<EventDraft>, colorId: string | undefined): Record<string, unknown> {
   const body: Record<string, unknown> = {}
   if (draft.title !== undefined) body['summary'] = draft.title

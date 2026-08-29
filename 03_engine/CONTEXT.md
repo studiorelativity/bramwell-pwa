@@ -1,6 +1,6 @@
 # Stage 03 — Scroll engine, rendering, year view
 
-**Status: BLOCKED** until 02's gate is closed.
+**Status: OPEN.** Gate 2 closed 2026-08-29.
 
 ## What this stage is
 `scroll.ts`, `render.ts`, `year.ts`, the calendar and year styles in
@@ -18,6 +18,45 @@ is a no-op this stage.
 As in `CLAUDE.md` "How a stage session runs". Carry-forward items, if
 any, are listed here by the human at the previous gate close — not read
 from the previous `verification.md`.
+
+### Carry-forward from the stage-02 gate close (2026-08-29)
+Read these as part of this stage's contract; do not go digging in stage 02's
+`verification.md` for them.
+
+- **The mood palette is yours.** `categories.themeCss()` ships the mechanism
+  with a `MOODS` table holding `warm` only — the other four ids resolve to
+  it — and the four band tokens are not emitted at all. Their values live in
+  the design canvas that SPEC "Visual direction" defers to and which is not
+  in the repo. Fill `MOODS` and emit the band tokens here. Stage 02
+  deliberately invented no palette; do not inherit one by guesswork.
+- **`main.ts` holds a DEV-only harness** (a Connect button, a Sign out
+  button, a status line and a `window.bramwell` handle, all behind
+  `import.meta.env.DEV`). It is stage 05's to delete when it builds the real
+  first-run screen. Leave it alone; it is what makes a gate runnable.
+- **`main.ts` calls `categories.configure()` at bootstrap only.** SPEC says
+  "and again on any prefs change", which is not achievable yet: `state.ts`
+  exposes no prefs-change subscription and there is no Settings UI until
+  stage 05. If this stage adds a prefs writer, wire the re-`configure()` and
+  re-emit the theme `<style>` with it.
+- **`ensureMonthsFor(weeks)` exists and works; deciding WHEN to call it is
+  yours.** SPEC "Perpetual scroll mechanics" wants months loaded as weeks
+  come within ~8 weeks of the viewport, both directions. Stage 02 owns only
+  the rule: fetch when `absent`, `error`, or `ready` and older than 5
+  minutes; skip `loading`; concurrent callers coalesce.
+- **`monthState(key)` is the render-facing load state** (`absent | loading |
+  ready | error`). A failed refresh keeps the prior events, so an `error`
+  month may still have content to draw.
+- **`spansForWeek(week)` returns `EventSpan[]` already deduped and clipped**,
+  with `continuesBefore`/`continuesAfter` computed against the unclipped
+  event. Lane packing is this stage's, on its own `PackedSpan`. A timed
+  event's span is its start day only, even when it crosses midnight.
+- **Verification: drive colour scheme with CDP `Emulation.setEmulatedMedia`.**
+  `--blink-settings=preferredColorScheme=2` crashes Chrome 151's renderer
+  reproducibly and is no longer sanctioned — see `CONVENTIONS.md`.
+- **A finding worth reusing:** `gcal.ts` calls bare `fetch(...)` and never
+  captures it at module scope, which let the gate count real API requests by
+  installing a `window.fetch` wrapper from the console. The same trick works
+  for anything this stage needs to count at runtime.
 
 ## Outputs
 - Virtualizer with 14 recycled rows, transform placement, half-month

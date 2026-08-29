@@ -1,7 +1,9 @@
 # Stage 02 — Data layer
 
-**Status: AWAITING GATE.** Code complete 2026-08-29; see `output/verification.md`.
-Gate 1 closed 2026-08-29; .env.local present.
+**Status: CLOSED.** Gate 2 passed and closed 2026-08-29 on the real account.
+All four `OPEN.md` wire items closed; 16 rulings promoted to `DECISIONS.md`
+("Stage 02 gate close") and `SPEC.md`. `output/verification.md` is now a
+record, not an input.
 
 ## What this stage is
 `auth.ts`, `gcal.ts`, `categories.ts`, and the cache/persistence/write

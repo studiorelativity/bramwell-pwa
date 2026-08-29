@@ -1,8 +1,9 @@
 # Stage 02 — verification
 
-**Status: code complete, awaiting the human gate.** Rulings 9 and 10 were
-resolved by human ruling on 2026-08-29 and are already written upstream; the
-remaining rulings still await gate close. Everything below the
+**Status: GATE PASSED and CLOSED, 2026-08-29.** Every criterion below passed on
+the real account. All four `OPEN.md` wire items — open since v3 — are closed.
+All 16 rulings have been promoted to `DECISIONS.md` (and `SPEC.md` where they
+change the contract); this file is now a record, not an input. Everything below the
 "Gate" heading is the human's to run against a real Google account; those
 rows are unfilled by design.
 
@@ -129,7 +130,6 @@ instance vs series delete; and the retry policy.
 - A month with more than 250 events at the real `MAX_RESULTS`.
 - DST-boundary *timed writes* (the DST-safe date stepping is covered; a write
   landing on a spring-forward hour is not).
-- Whether the transcribed Google colour hexes match Google's actual palette.
 - Verified out of band during review rather than by a suite case, and worth
   knowing: quota-exceeded swallowing (probe with a throwing `setItem` — prefs
   and the debounced cache flush both survive), the offline path
@@ -148,12 +148,12 @@ instance vs series delete; and the retry policy.
 | **Category resolution from a real colorId** | PASS (read side) | `FA Two Day Summit` carries `colorId: "8"` on the wire; `eventsForMonth` resolved it to the seed category `other`, whose colorId is 8. Events with no colorId resolved to the fallback, also `other`. Write side still pending. |
 | Pagination proven by lowering `MAX_RESULTS`, then restored | **PASS** | Edited `gcal.ts:8` to `5`, hard-reloaded, cleared `bramwell.cache.v1` and `_resetForTest()` to force a real fetch, and counted requests by installing a `window.fetch` wrapper from the console — which works precisely because `gcal.ts` calls bare `fetch(...)` and never captures it at module scope. Result: **18 events, 4 API requests, 3 carrying a `pageToken`, `maxResults: 5` on the wire.** 18 events at 5/page = 5+5+5+3. Same 18 as the single-page run at 250, so pagination is invisible in the result and visible only in the request count. `MAX_RESULTS` restored to 250 via `git checkout src/gcal.ts`. |
 | Persistence + 5-minute staleness rule (bonus, found by a mistake) | PASS | An earlier attempt called `_resetForTest()` WITHOUT clearing `localStorage`. `ensureLoaded()` re-read the persisted `ready` month, `needsFetch` saw it under 5 minutes old, and made **0 network requests** while still serving all 18 events. Unintended, but it is exactly the cache-and-staleness behaviour SPEC specifies, demonstrated on real data. |
-| OPEN #1 — one event per seed category | PASS (colorId) / pending (rendered colour) | Created one all-day event per seed category; read Google's raw resources back via the Calendar connector. Wire colorIds: Work `"9"`, Personal `"10"`, Financial `"5"`, Other `"8"` — all four exactly as the seed table specifies. Whether Google *renders* those ids in the expected hues is the human's eye check; the transcribed hex table is still unconfirmed. |
+| OPEN #1 — one event per seed category | **PASS — closed** | Created one all-day event per seed category; read Google's raw resources back via the Calendar connector. Wire colorIds: Work `"9"`, Personal `"10"`, Financial `"5"`, Other `"8"` — all four exactly as the seed table specifies. Human confirmed 2026-08-29 that all four render as expected in the Google Calendar app (Work blue/indigo, Personal green, Financial yellow/amber, Other grey), so the transcribed hex table stands. |
 | OPEN #2 — a 3-day all-day event's end date | **PASS — closed** | Internal `start = 20694` (2026-08-29), `end = 20696` (Aug 31, inclusive). Google stored `start.date 2026-08-29`, **`end.date 2026-09-01`** — exclusive, one past the inclusive end. Renders across Aug 29/30/31. Single-day controls stored `2026-08-29 → 2026-08-30`. Both directions correct. This item had been open since v3 and is now closed on the write side; the read side was closed earlier in this gate. |
 | OPEN #3 — edit one occurrence of a recurring event | **PASS — closed** | `updateEvent(instanceId, …, 'instance')` on `iounhiaoict4ngsltlf8qb6ofg_20260829`. Google: Aug 29 → "Bramwell gate — EDITED OCCURRENCE"; Sep 5, Sep 12, Sep 19 all still "Bramwell gate — weekly". The edited instance retained `recurringEventId` and `originalStartTime`, so it is a proper series exception, not a detached event. Caveat: the draft carried `repeat: 'none'`, so this run does not independently exercise the final-review fix that strips `repeat` on update. |
 | OPEN #4 — delete a series | **PASS — closed** | `deleteEvent(instanceId, 'series')` — the INSTANCE id `iounhiaoict4ngsltlf8qb6ofg_20260829` was passed in and `state.ts` resolved it to `recurringEventId` for the wire, per the stage's id-selection design. Google afterwards: all four occurrences gone (Aug 29 exception, Sep 5, Sep 12, Sep 19), and the five standalone test events untouched. Correct scope, zero collateral damage. |
 
-### Read this before running the gate
+### Read this before running the gate (retained for stage 05 and any re-run)
 
 1. **`MAX_RESULTS` cannot be lowered from the console.** `window.bramwell.gcal`
    is an ES module namespace object, so its properties are non-writable and an
