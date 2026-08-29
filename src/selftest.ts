@@ -1,8 +1,8 @@
 // STAGE 01 — pure self-test over the date core. No DOM. Cases 5–9 are added in Task 4.
-import type { DayNumber, StoredCategory } from './types.ts'
+import type { DayNumber, StoredCategory, MoodId } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
 import { today, weekOf, dayAt, _setAnchorForTest } from './state.ts'
-import { all, brighten, categoryFor, configure, fallback, sanitize } from './categories.ts'
+import { all, brighten, categoryFor, configure, fallback, sanitize, themeCss } from './categories.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -254,6 +254,36 @@ const cases: Case[] = [
       localStorage.setItem('k', 'v')
       if (localStorage.getItem('k') !== 'v') return 'storage stub did not round-trip'
     } finally { s.restore() }
+    return null
+  }],
+
+  ['categories: themeCss emits both schemes and data-cat rules', () => {
+    configure({})
+    const css = themeCss('warm')
+    for (const need of [
+      '--cat-work: #3056D3',
+      '--cat-other: #64748B',
+      '@media (prefers-color-scheme: dark)',
+      '--cat-work: #7B96FF',          // curated twin, not brighten()
+      '--cat-personal: #4FC48D',
+      '[data-cat="work"] { --cat: var(--cat-work); }',
+      '--surface:',
+    ]) if (!css.includes(need)) return `missing: ${need}`
+    // Mood values are stage 03: every id resolves to warm for now, and none of them throws.
+    for (const m of ['warm', 'paper', 'cool', 'sage', 'dusk'] as MoodId[]) {
+      if (themeCss(m) !== css) return `mood ${m} differs from warm before stage 03 fills MOODS`
+    }
+    // A non-seed colour with no displayHex takes Google's hex light and a derived twin dark.
+    configure({ categories: [{ name: 'solo', label: 'Solo', colorId: '3' }], fallbackCategory: 'solo' })
+    const solo = themeCss('warm')
+    if (!solo.includes('--cat-solo: #8E24AA')) return 'non-seed light colour is not Google hex'
+    if (!solo.includes(`--cat-solo: ${brighten('#8E24AA')}`)) return 'non-seed dark colour is not brighten(light)'
+    // A displayHex override wins over the colorId's Google hex in both schemes.
+    configure({ categories: [{ name: 'solo', label: 'Solo', colorId: '3', displayHex: '#112233' }], fallbackCategory: 'solo' })
+    const over = themeCss('warm')
+    if (!over.includes('--cat-solo: #112233')) return 'displayHex did not override light'
+    if (!over.includes(`--cat-solo: ${brighten('#112233')}`)) return 'displayHex did not override dark'
+    configure({})
     return null
   }],
 ]

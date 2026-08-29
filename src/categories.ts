@@ -142,5 +142,45 @@ export function all(): StoredCategory[] {
   return cats.slice()
 }
 
+// ---------- Theme ----------
+
+type MoodTokens = { surface: string; surfaceDark: string }
+
+/** Values are stage 03's, from the design canvas that SPEC "Visual direction" defers to.
+ *  Only warm exists in-repo (the seed paint in index.html); the other four ids resolve to
+ *  it until stage 03 fills this table, and the four band tokens are not emitted at all.
+ *  No palette is invented here. */
+const MOODS: Partial<Record<MoodId, MoodTokens>> = {
+  warm: { surface: '#f7f6f3', surfaceDark: '#0f1115' },
+}
+
+function lightOf(c: StoredCategory): string {
+  return c.displayHex ?? GOOGLE_HEX.get(c.colorId) ?? OTHER.displayHex ?? '#64748B'
+}
+
+function darkOf(c: StoredCategory): string {
+  const light = lightOf(c)
+  return TWINS.get(light.toUpperCase()) ?? brighten(light)
+}
+
 /** [data-cat] rules, --cat-<name> properties, mood tokens. main.ts owns the <style>. */
-export function themeCss(_mood: MoodId): string { throw new Error('STAGE 02: not implemented') }
+export function themeCss(mood: MoodId): string {
+  const tokens = MOODS[mood] ?? MOODS.warm!
+  const light = cats.map(c => `  --cat-${c.name}: ${lightOf(c)};`).join('\n')
+  const dark = cats.map(c => `    --cat-${c.name}: ${darkOf(c)};`).join('\n')
+  const rules = cats.map(c => `[data-cat="${c.name}"] { --cat: var(--cat-${c.name}); }`).join('\n')
+  return [
+    `:root {`,
+    `  --surface: ${tokens.surface};`,
+    light,
+    `}`,
+    `@media (prefers-color-scheme: dark) {`,
+    `  :root {`,
+    `    --surface: ${tokens.surfaceDark};`,
+    dark,
+    `  }`,
+    `}`,
+    rules,
+    ``,
+  ].join('\n')
+}
