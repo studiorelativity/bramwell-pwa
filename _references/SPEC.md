@@ -239,6 +239,26 @@ prefs.mood             — mood id            (absent -> "warm")
   to it; it cannot be deleted. Role lives in `prefs.fallbackCategory`.
 - **Deleting a category never touches Google.** Its events keep their
   colorId and resolve to the fallback on the next read/render.
+- **Google colour table.** `categories.ts` owns and exports it — the 11
+  colorIds with Google's own name and hex. Stage 05's settings dropdown is
+  its consumer; it is also the light-mode hex for any category with no
+  `displayHex`. Hexes below are transcribed from Google's palette and are
+  **unverified until a gate opens an event in the Google Calendar app**.
+
+  | id | name | hex | id | name | hex |
+  |---|---|---|---|---|---|
+  | 1 | Lavender | #7986CB | 7 | Peacock | #039BE5 |
+  | 2 | Sage | #33B679 | 8 | Graphite | #616161 |
+  | 3 | Grape | #8E24AA | 9 | Blueberry | #3F51B5 |
+  | 4 | Flamingo | #E67C73 | 10 | Basil | #0B8043 |
+  | 5 | Banana | #F6BF26 | 11 | Tomato | #D50000 |
+  | 6 | Tangerine | #F4511E | | | |
+
+- **Dark twins are keyed on the light hex, not on category identity:**
+  `light = displayHex ?? googleHex(colorId)`, then
+  `dark = TWINS[light] ?? brighten(light)` over the four seed twins. This
+  survives renames and colorId changes with no bookkeeping, and a hand-
+  picked `#3056D3` gets the curated twin rather than a derived one.
 - **Two colour layers.** Layer 1: the Google colorId (dropdown of the 11
   with Google's names — Lavender, Sage, Grape, Flamingo, Banana,
   Tangerine, Peacock, Graphite, Blueberry, Basil, Tomato). **Changing it
@@ -250,13 +270,23 @@ prefs.mood             — mood id            (absent -> "warm")
   sets `--surface` and the four band tokens only, light and dark, on the
   default's luminance ladder (band contrast is a property of the set).
   Never `--ink*`, `--rule*`, `--today`, or category colours.
+  **Values: stage 03.** Only Warm's `--surface` exists in-repo (the seed
+  paint in `index.html`); the other four moods and all four band tokens
+  live in the design canvas, which "Visual direction" defers to and which
+  is not in the repo. `categories.ts` ships the mechanism with a `MOODS`
+  table holding Warm only, so the other four ids resolve to Warm until
+  stage 03 fills it from the canvas. No palette is invented in stage 02.
 - Settings UI: one row per category (label editable in place, colorId
   dropdown, display swatch with clear, delete on every row but the
   fallback's — two-step "Remove?" button, not `confirm()`), add row
   disabled at 11 with the reason, Mood selector. Label edits do not
   rebuild the row; structural edits do.
 - `categories.ts` stays DOM-free and never imports `state.ts`; `main.ts`
-  pushes prefs in via `configure(...)`. Runtime colours are emitted by
+  pushes prefs in via `configure(...)`, at bootstrap and again on any
+  prefs change, so there is one writer. The module initialises to the seed
+  so a read before `configure()` resolves to seed colours, never throws.
+  `configure()` substitutes the seed when `sanitize()` yields nothing —
+  zero categories would leave `fallback()` with nothing to return. Runtime colours are emitted by
   `main.ts` into one `<style>` element from `categories.themeCss()`
   (`[data-cat]` rules plus `--cat-<name>` properties plus mood tokens).
   `:root` values in `index.html` are seed paint only. `render.ts` sets
@@ -344,7 +374,7 @@ Entry: "Try the demo" on first-run, or `?demo`.
 /src/habits.ts            — Supabase client; the ONLY file calling Supabase (HABITS.md)
 /src/journal.ts           — journal link/index resolution, no network of its own (JOURNAL.md)
 /src/dates.ts             — anchorless civil-date core: brands, civilToDay/dayToCivil, monthKey; imports no runtime code
-/src/selftest.ts          — pure selfTest() over dates.ts and state.ts; loaded only by main.ts under ?selftest
+/src/selftest.ts          — pure async selfTest() over dates.ts, state.ts and gcal.ts under a stubbed fetch; loaded only by main.ts under ?selftest
 /src/state.ts             — event cache, today() anchor, DayNumber<->WeekIndex math, persistence, write orchestration, demo
 /src/scroll.ts            — virtualizer, snap physics, the one variable-height row
 /src/render.ts            — week rows, bars, chips, lane packing, month badges, header
@@ -397,13 +427,33 @@ Base `https://www.googleapis.com/calendar/v3`, bearer token, calendar
   from the category, `description` from notes, `recurrence` from repeat
   (`RepeatRule` = `none | daily | weekly | monthly | yearly`, mapped to
   one RRULE).
-- **Update:** `PATCH`, changed fields only. Instance id = this occurrence;
-  `recurringEventId` = whole series.
-- **Delete:** same instance/series choice (`WriteScope` = `instance |
-  series`).
-- 403 rate-limit / 5xx: one retry with backoff, then surface.
+- **Update:** `PATCH`, changed fields only, on whichever id the caller
+  sends — the instance id is this occurrence, `recurringEventId` is the
+  whole series.
+- **Delete:** same id choice. `WriteScope` (`instance | series`) is
+  `state.ts`'s vocabulary, where the picker and the series-delete
+  confirmation live; see the bullet below.
+- **`gcal.ts` returns `StoredEvent`, never `CalendarEvent`.** `category` is
+  resolved against current prefs, which is `state.ts`'s job on every read;
+  resolving it here would make `gcal.ts` import `categories.ts` and depend
+  on `configure()` having already run. Returning the persisted shape makes
+  "category is never serialized" structural rather than remembered.
+- **Instance-vs-series is an id choice, made by the caller.** `WriteScope`
+  does not reach the wire: only `state.ts` holds the `CalendarEvent` that
+  carries both `id` and `recurringEventId`, so it picks which id to send.
+  `gcal.updateEvent(id, changes, token)` and `gcal.deleteEvent(id, token)`
+  take no scope.
+- 403 rate-limit / 5xx / 429: one retry with backoff, then surface. A 403
+  is retried **only** when the body's error reason is `rateLimitExceeded`
+  or `userRateLimitExceeded`; a permissions 403 surfaces immediately.
+- Errors are thrown as `GcalError { status, body }`. `gcal.ts` owns the
+  transport retry; `state.ts` owns the 401 re-auth retry. Neither retries
+  the other's case.
+- `fetch` is called bare inside each function, never captured at module
+  scope, so a test can swap `globalThis.fetch`.
 - `MAX_RESULTS` is a module constant; lower it to force pagination during
-  a gate, restore to 250.
+  a gate, restore to 250. `listMonth` caps the `nextPageToken` loop at 20
+  pages so a stub returning a fixed token fails rather than hangs.
 
 ## Write orchestration (`src/state.ts`)
 
@@ -415,6 +465,39 @@ rethrow. The offline check sits inside the try block after the optimistic
 apply so the rollback path really runs. `onCacheChange(fn)` notifies
 listeners with changed month keys. Optimistic creates are built field by
 field, not by spreading the draft.
+
+### State API
+
+```
+ensureMonthsFor(weeks: WeekIndex[]): void   — lazy month loading
+monthState(key: MonthKey): MonthLoadState   — render reads load state
+eventsForMonth(key: MonthKey): CalendarEvent[]
+spansForWeek(week: WeekIndex): EventSpan[]
+prefs(): Prefs / savePrefs(p: Prefs): void
+createEvent(draft) / updateEvent(id, draft, scope) / deleteEvent(id, scope)
+onCacheChange(fn: (months: MonthKey[]) => void): () => void
+today() / weekOf() / dayAt() / enableDemo()
+```
+
+`loadCache`/`saveCache` are private: nothing outside `state.ts` touches the
+event cache. `saveCache` is debounced (~250ms trailing) so an optimistic
+write does not re-serialize the whole blob synchronously; `savePrefs`
+writes immediately.
+
+- `ensureMonthsFor` fetches a month key that is `absent`, `error`, or
+  `ready` with `fetchedAt` older than **5 minutes**; it skips `loading`,
+  and coalesces concurrent callers through an in-flight map. A failed
+  fetch sets `error` but **keeps the prior events**, so a refresh failure
+  never blanks a month already on screen. Stage 03 owns *when* to call it.
+- `spansForWeek` gathers the one or two month keys the week touches and
+  **dedupes by event id**: an event crossing a month boundary is stored in
+  both months, and a week straddling that boundary would otherwise draw
+  the bar twice.
+- `eventsForMonth` re-resolves `category` through `categories.categoryFor`
+  on every read, then merges the pending overlay.
+- The 401 rule lives in one place, a `withToken(fn)` wrapper: `getToken()`
+  → call → on a 401 `GcalError`, `getToken(true)` and call once more →
+  else clear and surface.
 
 ## Dates
 

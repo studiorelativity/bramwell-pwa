@@ -20,17 +20,27 @@ from the previous `verification.md`.
 ## Outputs
 - `auth.ts`: exactly `getToken(forceRefresh?)`, `signIn`, `signOut`,
   `isSignedIn`.
-- `gcal.ts`: `listMonth`, `createEvent`, `updateEvent`, `deleteEvent`;
-  inclusive/exclusive conversion at this boundary; pagination; one retry
-  on 403/5xx.
+- `gcal.ts`: `listMonth`, `createEvent`, `updateEvent(id, changes, token)`,
+  `deleteEvent(id, token)` — no `WriteScope` on the wire; returns
+  `StoredEvent`, not `CalendarEvent`; inclusive/exclusive conversion at
+  this boundary; pagination; one retry on 403-rate-limit/429/5xx;
+  throws `GcalError { status, body }`.
 - `categories.ts`: prefs-backed resolution, `configure()`, `sanitize()`,
-  Google colour table, moods, `themeCss()`, `brighten()`, seed twins.
-- `state.ts`: `ensureMonthsFor`, `eventsForWeek`, `monthState`,
-  `onCacheChange`, prefs, optimistic create/update/delete with rollback.
+  Google colour table (exported), moods (**mechanism only — values are
+  stage 03**), `themeCss()`, `brighten()`, seed twins.
+- `state.ts`: `ensureMonthsFor`, `monthState`, `eventsForMonth`,
+  `spansForWeek`, `prefs`/`savePrefs`, `onCacheChange`, optimistic
+  create/update/delete with rollback, and the `withToken` 401 retry.
+  `loadCache`/`saveCache` are private. See SPEC "State API".
+- `main.ts`: an `import.meta.env.DEV`-only harness — a Connect button
+  (GIS needs real user activation, which a devtools call lacks) and a
+  `window.bramwell` handle, so the gate below can be driven. Stage 05
+  replaces it with the real first-run screen.
 - A `fetch`-stubbed test for `gcal.ts` (the v3 12-case list: inclusive
   spans, exclusive wire end, round-trip identity, colorId both ways,
   cancelled dropped, timed mapping, pagination, query params, instance
-  vs series delete).
+  vs series delete), added to `selftest.ts`, which becomes `async`. One
+  surface: `npm run selftest` and `/?selftest` both cover it.
 
 ## Gate (human, real account)
 - Sign in; reload; token renews quietly with no popup.
