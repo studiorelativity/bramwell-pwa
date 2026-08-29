@@ -1,4 +1,4 @@
-// STAGE 02 — GIS token client. The ONLY file that knows about Google auth. Exports exactly these four.
+// STAGE 02 — GIS token client. The ONLY file that knows about Google auth. Exports exactly these five.
 
 type TokenResponse = { access_token?: string; expires_in?: number; error?: string; error_description?: string }
 type TokenClient = { requestAccessToken: (o?: { prompt?: string }) => void }
@@ -21,7 +21,10 @@ const LOAD_TIMEOUT_MS = 10_000
 /** A token never dies mid-request. */
 const SKEW_MS = 60_000
 
-/** Module-private: SPEC "Auth" says auth.ts exports exactly four names. Identified by `.name`. */
+/** Module-private: SPEC "Auth" says auth.ts exports exactly five names. Identified by `.name`.
+ *  Note the division of labour with invalidateToken(): the failure path inside request()
+ *  already clears the token when a RENEWAL fails, so invalidateToken() exists solely for the
+ *  other case — a token GIS issued happily that the Calendar API then rejected. */
 class AuthError extends Error {
   constructor(message: string) {
     super(message)
@@ -134,4 +137,14 @@ export function signOut(): Promise<void> {
 
 export function isSignedIn(): boolean {
   return token !== null && Date.now() < expiresAt
+}
+
+/** Local-only clear of the cached token and its expiry. No revoke, no client reset.
+ *  For a token the API REJECTED, not one the user is finished with: revoking would be
+ *  wrong, because the grant itself may still be good. Unlike signOut(), a later quiet
+ *  renewal may sign straight back in — if it succeeds the grant was indeed still good;
+ *  if it fails, isSignedIn() stays false and the reconnect pill stands. */
+export function invalidateToken(): void {
+  token = null
+  expiresAt = 0
 }

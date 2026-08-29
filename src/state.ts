@@ -10,7 +10,7 @@ import type {
 } from './types.ts'
 import { asDay, asOffset, asWeek, addDays, civilToDay, monthKey, offsetOf } from './dates.ts'
 import { all as allCategories, categoryFor } from './categories.ts'
-import { getToken } from './auth.ts'
+import { getToken, invalidateToken } from './auth.ts'
 import {
   createEvent as gcalCreate, deleteEvent as gcalDelete, updateEvent as gcalUpdate,
   GcalError, listMonth,
@@ -253,7 +253,15 @@ async function withToken<T>(fn: (t: string) => Promise<T>): Promise<T> {
     return await fn(t)
   } catch (e) {
     if (!(e instanceof GcalError) || e.status !== 401) throw e
-    return await fn(await getToken(true))
+    try {
+      return await fn(await getToken(true))
+    } catch (retryError) {
+      // A freshly minted token was rejected too, so the grant is gone rather than stale.
+      // Clear locally — never revoke — so isSignedIn() goes false and stage 05's reconnect
+      // pill stands, while a later quiet renewal is still free to succeed.
+      if (retryError instanceof GcalError && retryError.status === 401) invalidateToken()
+      throw retryError
+    }
   }
 }
 

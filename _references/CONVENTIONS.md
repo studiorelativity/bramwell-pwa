@@ -55,8 +55,15 @@ twice, the rule goes here.
 ## Verification
 - Headless Chrome (`--headless=new --dump-dom --virtual-time-budget`)
   against `npm run dev`, driving the real UI in a same-origin iframe, in
-  both `--blink-settings=preferredColorScheme=1` and `=2`. Chrome may not
-  exit under a virtual-time budget; the DOM is written, kill the process.
+  both colour schemes. Chrome may not exit under a virtual-time budget; the
+  DOM is written, kill the process.
+- **Drive the colour scheme with CDP `Emulation.setEmulatedMedia`.** That is
+  the primary method for both schemes. `--blink-settings=preferredColorScheme=2`
+  is **no longer sanctioned**: it crashes Chrome 151's renderer reproducibly
+  (`VALIDATION_ERROR_UNKNOWN_ENUM_VALUE`, mojo `bad_message` reason 123), and
+  the process then hangs past the virtual-time budget. `=1` still works, so a
+  light-mode run either way is a useful control that the two mechanisms agree.
+  (Stage 02: reproduced independently by two agents on Chrome 151.0.7922.175.)
 - Headless Chrome hangs on service-worker registration. SW behaviour is
   verified statically (`dist/sw.js` at root, classic script, no ESM,
   precache list matches emitted paths) and then on a real install.

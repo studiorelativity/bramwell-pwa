@@ -404,10 +404,20 @@ Google Identity Services token model (`initTokenClient`). Script tag in
   else `requestAccessToken({prompt: ''})` for quiet renewal. A failed quiet
   renewal leaves `isSignedIn()` false and surfaces the reconnect pill; the
   user's click is the gesture (browsers block the popup otherwise). Any
-  401 → `getToken(true)` once, then clear and surface. Never a dead state.
+  401 → `getToken(true)` once; if the retry also 401s, `invalidateToken()`
+  then rethrow. Never a dead state.
 - `signOut()` revokes via `google.accounts.oauth2.revoke` (a local-only
   clear would quiet-renew straight back in).
-- Exports exactly `getToken`, `signIn`, `signOut`, `isSignedIn`.
+- `invalidateToken()` is a **local-only** clear of the cached token and its
+  expiry — no revoke, no client reset. It is for a token the API *rejected*,
+  not one the user is finished with: revoking would be wrong, because the
+  grant itself may still be good. Unlike `signOut()`, a later quiet renewal
+  MAY sign straight back in — if it succeeds the grant was still good; if it
+  fails, `isSignedIn()` stays false and the reconnect pill stands. The
+  failure path inside a renewal already clears the token on its own, so
+  `invalidateToken()` exists solely for the API-rejected case.
+- Exports exactly `getToken`, `signIn`, `signOut`, `isSignedIn`,
+  `invalidateToken`.
 
 ## Calendar API (`src/gcal.ts`)
 

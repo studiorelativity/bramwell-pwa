@@ -20,7 +20,8 @@ from the previous `verification.md`.
 
 ## Outputs
 - `auth.ts`: exactly `getToken(forceRefresh?)`, `signIn`, `signOut`,
-  `isSignedIn`.
+  `isSignedIn`, `invalidateToken` (five — see SPEC "Auth", amended by human
+  ruling 2026-08-29).
 - `gcal.ts`: `listMonth`, `createEvent(draft, colorId, token)`,
   `updateEvent(id, changes, colorId, token)`, `deleteEvent(id, token)` —
   no `WriteScope` on the wire; returns

@@ -813,8 +813,11 @@ const cases: Case[] = [
       if (f.calls[0]?.headers['authorization'] !== 'Bearer stale') return `first token: ${f.calls[0]?.headers['authorization']}`
       if (f.calls[1]?.headers['authorization'] !== 'Bearer fresh') return `retry token: ${f.calls[1]?.headers['authorization']}`
       if (monthState('2026-02') !== 'ready') return `state: ${monthState('2026-02')}`
+      // One 401 then success: the fresh token stands, so the session is still signed in.
+      // Asserted before the finally, whose signOut() would clear it either way.
+      if (!isSignedIn()) return 'a recovered 401 left the session signed out'
     } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
-    // A second 401 surfaces rather than looping.
+    // A second 401 surfaces rather than looping, and invalidates the token.
     const s2 = stubStorage()
     const g2 = stubGis([{ access_token: 'a', expires_in: 3600 }, { access_token: 'b', expires_in: 3600 }])
     const f2 = stubFetch([{ status: 401, body: {} }])
@@ -824,6 +827,11 @@ const cases: Case[] = [
       await _settleForTest()
       if (f2.calls.length !== 2) return `a repeated 401 made ${f2.calls.length} calls`
       if (monthState('2026-02') !== 'error') return `a repeated 401 left state ${monthState('2026-02')}`
+      // SPEC "Auth": any 401 -> getToken(true) once; if the retry also 401s, invalidateToken()
+      // then rethrow. Without the clear, isSignedIn() would stay true and stage 05's reconnect
+      // pill — bound to auth state — would never appear: the dead state SPEC forbids.
+      // Asserted before the finally, whose signOut() would mask it.
+      if (isSignedIn()) return 'two consecutive 401s left isSignedIn() true — the dead state SPEC forbids'
     } finally { await signOut(); f2.restore(); g2.restore(); s2.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],

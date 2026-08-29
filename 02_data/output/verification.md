@@ -1,6 +1,8 @@
 # Stage 02 — verification
 
-**Status: code complete, awaiting the human gate.** Everything below the
+**Status: code complete, awaiting the human gate.** Rulings 9 and 10 were
+resolved by human ruling on 2026-08-29 and are already written upstream; the
+remaining rulings still await gate close. Everything below the
 "Gate" heading is the human's to run against a real Google account; those
 rows are unfilled by design.
 
@@ -48,24 +50,36 @@ instance vs series delete; and the retry policy.
    "roll back, toast, rethrow", but `chrome.toast` is DOM-bearing and
    `state.ts` runs under node in the selftest. The caller raises the toast;
    stage 04 wires it.
-9. **`CONVENTIONS.md` needs amending.** It mandates headless Chrome under both
+9. **RESOLVED by human ruling 2026-08-29 — `CONVENTIONS.md` amended.**
+   CONVENTIONS mandated headless Chrome under both
    `--blink-settings=preferredColorScheme=1` and `=2`, but `=2` crashes this
    machine's Chrome 151.0.7922.175 renderer (`VALIDATION_ERROR_UNKNOWN_ENUM_VALUE`,
-   mojo `bad_message` reason 123), reproducibly. Dark was driven with CDP
-   `Emulation.setEmulatedMedia` instead; the reviewer independently reproduced
-   the crash and independently reimplemented the CDP check, getting identical
-   results. Every later stage hits this — name the fallback in CONVENTIONS.
-10. **`SPEC.md` "Auth" contradicts itself and needs a human ruling.** It says a
-    401 leads to `getToken(true)` once "then clear and surface. Never a dead
-    state" — but it also says `auth.ts` exports *exactly* four names, and the
-    only clearing export is `signOut()`, which revokes (wrong for a token that
-    is merely rejected). So `withToken` retries but cannot clear:
-    after two consecutive 401s `isSignedIn()` stays `true`, and stage 05's
-    reconnect pill, bound to auth state, would never appear. Not patched
-    downstream. Resolve upstream: a fifth export, or bind the pill to
-    something other than `isSignedIn()`.
+   mojo `bad_message` reason 123), reproducibly, and the process then hangs.
+   Reproduced independently by two agents. **Resolution:** CDP
+   `Emulation.setEmulatedMedia` is now the PRIMARY method for driving dark mode
+   in headless verification; the `=2` flag is no longer sanctioned. Written into
+   `CONVENTIONS.md` "Verification". Nothing further to promote at gate close.
+10. **RESOLVED by human ruling 2026-08-29 — `SPEC.md` "Auth" amended, and the
+    code now implements it.** SPEC said a 401 leads to `getToken(true)` once
+    "then clear and surface. Never a dead state", while also requiring `auth.ts`
+    to export exactly four names — leaving `withToken` able to retry but not to
+    clear, so two consecutive 401s left `isSignedIn()` true and stage 05's
+    reconnect pill would never appear. **Resolution:** `auth.ts` now exports
+    exactly **five** names, adding `invalidateToken()` — a local-only clear of
+    the cached token and expiry, with no revoke and no client reset. Revoke is
+    wrong for a merely-rejected token; and unlike `signOut()`, a later quiet
+    renewal MAY sign back in — if it succeeds the grant was still good, and if
+    it fails `isSignedIn()` stays false so the pill stands. SPEC's 401 sentence
+    now reads: any 401 → `getToken(true)` once; if the retry also 401s,
+    `invalidateToken()` then rethrow. `state.ts`'s `withToken` implements it,
+    and the selftest case asserts `isSignedIn() === false` after two consecutive
+    401s (and `true` after a recovered one). The assertion was proven
+    non-vacuous by removing the `invalidateToken()` call: `41/42`, failing with
+    "two consecutive 401s left isSignedIn() true — the dead state SPEC forbids".
+    Nothing further to promote at gate close.
 11. `state.ts` gains `_resetForTest`, `_flushForTest`, `_settleForTest`,
-    extending stage-01 ruling 2. `auth.ts` gains no test-only export.
+    extending stage-01 ruling 2. `auth.ts` gains no test-only export
+    (`invalidateToken` is production API, added by ruling 10, not a test hook).
 12. `brighten()`'s spec constants (lightness floor 0.62, saturation cap 0.72)
     stand; the *test* tolerance was widened to ±5e-3 because `brighten` emits
     an 8-bit hex and re-measuring it round-trips saturation with quantization
