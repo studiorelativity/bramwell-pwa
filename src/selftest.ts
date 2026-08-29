@@ -5,7 +5,60 @@ import { today, weekOf, dayAt, _setAnchorForTest } from './state.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
-type Case = [name: string, run: () => string | null] // null = pass, string = failure detail
+type Case = [name: string, run: () => string | null | Promise<string | null>] // null = pass, string = failure detail
+
+export type StubResponse = { status?: number; body?: unknown }
+export type FetchCall = { url: string; method: string; headers: Record<string, string>; body: unknown }
+
+/** Swaps globalThis.fetch. Responses are consumed in order; the last one repeats. */
+function stubFetch(responses: StubResponse[]): { calls: FetchCall[]; restore: () => void } {
+  const real = globalThis.fetch
+  const calls: FetchCall[] = []
+  let i = 0
+  const fake = (input: unknown, init?: RequestInit): Promise<Response> => {
+    const headers: Record<string, string> = {}
+    for (const [k, v] of Object.entries((init?.headers ?? {}) as Record<string, string>)) headers[k.toLowerCase()] = v
+    calls.push({
+      url: String(input),
+      method: init?.method ?? 'GET',
+      headers,
+      body: typeof init?.body === 'string' ? JSON.parse(init.body) : null,
+    })
+    const r = responses[Math.min(i++, responses.length - 1)] ?? {}
+    const status = r.status ?? 200
+    if (status === 204) return Promise.resolve(new Response(null, { status }))
+    return Promise.resolve(new Response(JSON.stringify(r.body ?? {}), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    }))
+  }
+  // why: the stub matches fetch's runtime contract, not its full overloaded type
+  globalThis.fetch = fake as unknown as typeof fetch
+  return { calls, restore: () => { globalThis.fetch = real } }
+}
+
+/** In-memory localStorage. Node has none; the browser's must not be touched by a test. */
+function stubStorage(): { restore: () => void } {
+  const had = 'localStorage' in globalThis
+  const real = had ? globalThis.localStorage : undefined
+  const map = new Map<string, string>()
+  const fake = {
+    getItem: (k: string) => map.get(k) ?? null,
+    setItem: (k: string, v: string) => { map.set(k, String(v)) },
+    removeItem: (k: string) => { map.delete(k) },
+    clear: () => { map.clear() },
+    key: (i: number) => [...map.keys()][i] ?? null,
+    get length() { return map.size },
+  }
+  // why: a Map-backed shim implements the Storage surface these tests use, not its index signature
+  Object.defineProperty(globalThis, 'localStorage', { value: fake as unknown as Storage, configurable: true, writable: true })
+  return {
+    restore: () => {
+      if (had) Object.defineProperty(globalThis, 'localStorage', { value: real, configurable: true, writable: true })
+      else Reflect.deleteProperty(globalThis as object, 'localStorage')
+    },
+  }
+}
 
 const cases: Case[] = [
   ['civil round-trip incl. leap day', () => {
@@ -118,15 +171,35 @@ const cases: Case[] = [
     if (y !== now.getFullYear() || m !== now.getMonth() + 1 || d !== now.getDate()) return `today() is ${y}-${m}-${d}`
     return null
   }],
+
+  ['harness: async cases, fetch and storage stubs', async () => {
+    const f = stubFetch([{ body: { ok: 1 } }])
+    try {
+      const res = await fetch('https://example.test/x', { method: 'POST', body: JSON.stringify({ a: 2 }) })
+      const json = await res.json() as { ok: number }
+      if (json.ok !== 1) return `stub body: ${JSON.stringify(json)}`
+      if (f.calls.length !== 1) return `calls: ${f.calls.length}`
+      if (f.calls[0]?.method !== 'POST') return `method: ${f.calls[0]?.method}`
+      if ((f.calls[0]?.body as { a: number } | null)?.a !== 2) return `captured body: ${JSON.stringify(f.calls[0]?.body)}`
+    } finally { f.restore() }
+    const s = stubStorage()
+    try {
+      localStorage.setItem('k', 'v')
+      if (localStorage.getItem('k') !== 'v') return 'storage stub did not round-trip'
+    } finally { s.restore() }
+    return null
+  }],
 ]
 
-export function selfTest(): SelfTestResult[] {
-  return cases.map(([name, run]) => {
+export async function selfTest(): Promise<SelfTestResult[]> {
+  const out: SelfTestResult[] = []
+  for (const [name, run] of cases) {
     try {
-      const detail = run()
-      return { name, pass: detail === null, detail: detail ?? 'ok' }
+      const detail = await run()
+      out.push({ name, pass: detail === null, detail: detail ?? 'ok' })
     } catch (e) {
-      return { name, pass: false, detail: `threw: ${(e as Error).message}` }
+      out.push({ name, pass: false, detail: `threw: ${(e as Error).message}` })
     }
-  })
+  }
+  return out
 }

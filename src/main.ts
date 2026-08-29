@@ -7,7 +7,7 @@ if (!app) throw new Error('STAGE 01: #app missing')
 
 if (new URLSearchParams(location.search).has('selftest')) {
   const { selfTest } = await import('./selftest.ts')
-  const results = selfTest()
+  const results = await selfTest()
   const passed = results.filter(r => r.pass).length
   const pre = document.createElement('pre')
   pre.textContent =
