@@ -93,6 +93,19 @@ instance vs series delete; and the retry policy.
 15. Mood values beyond `warm` are deferred to stage 03; the four band tokens
     are not emitted at all. No palette was invented here.
 
+16. **Criterion wording, found at the gate 2026-08-29.** The contract said
+    "token renews quietly with no popup". GIS's token model
+    (`initTokenClient` / `requestAccessToken`) has no popup-free variant: it
+    always opens a real popup window, and on the silent path it confirms the
+    existing grant server-side and closes itself with no user interaction.
+    Observed: reload flashes a modal that dismisses on its own and the status
+    returns to "Connected". The criterion should read "renews **without user
+    interaction**". Amend `02_data/CONTEXT.md` and SPEC's Definition of done at
+    gate close. Consequence for stage 05: the flash happens on every cold load,
+    which is exactly what SPEC's 2.5s grace before the reconnect pill is for.
+    The six `Cross-Origin-Opener-Policy ... window.closed` console errors are
+    GIS's own `client.js` polling the window it opened — benign, not ours.
+
 ## New open items (add to `OPEN.md` at gate close)
 
 - **GIS response ordering.** `auth.ts` pairs concurrent token requests with
@@ -129,13 +142,15 @@ instance vs series delete; and the retry policy.
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| Sign in; reload; token renews quietly, no popup | | |
-| A month fetch returns real events | | |
+| Sign in; reload; token renews **without user interaction** | PASS | Connect → "Connected". Reload → a GIS popup window opens and closes itself with no click; status returns to "Connected". See ruling 16 on the wording. |
+| A month fetch returns real events | PASS | `ensureMonthsFor([0])` → `state: ready`, **13 events** for 2026-08, categories resolved, DayNumbers correct (20666 = 2026-08-01). |
+| **Exclusive→inclusive end, READ side, on the real wire** | PASS | Cross-checked each event against Google's raw resource via the Calendar connector. `FA Two Day Summit`: Google stores `start.date 2026-08-19`, `end.date 2026-08-22` (exclusive); we read `20684 → 20686` = Aug 19 → Aug 21 inclusive. Correct. `🏝️ Sovereign Day — Weekend Wrap`: Google stores `2026-08-21 → 2026-08-22`; we read `20686 → 20686`, i.e. one day. A missing `−1` would have rendered this as two days. Both directions confirm the conversion. (The "Two Day" event genuinely spans three days in the account — a title, not a defect.) |
+| **Category resolution from a real colorId** | PASS (read side) | `FA Two Day Summit` carries `colorId: "8"` on the wire; `eventsForMonth` resolved it to the seed category `other`, whose colorId is 8. Events with no colorId resolved to the fallback, also `other`. Write side still pending. |
 | Pagination proven by lowering `MAX_RESULTS`, then restored | | |
-| OPEN #1 — one event per seed category, each opened in the Google app | | |
-| OPEN #2 — a 3-day all-day event's end date in the Google app | | |
-| OPEN #3 — edit one occurrence of a recurring event | | |
-| OPEN #4 — delete a series | | |
+| OPEN #1 — one event per seed category | PASS (colorId) / pending (rendered colour) | Created one all-day event per seed category; read Google's raw resources back via the Calendar connector. Wire colorIds: Work `"9"`, Personal `"10"`, Financial `"5"`, Other `"8"` — all four exactly as the seed table specifies. Whether Google *renders* those ids in the expected hues is the human's eye check; the transcribed hex table is still unconfirmed. |
+| OPEN #2 — a 3-day all-day event's end date | **PASS — closed** | Internal `start = 20694` (2026-08-29), `end = 20696` (Aug 31, inclusive). Google stored `start.date 2026-08-29`, **`end.date 2026-09-01`** — exclusive, one past the inclusive end. Renders across Aug 29/30/31. Single-day controls stored `2026-08-29 → 2026-08-30`. Both directions correct. This item had been open since v3 and is now closed on the write side; the read side was closed earlier in this gate. |
+| OPEN #3 — edit one occurrence of a recurring event | **PASS — closed** | `updateEvent(instanceId, …, 'instance')` on `iounhiaoict4ngsltlf8qb6ofg_20260829`. Google: Aug 29 → "Bramwell gate — EDITED OCCURRENCE"; Sep 5, Sep 12, Sep 19 all still "Bramwell gate — weekly". The edited instance retained `recurringEventId` and `originalStartTime`, so it is a proper series exception, not a detached event. Caveat: the draft carried `repeat: 'none'`, so this run does not independently exercise the final-review fix that strips `repeat` on update. |
+| OPEN #4 — delete a series | **PASS — closed** | `deleteEvent(instanceId, 'series')` — the INSTANCE id `iounhiaoict4ngsltlf8qb6ofg_20260829` was passed in and `state.ts` resolved it to `recurringEventId` for the wire, per the stage's id-selection design. Google afterwards: all four occurrences gone (Aug 29 exception, Sep 5, Sep 12, Sep 19), and the five standalone test events untouched. Correct scope, zero collateral damage. |
 
 ### Read this before running the gate
 
