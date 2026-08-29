@@ -1,6 +1,7 @@
 # Stage 01 — Scaffold
 
-**Status: VERIFIED — awaiting human gate.** Verification in output/verification.md.
+**Status: CLOSED 2026-08-29.** Gate passed; see output/verification.md.
+
 
 ## What this stage is
 The repo skeleton, the type system, and the date core — the only stage
