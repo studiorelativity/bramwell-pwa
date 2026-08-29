@@ -1,6 +1,6 @@
 # Stage 02 — Data layer
 
-**Status: BLOCKED** until 01's gate is closed and `.env.local` exists.
+**Status: OPEN.** Gate 1 closed 2026-08-29; .env.local present.
 
 ## What this stage is
 `auth.ts`, `gcal.ts`, `categories.ts`, and the cache/persistence/write
