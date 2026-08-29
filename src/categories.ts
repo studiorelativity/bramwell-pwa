@@ -75,7 +75,7 @@ function fromHsl(h: number, s: number, l: number): [number, number, number] {
 export function brighten(hex: string): string {
   const [r, g, b] = toRgb(hex)
   const [h, s, l] = toHsl(r, g, b)
-  const [nr, ng, nb] = fromHsl(h, Math.min(s, 0.71), Math.max(l, 0.62))
+  const [nr, ng, nb] = fromHsl(h, Math.min(s, 0.72), Math.max(l, 0.62))
   return toHex(nr, ng, nb)
 }
 

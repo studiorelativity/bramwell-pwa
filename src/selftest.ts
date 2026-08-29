@@ -212,8 +212,9 @@ const cases: Case[] = [
       const out = brighten(p)
       if (!/^#[0-9A-F]{6}$/.test(out)) return `${p} -> ${out} is not a 6-digit hex`
       const m = measure(out)
-      if (m.l < 0.62 - 1e-3) return `${p} -> ${out} lightness ${m.l.toFixed(3)} below floor`
-      if (m.s > 0.72 + 1e-3) return `${p} -> ${out} saturation ${m.s.toFixed(3)} above cap`
+      // Tolerance covers 8-bit hex quantization (~1/255 ≈ 0.0039), not algorithmic slack
+      if (m.l < 0.62 - 5e-3) return `${p} -> ${out} lightness ${m.l.toFixed(3)} below floor`
+      if (m.s > 0.72 + 5e-3) return `${p} -> ${out} saturation ${m.s.toFixed(3)} above cap`
       const src = measure(p)
       if (src.s > 0.01 && Math.abs(((m.h - src.h + 540) % 360) - 180) > 2) return `${p} -> ${out} hue moved ${src.h.toFixed(1)} -> ${m.h.toFixed(1)}`
       if (brighten(out) !== out) return `${p} not idempotent: ${out} -> ${brighten(out)}`
