@@ -6,6 +6,7 @@
   --rule: rgba(0, 0, 0, .08);
   --today: #0D9488;
   --ring: rgba(23, 24, 27, .22);
+  --scrim: rgba(0, 0, 0, .35);
   --cat-err: #D14343;
   --tile-r: 12px;
   --bar-r: 5px;
@@ -20,6 +21,7 @@
     --rule: rgba(255, 255, 255, .09);
     --today: #2DD4BF;
     --ring: rgba(232, 230, 225, .26);
+    --scrim: rgba(0, 0, 0, .55);
     --cat-err: #F87171;
   }
 }
@@ -302,7 +304,7 @@ html, body {
 }
 .set-fab:disabled { opacity: .35; }
 
-.set-scrim { position: fixed; inset: 0; z-index: 14; background: rgba(0, 0, 0, .35); }
+.set-scrim { position: fixed; inset: 0; z-index: 14; background: var(--scrim); }
 .set-sheet {
   position: fixed; z-index: 15;
   top: calc(var(--hdr-h) + 6px);

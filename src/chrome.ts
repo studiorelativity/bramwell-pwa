@@ -348,9 +348,12 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
   fab.addEventListener('click', () => host.addHere())
   document.body.append(fab)
 
-  // Escape closes the sheet. day.ts's own Escape handler in main.ts unwinds the
-  // form and the expansion; this listener is added AFTER it, so a sheet opened
-  // over an expanded day still closes the sheet first.
+  // Escape closes the sheet first, regardless of registration order: this
+  // listener runs in the CAPTURE phase, and day.ts's own Escape handler in
+  // main.ts is a default bubble-phase listener, so capture always fires
+  // first. stopPropagation() then keeps the event from ever reaching that
+  // bubble-phase handler, so with both a sheet open and a day expanded, one
+  // Escape closes the sheet and a second Escape is needed to unwind the day.
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape' || !api.isSheetOpen()) return
     e.preventDefault()
