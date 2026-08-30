@@ -1,6 +1,8 @@
 # Stage 08 — Journal link, legacy note migration
 
-**Status: BLOCKED** until 07's gate is closed.
+**Status: ON HOLD until 2026-09-06 (Sunday).** Held by the human on
+2026-08-30 to finish the calendar deployment first. The prior blocker still
+stands underneath the hold: 07's gate is not closed.
 
 ## Inputs
 - L3: `../_references/JOURNAL.md` in full

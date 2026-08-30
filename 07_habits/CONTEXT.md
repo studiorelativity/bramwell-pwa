@@ -1,7 +1,10 @@
 # Stage 07 — Habits (Supabase)
 
-**Status: BLOCKED** until 06's gate is closed and the Supabase manual
-setup in `HABITS.md` is done.
+**Status: ON HOLD until 2026-09-06 (Sunday).** Held by the human on
+2026-08-30 to finish the calendar deployment first. The prior blockers still
+stand underneath the hold: 06's gate is not closed and the Supabase manual
+setup in `HABITS.md` is not done. Do not start this stage before the hold
+lifts, even if those blockers clear first.
 
 ## Inputs
 - L3: `../_references/HABITS.md` in full

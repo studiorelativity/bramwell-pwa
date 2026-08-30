@@ -13,6 +13,11 @@ Layer 1. Read on entry, then open exactly one stage contract.
 | Habit tracker on Supabase | 07_habits | 07_habits/CONTEXT.md |
 | Journal link, legacy note migration | 08_journal | 08_journal/CONTEXT.md |
 
+Held stages (2026-08-30): 07_habits and 08_journal are ON HOLD until
+**2026-09-06**, so the calendar can be deployed first. A held stage is skipped
+by the entry rule even when its own blockers clear; the hold lifts by date, or
+by the human lifting it earlier.
+
 Entry rule: find the first stage whose `CONTEXT.md` Status is not CLOSED.
 That is the stage. If its Status is BLOCKED, the previous gate has not
 been closed by the human — stop and say so; do not start it.
