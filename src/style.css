@@ -340,6 +340,31 @@ html, body {
 }
 .set-segb[aria-pressed="true"] { color: var(--ink); font-weight: 620; background: var(--surface); }
 
+.set-h2 { margin: 12px 6px 4px; font-size: 12px; font-weight: 620; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+.set-colors { display: flex; flex-direction: column; gap: 2px; }
+.set-cat { display: flex; align-items: center; gap: 6px; padding: 5px 6px; min-height: 34px; }
+.set-cat-lab {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--band-b-end);
+  border: 0; border-radius: 8px; padding: 5px 8px; flex: 1 1 80px; min-width: 0;
+}
+.set-cat-cid {
+  font: inherit; font-size: 12px; color: var(--ink); background: var(--band-b-end);
+  border: 0; border-radius: 8px; padding: 5px 6px; flex: 0 1 104px; min-width: 0;
+}
+/* Both swatches when the display hex and the Google colour disagree (SPEC). */
+.set-cat-sw { display: flex; gap: 2px; flex: none; }
+.set-cat-swg, .set-cat-swd { width: 12px; height: 18px; background: var(--sw); flex: none; }
+.set-cat-swg { border-radius: 4px 0 0 4px; }
+.set-cat-sw > .set-cat-swg:only-child { border-radius: 4px; }
+.set-cat-swd { border-radius: 0 4px 4px 0; }
+.set-cat-hex { width: 26px; height: 24px; padding: 0; border: 0; background: none; flex: none; }
+.set-cat-del {
+  font: inherit; font-size: 12px; color: var(--cat-err); background: var(--band-b-end);
+  border: 0; border-radius: 8px; padding: 5px 8px; flex: none;
+}
+.set-cat-del[data-confirm] { background: color-mix(in srgb, var(--cat-err) 18%, transparent); }
+.set-cat-add { display: flex; align-items: center; gap: 8px; padding: 6px; }
+
 /* ---------- year view ---------- */
 .yearview { flex: 1; overflow: auto; position: relative; }
 .yr { display: flex; flex-direction: column; gap: 2px; padding: 8px; }

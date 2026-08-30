@@ -5,8 +5,7 @@
 import * as auth from './auth.ts'
 import * as state from './state.ts'
 import type { MoodId, StoredCategory } from './types.ts'
-// NOTE: categories.ts is imported in Task 5, which is the first task that uses
-// it. Importing `mintName` here would not type-check — it does not exist yet.
+import { GOOGLE_COLORS, all as catsAll, mintName } from './categories.ts'
 
 /** SPEC "First-run and connection state": the reconnect pill waits 2.5s so a quiet
  *  renewal does not cry wolf. NOT a motion token — it decides WHEN a UI state is
@@ -167,8 +166,168 @@ const MOOD_IDS: readonly MoodId[] = ['warm', 'paper', 'cool', 'sage', 'dusk']
 const MOOD_LABELS: Record<MoodId, string> =
   { warm: 'Warm', paper: 'Paper', cool: 'Cool', sage: 'Sage', dusk: 'Dusk' }
 
-// TASK 5 deletes this stub and supplies the real Colors section builder.
-function buildColors(): HTMLElement { return el('div') }
+/** The RESOLVED list, not the raw prefs blob. categories.ts is already configured
+ *  from prefs by main.ts (and re-configured by onPrefsChanged after every write
+ *  below), so this is fresh — and it is the seed when prefs carries none, which
+ *  is how the seed reaches the UI without chrome.ts knowing the seed's values.
+ *  Reading the resolved list also means the UI shows what sanitize() really
+ *  kept, rather than what was optimistically written. */
+function currentCats(): StoredCategory[] {
+  return catsAll()
+}
+
+function writeCats(next: StoredCategory[], fallbackName: string): void {
+  state.savePrefs({ ...state.prefs(), categories: next, fallbackCategory: fallbackName })
+  hostRef?.onPrefsChanged()
+}
+
+function googleHex(colorId: string): string {
+  return GOOGLE_COLORS.find(g => g.id === colorId)?.hex ?? '#616161'
+}
+
+function buildColors(): HTMLElement {
+  const wrap = el('div', 'set-colors')
+  wrap.id = 'colors'
+  wrap.append(el('h2', 'set-h2', 'Colors'))
+
+  const cats = currentCats()
+  const p = state.prefs()
+  const fallbackName = cats.some(c => c.name === (p.fallbackCategory ?? 'other'))
+    ? (p.fallbackCategory ?? 'other')
+    : (cats[0]?.name ?? 'other')
+
+  /** Structural edits rebuild; label edits do not (DECISIONS). */
+  const rebuild = (): void => {
+    const fresh = buildColors()
+    wrap.replaceWith(fresh)
+  }
+
+  for (const c of cats) {
+    const r = el('div', 'set-cat')
+    r.dataset['cat'] = c.name
+
+    // --- label: edited in place, commits on change/blur, never rebuilds ---
+    const lab = el('input', 'set-cat-lab')
+    lab.type = 'text'
+    lab.value = c.label
+    lab.setAttribute('aria-label', `Label for ${c.label}`)
+    lab.addEventListener('change', () => {
+      // Empty becomes "Untitled" on blur (DECISIONS) — a blank row is unreadable
+      // and sanitize() would drop it on the next load.
+      const label = lab.value.trim() === '' ? 'Untitled' : lab.value.trim()
+      lab.value = label
+      writeCats(currentCats().map(x => x.name === c.name ? { ...x, label } : x), fallbackName)
+    })
+
+    // --- colorId: Google's names, taken ids disabled elsewhere ---
+    const sel = el('select', 'set-cat-cid')
+    sel.setAttribute('aria-label', `Google colour for ${c.label}`)
+    const takenElsewhere = new Set(cats.filter(x => x.name !== c.name).map(x => x.colorId))
+    for (const g of GOOGLE_COLORS) {
+      const o = el('option', undefined, g.name)
+      o.value = g.id
+      // THE INVARIANT: no two categories share a colorId, because the colorId is
+      // the only channel by which a read resolves back to a category (SPEC).
+      // iOS ignores <option> colouring, which is why these are NAMES not swatches.
+      o.disabled = takenElsewhere.has(g.id)
+      if (g.id === c.colorId) o.selected = true
+      sel.append(o)
+    }
+    // Structural: the other rows' disabled sets all change.
+    sel.addEventListener('change', () => {
+      writeCats(currentCats().map(x => x.name === c.name ? { ...x, colorId: sel.value } : x), fallbackName)
+      rebuild()
+    })
+
+    // --- swatches: BOTH when the display hex and the Google colour disagree.
+    // Divergence is a feature, never a surprise (SPEC). ---
+    const sw = el('span', 'set-cat-sw')
+    const gsw = el('span', 'set-cat-swg')
+    gsw.style.setProperty('--sw', googleHex(c.colorId))
+    gsw.title = `Google: ${GOOGLE_COLORS.find(g => g.id === c.colorId)?.name ?? c.colorId}`
+    sw.append(gsw)
+    if (c.displayHex !== undefined && c.displayHex.toLowerCase() !== googleHex(c.colorId).toLowerCase()) {
+      const dsw = el('span', 'set-cat-swd')
+      dsw.style.setProperty('--sw', c.displayHex)
+      dsw.title = `On screen: ${c.displayHex}`
+      sw.append(dsw)
+    }
+
+    // --- display hex + clear ---
+    const hex = el('input', 'set-cat-hex')
+    hex.type = 'color'
+    hex.value = c.displayHex ?? googleHex(c.colorId)
+    hex.setAttribute('aria-label', `Display colour for ${c.label}`)
+    hex.addEventListener('change', () => {
+      writeCats(currentCats().map(x => x.name === c.name ? { ...x, displayHex: hex.value } : x), fallbackName)
+      rebuild()
+    })
+    const clr = el('button', 'set-btn', '×')
+    clr.type = 'button'
+    clr.setAttribute('aria-label', `Clear display colour for ${c.label}`)
+    clr.disabled = c.displayHex === undefined
+    clr.addEventListener('click', () => {
+      writeCats(currentCats().map(x => {
+        if (x.name !== c.name) return x
+        // exactOptionalPropertyTypes: rebuild without the key, never `undefined`.
+        const { displayHex: _drop, ...rest } = x
+        return rest
+      }), fallbackName)
+      rebuild()
+    })
+
+    r.append(lab, sel, sw, hex, clr)
+
+    // --- delete: two-step, never confirm(), never on the fallback ---
+    if (c.name !== fallbackName) {
+      const del = el('button', 'set-cat-del', 'Remove')
+      del.type = 'button'
+      del.addEventListener('click', () => {
+        if (del.dataset['confirm'] === undefined) {
+          del.dataset['confirm'] = ''
+          del.textContent = 'Remove?'
+          return
+        }
+        // Deleting NEVER touches Google: the events keep their colorId and
+        // resolve to the fallback on the next read (SPEC).
+        writeCats(currentCats().filter(x => x.name !== c.name), fallbackName)
+        rebuild()
+      })
+      r.append(del)
+    } else {
+      r.append(el('span', 'set-note', 'Fallback'))
+    }
+
+    wrap.append(r)
+  }
+
+  // --- add: dead at 11, WITH the reason (SPEC) ---
+  const addRow = el('div', 'set-cat-add')
+  const add = el('button', 'set-btn', 'Add category')
+  add.id = 'cat-add'
+  add.type = 'button'
+  const full = cats.length >= 11
+  add.disabled = full
+  if (full) {
+    addRow.append(add, el('span', 'set-note',
+      'Google has 11 event colours, and the colour is the only way a read finds its category.'))
+  } else {
+    addRow.append(add)
+  }
+  add.addEventListener('click', () => {
+    const taken = new Set(cats.map(x => x.colorId))
+    const free = GOOGLE_COLORS.find(g => !taken.has(g.id))
+    if (free === undefined) return                    // belt and braces; add is already dead
+    const label = 'Untitled'
+    writeCats([...currentCats(), {
+      name: mintName(label, cats.map(x => x.name)), label, colorId: free.id,
+    }], fallbackName)
+    rebuild()
+  })
+  wrap.append(addRow)
+
+  return wrap
+}
 
 function buildSheet(): HTMLElement {
   const h = hostRef

@@ -11,7 +11,7 @@ import {
   ensureMonthsFor, onCacheChange, _settleForTest, clearAuthGate,
   createEvent, updateEvent, deleteEvent,
 } from './state.ts'
-import { all, brighten, categoryFor, configure, fallback, sanitize, themeCss } from './categories.ts'
+import { all, brighten, categoryFor, configure, fallback, mintName, sanitize, themeCss } from './categories.ts'
 import { getToken, isSignedIn, signIn, signOut } from './auth.ts'
 import {
   createEvent as gcalCreate, deleteEvent as gcalDelete, updateEvent as gcalUpdate,
@@ -347,6 +347,30 @@ const cases: Case[] = [
     if (!over.includes('--cat-solo: #112233')) return 'displayHex did not override light'
     if (!over.includes(`--cat-solo: ${brighten('#112233')}`)) return 'displayHex did not override dark'
     configure({})
+    return null
+  }],
+
+  ['categories: mintName slugs a label and uniquifies against the current set', () => {
+    // A name must satisfy sanitize()'s own NAME_RE, or a minted category would be
+    // silently dropped on the next load.
+    const ok = /^[a-z0-9-]{1,32}$/
+    const cases: [string, string[], string][] = [
+      ['Travel', [], 'travel'],
+      ['Deep  Work!', [], 'deep-work'],
+      ['Travel', ['travel'], 'travel-2'],
+      ['Travel', ['travel', 'travel-2'], 'travel-3'],
+      ['   ', [], 'category'],
+      ['!!!', ['category'], 'category-2'],
+      ['ÉLAN', [], 'lan'],
+    ]
+    for (const [label, taken, want] of cases) {
+      const got = mintName(label, taken)
+      if (got !== want) return `mintName(${JSON.stringify(label)}, ${JSON.stringify(taken)}) = ${got}, want ${want}`
+      if (!ok.test(got)) return `${got} does not satisfy NAME_RE`
+    }
+    // Length is capped so a very long label cannot mint an unstorable name.
+    const long = mintName('x'.repeat(80), [])
+    if (long.length > 32) return `a long label minted a ${long.length}-char name`
     return null
   }],
 

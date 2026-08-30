@@ -114,6 +114,23 @@ export function sanitize(raw: unknown): StoredCategory[] {
   return out
 }
 
+/** Mint a stable key from a label, uniquified against the names currently in use.
+ *  SPEC: names are minted from the label and NEVER re-derived — a rename edits
+ *  `label` only. Uniquified against the CURRENT set only, so deleting `travel`
+ *  and adding "Travel" lets old events adopt the new one (DECISIONS, accepted).
+ *  Pure and exported so the selftest pins the rule rather than a copy of it. */
+export function mintName(label: string, taken: readonly string[]): string {
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32)
+  const stem = base === '' ? 'category' : base
+  if (!taken.includes(stem)) return stem
+  for (let i = 2; ; i++) {
+    // Trim the stem, not the suffix: the result must still satisfy NAME_RE's 32.
+    const suffix = `-${i}`
+    const n = stem.slice(0, 32 - suffix.length) + suffix
+    if (!taken.includes(n)) return n
+  }
+}
+
 // ---------- Resolution ----------
 
 let cats: StoredCategory[] = SEED.slice()
