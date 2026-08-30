@@ -1,6 +1,8 @@
 # Stage 04 — verification
 
-**Status: AWAITING GATE.** Branch `stage-04-day`, 25 commits off `main` @ `f0ce305`.
+**Status: AWAITING GATE.** Branch `stage-04-day`, 26 commits off `main` @ `f0ce305`
+as of this fix wave (2026-08-30) — the count moves as fix rounds land; treat it as
+informational, not a claim this document depends on.
 Suite grew 51 → 54 cases. Everything under "Gate criteria" that says **human** is
 unfilled by design; the rest carries the command or probe that produced it.
 
@@ -10,6 +12,21 @@ delivered and two probes too weak to carry the claims they were written for. All
 that is below, in the same table as the passes. **Read the inline notes on
 `rowHeightInterpolated` and `jumpStampedOnRecycle` before drawing a conclusion from
 those two columns** — scanned without them, they say the opposite of what is true.
+
+**`npm run shot` is a regression printer, not a regression detector, and this
+applies to every probe in it, not just the two called out above.** The harness
+exits non-zero only when a probe *throws* — it never asserts that a reported
+boolean is `true`. Every field below could read `false` on all 9 rows and the
+run would still `exit=0` with no `error` key. That is why this document cites
+the field values themselves as evidence rather than the exit code: the exit
+code carries no claim about correctness, only about whether the probe ran to
+completion. Encoding real expectations — making the harness fail when a field
+it already reports is wrong — is real work, deliberately not done this stage
+because several probes' expectations are still in flux (see the
+column-interpolation discussion in §3); it is filed as an `OPEN.md` item for
+stage 05. Until that lands, a green re-run of `npm run shot` proves the app
+still starts and every probe still runs; it proves nothing about whether the
+app still behaves correctly.
 
 At gate close the rulings below are promoted to `DECISIONS.md` (and `SPEC.md` where
 they change the contract), the `OPEN.md` items get their dated lines, and this file
@@ -30,13 +47,26 @@ after the last app commit; `exit=0`, 9/9 rows, no `error` key on any row, raw JS
 form-control and transient-UI rows; that gap is closed — those rows are this run's.
 The greps and `npm run build` / `npm run selftest` were re-run in the same session.
 
-The port is derived from the dev server the run actually starts, not hardcoded.
-That guard exists because it nearly went wrong: during Task 7 the harness was
-pointed at `PORT=5173` while the task's own vite bound 5177. `lsof` showed both
-listeners rooted in this tree, so the evidence stood — but it stood by luck, and
-the failure would have been silent (every harness run this stage testing a
-different app). Ruling: derive the port. One shell line against a whole stage of
-worthless evidence.
+The port is derived from the dev server the run actually starts — but that
+derivation lives entirely in the **run procedure**, the shell lines a human
+types before invoking `npm run shot`, not in the harness itself. `scripts/
+shot.mjs` has no safety net of its own: it reads `process.env.PORT ?? 5173`
+and will happily test whatever is listening on that port, matching app or
+not. That distinction exists because it nearly went wrong: during Task 7 the
+harness was pointed at `PORT=5173` while the task's own vite bound 5177.
+`lsof` showed both listeners rooted in this tree, so the evidence stood — but
+it stood by luck, and the failure would have been silent (every harness run
+that stage testing a different app). Ruling: derive the port **in the run
+procedure, every run** —
+
+```
+npm run dev >/tmp/bramwell-dev.log 2>&1 &
+P=$(grep -oE 'localhost:[0-9]+' /tmp/bramwell-dev.log | head -1 | cut -d: -f2)
+PORT=$P npm run shot
+```
+
+— because the harness will not do it for you. One shell line against a whole
+stage of worthless evidence, repeated at every invocation.
 
 ## Gate criteria
 
@@ -45,13 +75,13 @@ worthless evidence.
 | 1 | 60fps expand/collapse on the MacBook | **Human, on device.** The harness cannot measure frame rate. See "The 60fps claim" below for what it *can* argue. | — |
 | 2 | 60fps expand/collapse on a mid phone | **Human, on device.** Separate row from 1 on purpose: a laptop pass is not a phone pass. The phone is where the `0fr` full-width mechanism and the smallest row heights are. | — |
 | 3 | Reduced-motion path verified | `npm run shot`, the three `motion: reduce` rows: `animDurMs` = **80** on every one (vs 380 on `no-preference`), read off the row's own computed `transitionDuration + transitionDelay`. `columnsInterpolated: false` on those rows is **correct and expected** — the reduced-motion block collapses `transition-property` to `opacity` by design. Toast dwell deliberately survives at `--t-toast` 3200ms (ruling 7). | PASS |
-| 4 | Every form control passes `elementFromPoint()` at its centre | `npm run shot`, final run, **all 9 rows**. `controlHits` names all eight and every one is `true`: `.dp-title`, `.dp-allday`, `.dp-start`, `.dp-end`, `.dp-repeat`, `.dp-notes`, `.dp-save`, `.dp-cancel`. Plus `chipHit: true` with `chipCount: 4` and `chipsAreLabels: true` (chips carry the category *label*, per the contract), `addHit: true`, `repeatEnabledOnAdd: true`, `emptyTitleBlocked: true`, and the stage-03 controls still hit-testing through the open panel: `dayHitBeforeOpen`, `todayHit`, `modeHit`, `yrCellHit`. Every one via `document.elementFromPoint()` at the control's geometric centre, per CONVENTIONS. `.click()` appears only as the *action* that opens the form or drives validation, never as a substitute for a hit test. | PASS |
+| 4 | Every form control passes `elementFromPoint()` at its centre | `npm run shot`, final run, **all 9 rows — but only for the controls the harness can build.** The event form has 13 distinct controls; the harness only ever opens the **Add** form (never an edit form, never a recurring event), so `controlHits` names exactly **eight of the thirteen** and every one is `true`: `.dp-title`, `.dp-allday`, `.dp-start`, `.dp-end`, `.dp-repeat`, `.dp-notes`, `.dp-save`, `.dp-cancel`. A ninth, the category chips, is hit-tested separately — `chipHit: true` with `chipCount: 4` and `chipsAreLabels: true` (chips carry the category *label*, per the contract). The remaining four are **not** covered by this row: `.dp-startt` and `.dp-endt` were simply never added to `controlSel`, and the scope picker (`.dp-scope`, recurring-only) and the series-delete confirm (`.dp-del`, edit-only) never exist in any run the harness performs — see gate row 7 and "What was not tested". Plus `addHit: true`, `repeatEnabledOnAdd: true`, `emptyTitleBlocked: true`, and the stage-03 controls still hit-testing through the open panel: `dayHitBeforeOpen`, `todayHit`, `modeHit`, `yrCellHit`. Every one via `document.elementFromPoint()` at the control's geometric centre, per CONVENTIONS. `.click()` appears only as the *action* that opens the form or drives validation, never as a substitute for a hit test. | PASS (8 of 13 controls covered; 1 more separately; 4 not tested) |
 | 5 | Create round trip, real account | **Human, on device.** The harness seeds `localStorage` and makes no network call. | — |
 | 6 | Edit-occurrence round trip, real account | **Human, on device.** | — |
-| 7 | Delete-series round trip, real account | **Human, on device.** The scope picker and the series-delete confirm are hit-tested (row 4) but never driven against Google. | — |
+| 7 | Delete-series round trip, real account | **Human, on device.** Correction to an earlier draft of this row: the scope picker and the series-delete confirm are **not** hit-tested by row 4, or by anything automated — the harness only ever opens the **Add** form, and both controls exist only on an **edit** form for a **recurring** event, which the harness never constructs. This row therefore covers their `elementFromPoint()` reachability as well as the write itself, not just the write. | — |
 | 8 | Type in the form, wait past a background refresh, text survives | `npm run shot`, final run: `typedTextSurvives: true` and `notesSurvive: true` on all 9 rows, with `formOpenSeen: true` confirming the form was genuinely open across the refresh. This is the CONVENTIONS transient-UI rule (`refresh()` no-ops while a form is open) exercised, not asserted. | PASS |
 | 9 | `grid-template-columns` interpolates on iOS Safari | **Human, on device** — and read the Chrome result first, because it is worse than the gate row assumes. In Chrome the column template interpolates on *some* paths at *some* viewports and snaps on the others; §3 below has the raw widths. `OPEN.md` names the fallback: if it snaps, the `0fr` template applies with no transition and that is a recorded degradation, not a surprise. | — |
-| 10 | No motion literal outside `motion.css` | Two greps, re-run against the final tree. `grep -rnE 'transition\|animation\|@keyframes\|cubic-bezier' src/ --include='*.css' \| grep -v '^src/motion.css'` → **no output, exit 1**. The `.ts` grep returns 36 hits, of which 33 are doc comments naming the rule; the three non-comment lines are `chrome.ts`'s `animationend` listener (a DOM event name), `scroll.ts:279`'s `animMs()` *reading back* `transitionDuration`/`transitionDelay` (a CSS API call, not a declaration — the sanctioned carve-out), and a trailing comment on a `render.ts` `removeAttribute`. No `transition:`/`animation:` declaration and no `Nms` literal at any use site outside `motion.css`. | PASS |
+| 10 | No motion literal outside `motion.css` | Two greps, re-run against the final tree, after this fix wave's comment edits. `grep -rnE 'transition\|animation\|@keyframes\|cubic-bezier' src/ --include='*.css' \| grep -v '^src/motion.css'` → **no output, exit 1**. The `.ts` grep returns **34 hits** (this figure moves with comment edits — an earlier draft of this row cited 36 from before the fix wave; the count itself is not the claim, the *shape* of the three exceptions below is), of which 31 are doc comments naming the rule; the three non-comment/non-declaration lines are `chrome.ts`'s `animationend` listener (a DOM event name), `scroll.ts`'s `animMs()` *reading back* `transitionDuration`/`transitionDelay` (a CSS API call, not a declaration — the sanctioned carve-out, at whatever line it currently sits on), and a trailing comment on a `render.ts` `removeAttribute`. No `transition:`/`animation:` declaration and no `Nms` literal at any use site outside `motion.css`. | PASS |
 | 11 | One day open; Escape collapses, scroll does not | `npm run shot`, all 9 rows. The layered behaviour is asserted one layer at a time: `formClosedByFirstEscape: true` **and** `dayStillOpenAfterFirstEscape: true` (first Escape closes the form only), then `collapsedByEscape: true` and `panelDetached: true` (second Escape collapses the day and `onExpandEnd` detaches the panel). Scroll: `stillOpenAfterScroll: true` with `animAttrAfterScroll: null` — the day survives a scroll and the gate is not left armed. | PASS |
 | 12 | Columns animate back on collapse, not just out | `colsBackToRest: true` and `rowBackToRest: true` on all 9 rows — both re-found via `document.querySelector('.day[data-open]')?.closest('.week')` immediately before the second Escape, because the originally captured node is almost certainly a different pool node after six wheel events and a settle. **Read this as end-state only.** These assert the row and its columns return to their resting values; they say nothing about smooth interpolation on the way back. Arming the collapse gate turned out to be *necessary*, not defensive: a direct test showed collapse snapping while `colsBackToRest` still passed. | PASS (end state) |
 | 13 | The recycling guard does not leak | `jumpDuringSteadyState: 0` and `jumpAfterSettle: 0` on **all 9 rows of the final run** — the negative case, that `data-jump` never deadens ordinary recycling, is solid. **`jumpStampedOnRecycle: true` on only 1 of 9 rows does NOT mean the guard barely works** — see the inline note below; the mechanism is proven in an isolated repro, and the 1/9 is the harness's trigger being fragile. | PASS (leak); positive case weak |
@@ -123,9 +153,18 @@ it unreliable. Two stabilisation attempts were made; one mattered (a fresh
 navigation instead of reusing the well-scrolled page — without it, 0/9 every time),
 one did not.
 
-**Consequence, stated plainly: nothing in the suite reliably asserts the positive
-case.** Replace the stamping condition with `if (false)` and the suite still passes.
-Half of the `data-jump` fix rests on the isolated repro rather than on the harness.
+**Consequence, stated plainly: nothing in the suite reliably exercises the positive
+case for THIS mechanism.** Replace the stamping condition with `if (false)` and
+the suite still passes — but that is true of every probe in the harness, not a
+special weakness of this one (see the "regression printer, not a regression
+detector" note near the top of this document): the harness has no assertions
+anywhere, so it never fails on a wrong boolean regardless of which probe reports
+it. What is specific to `jumpStampedOnRecycle` is narrower and worse in a
+different way — not merely that a wrong value would go unflagged, but that the
+*correct* value is reproduced reliably only 1 run in 9, so even reading the field
+by eye across a single run is weak evidence for this one mechanism in particular.
+Half of the `data-jump` fix rests on the isolated repro rather than on the
+harness.
 
 ## Three things this stage must state plainly
 
@@ -422,11 +461,19 @@ rulings"; they are restated here because the gate is judged against them. Ruling
 
 Honestly and specifically:
 
-- **Every write against the real account.** Create, edit-occurrence, delete-series
-  and the scope picker are gate rows 5–7 and are the human's. The harness seeds
+- **Every write against the real account, and the reachability of four controls
+  the harness cannot build.** Create, edit-occurrence, delete-series and the
+  scope picker are gate rows 5–7 and are the human's. The harness seeds
   `localStorage` and makes no network call at any point. Validation
   (`emptyTitleBlocked`) and reachability (`controlHits`, `chipHit`, `addHit`) are
-  proven; that the resulting request does the right thing at Google is not.
+  proven for the eight-of-thirteen controls the Add-only flow can reach (gate
+  row 4); that the resulting request does the right thing at Google is not
+  tested at all. Separately: the scope picker and the series-delete confirm are
+  never even built by the harness (it never opens an edit form, and never for a
+  recurring event), so their `elementFromPoint()` reachability — not just the
+  write behind them — is untested by anything automated and belongs on the
+  human's gate row 7. `.dp-startt`/`.dp-endt` are untested for a plainer reason:
+  they were never added to `controlSel`.
 - **A real touch device.** The two-tap flow inside the panel, `TAP_SLOP`
   drag-vs-tap discrimination, and the phone `0fr` full-width layout in the hand are
   all untested on hardware. Headless emulation is not a phone.
