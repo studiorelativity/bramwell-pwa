@@ -25,6 +25,15 @@ export const POOL_SIZE = 14
 /** The one variable-height row. Stage 03 always passes null; stage 04 sets it. */
 export type Expanded = { week: WeekIndex; delta: number } | null
 
+/** Value equality for `Expanded`, so `setExpanded` can tell a genuine change
+ *  from a no-op remeasure (fix-wave finding: `day.ts`'s `refresh()` fires
+ *  `onHeightChange()` unconditionally on every refill of the open row, and
+ *  `expand()` calls `refresh()` on every refill — so a background cache
+ *  repaint reaches `setExpanded` with the SAME week/delta on its own). */
+function expandedEq(a: Expanded, b: Expanded): boolean {
+  return a === null ? b === null : b !== null && a.week === b.week && a.delta === b.delta
+}
+
 // ---------- Geometry ----------
 
 /** 6.5 rows fill the area BELOW the sticky header. */
@@ -425,8 +434,23 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
       // old unconditional setAnim(null) in frame(), snapped it — see frame's
       // comment for the other half of this fix). Cancel it outright rather
       // than rely on frame() to notice next tick.
-      if (raf !== 0) { cancelAnimationFrame(raf); raf = 0 }
-      anim = null
+      //
+      // ONLY when the expansion actually changes (fix-wave finding): a
+      // no-op remeasure — the SAME week and delta as already set — must
+      // leave a running settle alone. Concretely: a day is open, the user
+      // presses Today (an animated goToWeek), and a month fetch settles
+      // mid-glide (ctl.invalidate() -> place() -> fillRow -> applyExpansion
+      // -> day.expand -> refresh() -> host.onHeightChange() unconditionally
+      // -> scheduleRemeasure -> setExpanded with the SAME { week, delta }).
+      // Cancelling the glide there aborts it where it stands: onDock never
+      // fires, so the header range label and lastDockedDay are left stale
+      // until the user next touches the view. A genuine change still takes
+      // over positioning outright, per the comment above.
+      const changed = !expandedEq(ex, expanded)
+      if (changed) {
+        if (raf !== 0) { cancelAnimationFrame(raf); raf = 0 }
+        anim = null
+      }
       setAnim(animate ? (ex === null ? 'collapse' : 'expand') : null)
       // The maths jump; CSS carries the pixels. Moving y IS writing transforms,
       // so the row growing and the view sliding to fit it are one transition.

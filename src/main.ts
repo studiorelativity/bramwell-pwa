@@ -234,12 +234,17 @@ if (new URLSearchParams(location.search).has('selftest')) {
    *  frame breaks that chain and coalesces a burst of height changes into one
    *  expansion — the same pattern the cache-change repaint already uses.
    *
-   *  Note this chain still recurses ONCE, harmlessly: the pendingFill branch's
-   *  own `ctl.invalidate` above runs day.expand -> refresh -> onHeightChange,
-   *  which calls back in here while heightRaf is already 0 (cleared just
-   *  before `remeasure` was invoked), so it schedules one more frame. That
-   *  next call finds `pendingFill` already false and takes the cheap branch,
-   *  so the recursion is exactly one extra, idle frame — not a loop. */
+   *  Note this chain still recurses ONCE, and that extra frame is not idle:
+   *  the pendingFill branch's own `ctl.invalidate` above runs day.expand ->
+   *  refresh -> onHeightChange, which calls back in here while heightRaf is
+   *  already 0 (cleared just before `remeasure` was invoked), so it schedules
+   *  one more frame. That next call finds `pendingFill` already false and
+   *  takes the cheap branch — but the cheap branch still re-runs `remeasure`
+   *  in full: it re-arms the gate (`ctl.armAnim`), reapplies the column
+   *  template, and calls `ctl.setExpanded` again, which sweeps `data-anim`/
+   *  `data-jump` across the whole 14-row pool a second time. So the
+   *  recursion is exactly one extra frame that does real, bounded work — not
+   *  a loop, and not a no-op either. */
   function scheduleRemeasure(animate: boolean): void {
     if (heightRaf !== 0) return
     heightRaf = requestAnimationFrame(() => { heightRaf = 0; remeasure(animate) })
@@ -247,6 +252,17 @@ if (new URLSearchParams(location.search).has('selftest')) {
 
   function openDayAt(d: DayNumber): void {
     if (openDay === d) return
+    // A held background repaint (see releaseHeldRepaint below) is bound to
+    // the day that was open when it landed, not to the form specifically —
+    // switching away from that day abandons whatever form it held just as
+    // surely as closing the form does, and day.ts's own dropForm() (called
+    // from expand()'s dayChanged branch, a few frames below this) fires no
+    // callback of its own to release it. Released HERE, before openDay
+    // changes, rather than from inside day.ts's dropForm: dropForm also
+    // runs mid-way through openForm() replacing one form with another, and
+    // releasing from there would run a full ctl.invalidate() in that
+    // window for no reason tied to abandoning a day.
+    releaseHeldRepaint()
     const prev = weekOfOpen()
     const week = state.weekOf(d)
     // expandReady starts false and is set true inside remeasure's pendingFill
@@ -262,6 +278,12 @@ if (new URLSearchParams(location.search).has('selftest')) {
 
   function closeDay(): void {
     if (openDay === null) return
+    // See openDayAt's comment: collapsing the day abandons any form it was
+    // holding a repaint for, same as switching days does. Escape always
+    // closes the form first (day.isFormOpen() above), which already
+    // releases via onFormClosed — this covers closeDay reached any other
+    // way, and is a no-op if the release already happened.
+    releaseHeldRepaint()
     const row = openRow()
     day.beginCollapse()
     openDay = null                      // before setExpanded: onExpandEnd reads it
@@ -433,7 +455,13 @@ if (new URLSearchParams(location.search).has('selftest')) {
     repaint = requestAnimationFrame(() => {
       repaint = 0
       // CONVENTIONS transient-UI rule: a background refresh must never wipe an
-      // open form. The repaint is HELD, not dropped — it runs when the form closes.
+      // open form. The repaint is HELD, not dropped — it runs when the form
+      // closes (day.ts's closeForm -> onFormClosed), or the moment the shown
+      // day is abandoned by switching or collapsing (openDayAt/closeDay,
+      // below), whichever comes first. dropForm() alone — reached from
+      // day.expand's dayChanged branch and from detach() — fires neither
+      // callback, which is why the release also lives at the two main.ts
+      // call sites that reach it, not only in day.ts.
       if (day.isFormOpen()) { heldRepaint = true; return }
       ctl.invalidate()
       if (inYear() && yearDirty) yearCtl?.invalidate()
@@ -441,8 +469,11 @@ if (new URLSearchParams(location.search).has('selftest')) {
     })
   })
 
-  /** Task 7 calls this from the form's close path; declared here because main.ts
-   *  owns the repaint it is releasing. */
+  /** Called from day.ts's close path (via onFormClosed) AND from main.ts's own
+   *  openDayAt/closeDay, whichever tears the form down first — declared here
+   *  because main.ts owns the repaint it is releasing. Safe to call more than
+   *  once or when nothing is held: the guard makes every call after the first
+   *  a no-op. */
   function releaseHeldRepaint(): void {
     if (!heldRepaint) return
     heldRepaint = false
