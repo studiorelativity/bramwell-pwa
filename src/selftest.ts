@@ -3,7 +3,7 @@
 // gcal wire mapping and transport, auth token handling, and state's cache, lazy loading,
 // 401 retry and optimistic writes. Cases share module state, so each restores what it stubs
 // (fetch, localStorage, GIS), the anchor it pins, and any token it acquired.
-import type { DayNumber, EventDraft, StoredCategory, MoodId } from './types.ts'
+import type { DayNumber, EventDraft, StoredCategory, MoodId, CalendarEvent, EventSpan } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
 import {
   today, weekOf, dayAt, _setAnchorForTest, _resetForTest, _flushForTest,
@@ -22,6 +22,7 @@ import {
   settleMs, snapTargetY, weekAtY,
 } from './scroll.ts'
 import type { Expanded } from './scroll.ts'
+import { packLanes } from './render.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -1254,6 +1255,36 @@ const cases: Case[] = [
     }
     // The seed near-black belongs to Cool, not Warm — it was always hue 220.
     if (grab(themeCss('cool'), 'dark', 'surface').toUpperCase() !== '#0F1115') return 'cool/dark ground is no longer the seed near-black'
+    return null
+  }],
+
+  ['render: lane packing is longest-first, compact and deterministic', () => {
+    const ev = (id: string, allDay: boolean) => ({
+      id, title: id, category: 'work', allDay, start: asDay(0), end: asDay(0),
+    } as unknown as CalendarEvent)   // why: only id/allDay/category are read by packLanes
+    const span = (id: string, from: number, to: number, allDay = true): EventSpan => ({
+      event: ev(id, allDay), week: asWeek(0),
+      from: asOffset(from), to: asOffset(to), continuesBefore: false, continuesAfter: false,
+    })
+    // A long span must take lane 0 even though a short one starts earlier.
+    const a = packLanes([span('short', 0, 0), span('long', 1, 6)])
+    if (a.find(s => s.event.id === 'long')?.lane !== 0) return `longest-first violated: long got lane ${a.find(s => s.event.id === 'long')?.lane}`
+    if (a.find(s => s.event.id === 'short')?.lane !== 1) return `short got lane ${a.find(s => s.event.id === 'short')?.lane}`
+    // Non-overlapping spans of equal length share a lane.
+    const b = packLanes([span('x', 0, 1), span('y', 3, 4)])
+    if (b[0]?.lane !== 0 || b[1]?.lane !== 0) return `disjoint spans did not share a lane: ${b.map(s => s.lane).join(',')}`
+    // Overlapping spans never share one.
+    const c = packLanes([span('p', 0, 3), span('q', 2, 5)])
+    if (c[0]?.lane === c[1]?.lane) return 'overlapping spans shared a lane'
+    // Timed events are chips, never bars (DECISIONS "In force — scroll and render").
+    const d = packLanes([span('bar', 0, 2, true), span('chip', 0, 2, false)])
+    if (d.length !== 1 || d[0]?.event.id !== 'bar') return `timed event was packed as a bar: ${d.map(s => s.event.id).join(',')}`
+    // Deterministic: input order must not change the result, or a repaint
+    // reshuffles lanes under the user.
+    const input = [span('m', 0, 2), span('n', 0, 2), span('o', 3, 6), span('p', 1, 1)]
+    const once = packLanes(input).map(s => `${s.event.id}:${s.lane}`).sort().join(' ')
+    const again = packLanes([...input].reverse()).map(s => `${s.event.id}:${s.lane}`).sort().join(' ')
+    if (once !== again) return `not deterministic:\n  ${once}\n  ${again}`
     return null
   }],
 ]
