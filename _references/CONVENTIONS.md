@@ -14,13 +14,16 @@ twice, the rule goes here.
 ## Style
 - Follow `SPEC.md` "Visual direction — Night Depth". When in doubt: less
   chrome. The user's commitments are the only strong colour on screen.
-- Colour and motion values are tokens, defined once. No transition or
-  animation literal outside `motion.css` — with one carve-out: the scroll
+- Colour and motion values are tokens, defined once. CSS `transition`,
+  `animation`, and `@keyframes` declarations live only in `motion.css` — not
+  merely their numeric values — because that is what makes the rule provable
+  by a single grep; a component never carries its own transition, even one
+  built from tokens. (Settled at stage 04, when stage 03's token-based hover
+  transitions were moved out of `style.css`.) One carve-out: the scroll
   engine's physics constants (`PROJECT_MS`, `SETTLE_*`, `WHEEL_GAIN`,
   `WHEEL_IDLE_MS`, `easeOutCubic`) drive per-frame arithmetic rather than CSS
   and live at the top of `scroll.ts`, as SPEC "Perpetual scroll mechanics"
-  requires. CSS transition/animation values still live only in `motion.css`.
-  Neither kind may appear as a literal at a use site.
+  requires.
 
 ## Module boundaries
 - `auth.ts` is the only file that knows about Google auth. `gcal.ts` is
