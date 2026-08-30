@@ -825,9 +825,14 @@ Google Cloud Console — the v3 client carries over:
    users, no review; consent expires periodically — re-clicking sign-in
    fixes it, not a bug).
 3. Credentials → OAuth client ID → Web application → authorized
-   JavaScript origins `http://localhost:5173` and the deployed origin.
-   No redirect URIs. Exact-match: `no.fail` and `www.no.fail` do not cover
-   `cal.no.fail`.
+   JavaScript origins `http://localhost:5173` (dev server),
+   `http://localhost:4173` (`vite preview`, registered 2026-08-30) and the
+   deployed origin. No redirect URIs. **Exact-match, and the port is part of
+   the match**: `no.fail` and `www.no.fail` do not cover `cal.no.fail`, and
+   5173 does not cover 4173 — which is why a production build served by
+   `npm run preview` fails sign-in with `origin_mismatch` unless its own port
+   is registered. Origin changes take a few minutes to propagate; retry in a
+   fresh tab, since GIS caches the rejection.
 4. `.env.local`: `VITE_GOOGLE_CLIENT_ID=`.
 
 Supabase: see `HABITS.md`.
