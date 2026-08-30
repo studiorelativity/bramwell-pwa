@@ -161,16 +161,39 @@ the add/edit form, the habit checklist (`HABITS.md`), and the journal link
 - The virtualizer must support **exactly one variable-height row**: rows
   below the expanded one shift by an animated delta. If this cannot be
   done cleanly, stop and revise — do not fake it with an overlay.
-- Phone (≤560px): the day expands to full row width inline (leaning; rule
-  at plan time and record it in `DECISIONS.md`).
+- **Phone (≤560px): inline full width.** Ruled at the stage-04 plan. The other
+  six columns go to `0fr` and the column gap to zero, so it is the same
+  `grid-template-columns` mechanism as the desktop `3fr`, not a second shell.
+  The bottom sheet stays rejected (`DECISIONS.md` "Rejected — do not retry").
 - Transient-UI rule: a background month refresh must never close the
   expanded day, reset the form, or wipe text being typed. `refresh()` is
   a no-op while the form is open.
 
+### Day module API (`src/day.ts`)
+
+```
+configure(host: DayHost): void
+expand(day: DayNumber, into: HTMLElement): void   — attach the panel, rebuild the list
+beginCollapse(): void                             — fade the content, panel stays until detach
+detach(): void                                    — remove the panel from the DOM
+openAdd(day: DayNumber): void                     — the FAB entry point
+refresh(): void                                   — rebuild the list; NO-OP while the form is open
+isFormOpen(): boolean
+closeForm(): void                                 — close the form, keep the day open
+contentHeight(): number                           — panel offsetTop + offsetHeight, 0 unattached
+validate(draft: EventDraft): string | null        — pure; null when writable
+DayHost = { toast(message), onHeightChange(), onFormClosed() }
+```
+
+`day.ts` owns ONE panel node and moves it between cells. A refill or a resize re-attaches
+the same DOM, so typed text cannot be wiped by anything but an explicit rebuild — and
+`refresh()` refuses to rebuild while the form is open.
+
 ## Motion
 
 - Tokens in `:root` beside colour tokens: `--t-fast: 140ms`,
-  `--t-base: 240ms`, `--t-open: 380ms`,
+  `--t-base: 240ms`, `--t-open: 380ms`, `--t-stagger: 40ms`,
+  `--t-toast: 3200ms`,
   `--ease-out: cubic-bezier(0.22, 1, 0.36, 1)`,
   `--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1)`. **No transition or
   animation value may appear outside the token layer.**
@@ -182,8 +205,10 @@ the add/edit form, the habit checklist (`HABITS.md`), and the journal link
   drives a CSS transition or animation belongs in `motion.css`; a value that
   drives per-frame arithmetic belongs in `scroll.ts`.** No third home, and
   neither kind may appear as a literal at a use site.
-  (Stage 04 note: the expand row-height animation may be driven either way;
-  whichever it is decides which home its duration lives in.)
+  (Stage 04 ruling: the expand is driven by CSS, so its duration lives in
+  `motion.css` and `scroll.ts` gains no new constant. `scroll.ts` reads the
+  effective duration back off the element's computed style to know when the
+  animation ended — a token read, not a literal.)
 - Hover enters `--t-fast --ease-out`, leaves `--t-base`. Expand runs
   `--t-open --ease-spring`; content staggers in 40ms apart (fade + 6px
   rise). Collapse runs `--t-base --ease-out`, content fades first, no
@@ -191,7 +216,13 @@ the add/edit form, the habit checklist (`HABITS.md`), and the journal link
 - One shared enter/exit utility solves display:none-vs-animation once
   (`@starting-style` + `transition-behavior: allow-discrete` on enter,
   `transitionend` on exit). Components never write their own transitions.
+  The utility has three states: `.enter` (hidden at rest), `[data-in]` (entering,
+  staggered by `--i`), `[data-out]` (leaving, opacity only, never staggered).
+  A component sets `--i` as a plain integer; the 40ms cadence stays a token.
 - `prefers-reduced-motion`: everything collapses to 80ms opacity-only.
+  Carve-out: a toast's animation is its LIFETIME, not motion. Collapsing it to
+  80ms would make an error unreadable, so under reduced motion the toast keeps
+  `--t-toast` and swaps to opacity-only keyframes.
 - Performance: hover animates compositor properties only. The expand
   row-height animation is the one permitted layout animation, contained
   to the scroller. 60fps on a mid phone is a gate criterion.
@@ -205,7 +236,11 @@ Ported behaviour (content contract unchanged from the drawer):
   form), repeat (RRULE; **disabled when editing**), notes → `description`.
 - Recurring events show a scope picker (this occurrence / whole series),
   default "this occurrence". Series delete confirms first.
-- Validation and write errors surface in the form and as a toast.
+- Validation and write errors surface in the form **and** as a toast.
+  `chrome.toast` is built at stage 04, because that is where the first write
+  error can happen; `chrome.mount` stays a stage-05 stub. The file layout puts
+  toasts in `chrome.ts` and that is where they go — no interim home to delete
+  later.
 
 ## First-run and connection state
 
@@ -359,11 +394,13 @@ Entry: "Try the demo" on first-run, or `?demo`.
 ```
 scroll.mount(root: HTMLElement, host: ScrollHost): ScrollController
 ScrollHost      = { fillRow(node, week, rowH), mondayOf(week), weekOf(day),
-                    onDock(week), onRangeChange(firstWeek, lastWeek) }
+                    onDock(week), onRangeChange(firstWeek, lastWeek), onExpandEnd() }
 ScrollController= { goToWeek(week, animate), setSnapStep(15|30|45),
+                    setExpanded(ex: Expanded, animate: boolean), rowHeight(),
                     invalidate(weeks?), destroy() }
 render.renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[], rowH: number): void
 render.packLanes(spans: EventSpan[]): PackedSpan[]
+render.columnsFor(offset: DayOffset, full: boolean): string
 render.renderRange(node: HTMLElement, firstWeek: WeekIndex, lastWeek: WeekIndex): void
 year.mount(root: HTMLElement, host: YearHost): YearController
 ```
@@ -384,6 +421,7 @@ year.mount(root: HTMLElement, host: YearHost): YearController
 rowHeightFor(viewportH, headerH)   heightOf(w, rowH, expanded)
 posOf(w, rowH, expanded)           weekAtY(y, rowH, expanded)
 snapTargetY(anchorWeek, rowH, expanded, viewportH)
+fitY(y, ex, rowH, viewportH)
 nearestAnchor(day, modulus, dir)   projectY(y, velocity)
 settleMs(distancePx, rowH)         easeOutCubic(t)
 Expanded = { week: WeekIndex; delta: number } | null
@@ -411,6 +449,25 @@ Expanded = { week: WeekIndex; delta: number } | null
   `SETTLE_BASE/PER_WEEK/MAX_MS 280/42/760`, `WHEEL_GAIN 0.6`,
   `WHEEL_IDLE_MS 140`, `HAPTIC_ON_SNAP false`. Easing `easeOutCubic`,
   velocity smoothed 0.7/0.3, drag 1:1 with row height.
+- **`setExpanded` jumps the maths and lets CSS carry the pixels.** It sets
+  `expanded`, moves `y` through `fitY` so the grown row is fully on screen, and
+  writes each row's FINAL transform and height once. `posOf`/`weekAtY` are
+  therefore never mid-flight-wrong: a click during the animation resolves
+  against the layout the pixels are heading for, bounded by `--t-open`.
+  Expansion and the scroll-to-fit ride are one transition, not two.
+- **`rowHeight()` exists so no consumer measures the row.** The expanded delta
+  is `max(0, panel height − rowHeight())`; reading it off a DOM node would read
+  a mid-animation height.
+- **`data-anim` on the scroller gates the transition**, carrying `expand` or
+  `collapse`. Any pointerdown, wheel or `goToWeek` clears it first, so a drag is
+  never transitioned. A node recycled INTO view mid-animation is stamped
+  `data-jump` — without it the node would fly in from its position 14 rows away.
+  The stamp is written only while `data-anim` is set, so steady-state recycling
+  keeps its two style writes per row per frame.
+- **`onExpandEnd()` fires when the animation is over.** `scroll.ts` reads the
+  duration from the row's own computed `transition-duration` plus
+  `transition-delay`, so `motion.css` keeps the single home for the value and
+  reduced motion's 80ms is honoured without a second code path.
 
 ## PWA
 

@@ -414,3 +414,47 @@ at their SPEC values; the human approved the palette and the phone's
   that seeds `localStorage` and drives colour scheme with
   `Emulation.setEmulatedMedia`. `hover`/`pointer` are not emulatable media
   features; touch flow is driven with `Emulation.setTouchEmulationEnabled`.
+
+## Stage 04 rulings (2026-08-29, made at plan time)
+
+- **The expand is one CSS transition, not a rAF animation.** `scroll.ts` jumps
+  `expanded` and `y` to their final values, writes each row's final geometry
+  once, and `motion.css` interpolates. Per-frame cost is zero, no cubic-bezier
+  solver is needed to reproduce `--ease-spring`'s overshoot, and the motion
+  carve-out boundary holds without a new constant in `scroll.ts`.
+- **Expansion and scroll-to-fit are the same transition.** Because the scroller
+  is synthetic, moving `y` IS writing transforms — so the row growing and the
+  view sliding up to fit it interpolate together, one duration, nothing to
+  co-ordinate. `fitY` shifts up only as far as the row's own top edge, so
+  opening a day never pushes its top above the fold.
+- **The animation's end is read from computed style, not from a JS constant.**
+  `getComputedStyle(row).transitionDuration + transitionDelay`. Reduced motion's
+  80ms is then correct by construction rather than by a parallel constant.
+- **Accepted, bounded:** hit-testing during the animation resolves against the
+  FINAL layout while the pixels are still in flight. The window is exactly
+  `--t-open` (expand) or `--t-fast + --t-base` (collapse). Preferred over the
+  alternative — mid-flight-accurate maths would mean per-frame recomputation and
+  a click that lands on whatever slid under the finger.
+- **`data-jump` guards recycling during an animation only.** A node recycled into
+  view mid-animation would transition from its position 14 rows away. The stamp
+  is written only while `data-anim` is set, so steady-state recycling keeps its
+  two style writes per row per frame. Asserted in the harness so the guard cannot
+  leak and deaden normal recycling.
+- **Phone (≤560px) is inline full width**, via the same `grid-template-columns`
+  mechanism with `0fr` neighbours and zero column gap. The bottom sheet stays
+  rejected; no new reason was found to retry it.
+- **Reduced motion collapses motion, not dwell.** The global 80ms rule would make
+  a toast unreadable, so `.toast` keeps `--t-toast` and swaps to opacity-only
+  keyframes under `prefers-reduced-motion`.
+- **`chrome.toast` is built at stage 04**, `chrome.mount` stays a stage-05 stub.
+  Toasts belong to `chrome.ts` in the file layout; a temporary home in `day.ts`
+  would be a boundary bend with a deletion attached.
+- **The panel stops pointer events reaching the scroller.** `scroll.ts` calls
+  `setPointerCapture` on every pointerdown in the scroller, which retargets the
+  compat `click` and would break every form control. One `pointerdown`
+  `stopPropagation` on the panel fixes it without `scroll.ts` learning what a
+  day panel is.
+- **Day taps are detected from the pointer sequence, not `click`**, for the same
+  capture reason, with the target resolved by `document.elementFromPoint` at the
+  pointerdown position — which is the hit test CONVENTIONS demands anyway. A
+  movement past `TAP_SLOP` is a drag, not a tap.

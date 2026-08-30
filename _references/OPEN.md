@@ -42,6 +42,10 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
 - **2026-08-29 — Year view on a phone: CLOSED at the stage-03 gate.** 14
   columns shipped as the phone default (27 rows at 390px, scrolls about one
   row); approved on device. Ruling in `DECISIONS.md` "Stage 03 gate close".
+- **`grid-template-columns` interpolation on iOS Safari.** The expansion animates
+  the column template. Chrome interpolates it; if iOS Safari snaps instead, the
+  degradation is a hard column jump with the height still animating. Gate row at
+  stage 04; the fallback if it snaps is to accept the snap and record it.
 
 ## Opened at the stage-03 gate close
 - **Signed-out refetch pressure.** Stage 02's rule refetches an `error`
@@ -69,7 +73,11 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   Stage 05's PWA gate is the right place.
 
 ## Rebuild questions
-- Phone expansion: inline full-width or bottom sheet (leaning inline).
+- **2026-08-29 — Phone expansion: CLOSED at the stage-04 plan.** Inline full
+  width: the six neighbours go to `0fr` and the column gap to zero, so it is the
+  desktop mechanism with different numbers rather than a second shell. The sheet
+  was already in `DECISIONS.md` "Rejected — do not retry" and no new reason was
+  found to retry it. Ruling in `DECISIONS.md` "Stage 04 rulings".
 - **2026-08-29 — Variable-height row without an overlay: CLOSED with
   evidence at the stage-03 gate.** The pure maths take `expanded` and the
   round-trip test fails at exactly the expanded row when `posOf` is broken;
