@@ -17,6 +17,11 @@ import {
   createEvent as gcalCreate, deleteEvent as gcalDelete, updateEvent as gcalUpdate,
   GcalError, listMonth, MAX_RESULTS,
 } from './gcal.ts'
+import {
+  easeOutCubic, heightOf, nearestAnchor, posOf, projectY, rowHeightFor,
+  settleMs, snapTargetY, weekAtY,
+} from './scroll.ts'
+import type { Expanded } from './scroll.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -1101,6 +1106,109 @@ const cases: Case[] = [
       if (had) Object.defineProperty(globalThis, 'google', { value: real, configurable: true, writable: true })
       else Reflect.deleteProperty(globalThis as object, 'google')
     }
+    return null
+  }],
+
+  ['scroll: row height clamps and excludes the header', () => {
+    // 6.5 rows fill the area BELOW the sticky header, or "6.5 weeks fill the
+    // viewport" is false by exactly one header.
+    if (rowHeightFor(844, 56) !== (844 - 56) / 6.5) return `phone: ${rowHeightFor(844, 56)}`
+    if (rowHeightFor(400, 56) !== 74) return `short viewport did not clamp to MIN_ROW_H: ${rowHeightFor(400, 56)}`
+    if (rowHeightFor(4000, 56) !== 190) return `tall viewport did not clamp to MAX_ROW_H: ${rowHeightFor(4000, 56)}`
+    if (rowHeightFor(900, 56) <= 74 || rowHeightFor(900, 56) >= 190) return 'desktop should sit inside the clamps'
+    return null
+  }],
+
+  ['scroll: posOf/heightOf/weekAtY round-trip, uniform and expanded', () => {
+    const H = 120
+    for (const ex of [null, { week: asWeek(3), delta: 260 }] as Expanded[]) {
+      for (let w = -5; w <= 10; w++) {
+        const week = asWeek(w)
+        const y = posOf(week, H, ex)
+        if (weekAtY(y, H, ex) !== w) return `${ex ? 'expanded' : 'uniform'}: week ${w} -> y ${y} -> ${weekAtY(y, H, ex)}`
+        // every point inside a row maps back to that row
+        const mid = y + heightOf(week, H, ex) / 2
+        if (weekAtY(mid, H, ex) !== w) return `${ex ? 'expanded' : 'uniform'}: midpoint of week ${w} -> ${weekAtY(mid, H, ex)}`
+      }
+    }
+    const ex: Expanded = { week: asWeek(3), delta: 260 }
+    if (heightOf(asWeek(3), H, ex) !== H + 260) return 'the expanded row did not grow'
+    if (heightOf(asWeek(2), H, ex) !== H) return 'a row above the expanded one changed height'
+    if (heightOf(asWeek(4), H, ex) !== H) return 'a row below the expanded one changed height'
+    if (posOf(asWeek(2), H, ex) !== posOf(asWeek(2), H, null)) return 'a row ABOVE the expanded one moved'
+    if (posOf(asWeek(4), H, ex) !== posOf(asWeek(4), H, null) + 260) return 'a row below did not shift by exactly delta'
+    // delta 0 must be indistinguishable from no expansion — this is what stage 03 ships with
+    for (let w = -3; w <= 6; w++) {
+      if (posOf(asWeek(w), H, { week: asWeek(3), delta: 0 }) !== posOf(asWeek(w), H, null)) return `delta 0 differed at week ${w}`
+    }
+    return null
+  }],
+
+  ['scroll: anchor sequence and the 15/30/45 modulus', () => {
+    const d = (y: number, m: number, day: number) => civilToDay(y, m, day)
+    const show = (n: DayNumber) => { const c = dayToCivil(n); return `${c.y}-${c.m}-${c.d}` }
+    // modulus 1 (setting 15): every anchor — the 1st and the 16th
+    if (nearestAnchor(d(2026, 3, 10), 1, 1) !== d(2026, 3, 16)) return `15 next from Mar 10: ${show(nearestAnchor(d(2026, 3, 10), 1, 1))}`
+    if (nearestAnchor(d(2026, 3, 20), 1, 1) !== d(2026, 4, 1)) return `15 next from Mar 20: ${show(nearestAnchor(d(2026, 3, 20), 1, 1))}`
+    if (nearestAnchor(d(2026, 3, 10), 1, -1) !== d(2026, 3, 1)) return `15 prev from Mar 10: ${show(nearestAnchor(d(2026, 3, 10), 1, -1))}`
+    // modulus 2 (setting 30): the 1st of each month only
+    if (nearestAnchor(d(2026, 3, 10), 2, 1) !== d(2026, 4, 1)) return `30 next from Mar 10: ${show(nearestAnchor(d(2026, 3, 10), 2, 1))}`
+    if (nearestAnchor(d(2026, 3, 20), 2, -1) !== d(2026, 3, 1)) return `30 prev from Mar 20: ${show(nearestAnchor(d(2026, 3, 20), 2, -1))}`
+    // modulus 3 (setting 45): every third anchor — 1.5 months apart
+    const a = nearestAnchor(d(2026, 1, 5), 3, 1)
+    const b = nearestAnchor(a, 3, 1)
+    const c = nearestAnchor(b, 3, 1)
+    const gaps = [show(a), show(b), show(c)].join(' ')
+    if (gaps !== '2026-2-16 2026-4-1 2026-5-16') return `45 sequence: ${gaps}`
+    // year boundary
+    if (nearestAnchor(d(2026, 12, 20), 2, 1) !== d(2027, 1, 1)) return `year roll: ${show(nearestAnchor(d(2026, 12, 20), 2, 1))}`
+    if (nearestAnchor(d(2027, 1, 5), 2, -1) !== d(2027, 1, 1)) return `back over year roll: ${show(nearestAnchor(d(2027, 1, 5), 2, -1))}`
+    // dir 0 picks the closer side
+    if (nearestAnchor(d(2026, 3, 3), 2, 0) !== d(2026, 3, 1)) return `nearest from Mar 3: ${show(nearestAnchor(d(2026, 3, 3), 2, 0))}`
+    if (nearestAnchor(d(2026, 3, 28), 2, 0) !== d(2026, 4, 1)) return `nearest from Mar 28: ${show(nearestAnchor(d(2026, 3, 28), 2, 0))}`
+    // every returned anchor is a 1st or a 16th, never a rolling day count
+    for (const m of [1, 2, 3] as const) {
+      for (let k = 0; k < 12; k++) {
+        const day = dayToCivil(nearestAnchor(d(2026, 1, 1 + k * 29), m, 1)).d
+        if (day !== 1 && day !== 16) return `modulus ${m} returned day-of-month ${day}`
+      }
+    }
+    return null
+  }],
+
+  ['scroll: snap target puts the anchor row top at viewport centre', () => {
+    const H = 120, VP = 780
+    const t = snapTargetY(asWeek(4), H, null, VP)
+    // Scrolled to t, the top edge of week 4 sits at exactly SNAP_ALIGN of the viewport.
+    if (posOf(asWeek(4), H, null) - t !== VP * 0.5) return `anchor row top landed at ${posOf(asWeek(4), H, null) - t}, want ${VP * 0.5}`
+    // With a row expanded above it, the target shifts by exactly delta and the
+    // anchor still lands dead centre.
+    const ex: Expanded = { week: asWeek(1), delta: 300 }
+    const t2 = snapTargetY(asWeek(4), H, ex, VP)
+    if (t2 - t !== 300) return `expanded row above did not shift the target by delta: ${t2 - t}`
+    if (posOf(asWeek(4), H, ex) - t2 !== VP * 0.5) return 'anchor did not stay centred with a row expanded above'
+    return null
+  }],
+
+  ['scroll: projection, settle duration and easing', () => {
+    // velocity is px/ms; projection looks PROJECT_MS ahead
+    if (projectY(1000, 0) !== 1000) return 'zero velocity moved the projection'
+    if (projectY(1000, 2) !== 1000 + 2 * 300) return `projectY: ${projectY(1000, 2)}`
+    if (projectY(1000, -2) !== 1000 - 2 * 300) return `negative projectY: ${projectY(1000, -2)}`
+    // settle: base at zero distance, grows per week, capped
+    if (settleMs(0, 120) !== 280) return `settle at rest: ${settleMs(0, 120)}`
+    if (settleMs(120, 120) !== 280 + 42) return `settle one row: ${settleMs(120, 120)}`
+    if (settleMs(120 * 100, 120) !== 760) return `settle did not cap: ${settleMs(120 * 100, 120)}`
+    if (settleMs(-120, 120) !== 280 + 42) return 'settle ignored direction'
+    // easing: anchored, monotonic, and decelerating (it must not hard-stop)
+    if (easeOutCubic(0) !== 0 || easeOutCubic(1) !== 1) return 'easing is not anchored at 0 and 1'
+    let prev = -1
+    for (let i = 0; i <= 20; i++) {
+      const v = easeOutCubic(i / 20)
+      if (v < prev) return 'easing is not monotonic'
+      prev = v
+    }
+    if (!(easeOutCubic(0.5) > 0.5)) return 'easeOutCubic must be above the diagonal (decelerating)'
     return null
   }],
 ]
