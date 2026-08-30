@@ -25,6 +25,15 @@ export const POOL_SIZE = 14
 /** The one variable-height row. Stage 03 always passes null; stage 04 sets it. */
 export type Expanded = { week: WeekIndex; delta: number } | null
 
+/** Value equality for `Expanded`, so `setExpanded` can tell a genuine change
+ *  from a no-op remeasure (fix-wave finding: `day.ts`'s `refresh()` fires
+ *  `onHeightChange()` unconditionally on every refill of the open row, and
+ *  `expand()` calls `refresh()` on every refill — so a background cache
+ *  repaint reaches `setExpanded` with the SAME week/delta on its own). */
+function expandedEq(a: Expanded, b: Expanded): boolean {
+  return a === null ? b === null : b !== null && a.week === b.week && a.delta === b.delta
+}
+
 // ---------- Geometry ----------
 
 /** 6.5 rows fill the area BELOW the sticky header. */
@@ -58,6 +67,20 @@ export function weekAtY(y: number, rowH: number, ex: Expanded): WeekIndex {
 /** Scroll offset that puts the top edge of `anchorWeek` at SNAP_ALIGN of the viewport. */
 export function snapTargetY(anchorWeek: WeekIndex, rowH: number, ex: Expanded, viewportH: number): number {
   return posOf(anchorWeek, rowH, ex) - viewportH * SNAP_ALIGN
+}
+
+/** Scroll offset that keeps the expanded row fully on screen: shift up by however
+ *  much its bottom overruns the viewport, but NEVER past its own top edge, and
+ *  pull it back down if it starts above the fold. Pure — no layout read, so the
+ *  scroll-to-fit ride is decided before a single pixel moves and rides the same
+ *  transition as the expansion itself. */
+export function fitY(y: number, ex: Expanded, rowH: number, viewportH: number): number {
+  if (ex === null) return y
+  const top = posOf(ex.week, rowH, ex) - y
+  const bottom = top + heightOf(ex.week, rowH, ex)
+  if (top < 0) return y + top
+  if (bottom > viewportH) return y + Math.min(bottom - viewportH, top)
+  return y
 }
 
 // ---------- Anchors ----------
@@ -122,10 +145,34 @@ export type ScrollHost = {
   weekOf(day: DayNumber): WeekIndex
   onDock(week: WeekIndex): void
   onRangeChange(firstWeek: WeekIndex, lastWeek: WeekIndex): void
+  /** The expand/collapse transition is over. Fired for a non-animated set too. */
+  onExpandEnd(): void
 }
 export type ScrollController = {
   goToWeek(week: WeekIndex, animate: boolean): void
   setSnapStep(step: 15 | 30 | 45): void
+  setExpanded(ex: Expanded, animate: boolean): void
+  /** Raises `data-anim` (geometry: transform/height/column-gap) on its own —
+   *  no timer, no geometry, no `place()` — so the gate can open BEFORE the
+   *  property it gates changes, not merely in the same task as it (SPEC
+   *  "Scroll engine API"). Stamped on every pooled row: geometry shifts under
+   *  all of them when one row grows. `setExpanded` still calls `setAnim`
+   *  itself, so arming again inside it is simply idempotent. */
+  armAnim(kind: 'expand' | 'collapse'): void
+  /** Raises `data-cols-anim` on the ONE row whose columns actually change
+   *  this task — the expanding row, or the departing row on a cross-week
+   *  switch — never the whole pool: it is the only row with a
+   *  `grid-template-columns` value to transition, so it is the only one
+   *  that needs this gate. Paired with `data-anim` on that SAME row via a
+   *  compound selector (`.week[data-anim][data-cols-anim]`, motion.css) —
+   *  the two single-attribute rules have equal specificity and are not
+   *  additive, so without the compound rule, whichever matched last in
+   *  source order would silently drop the other's properties from
+   *  `transition-property` (SPEC "Scroll engine API"). */
+  armColsAnim(node: HTMLElement, kind: 'expand' | 'collapse'): void
+  /** The UNEXPANDED row height. Consumers derive the delta from this rather than
+   *  measuring a DOM node, which mid-animation would read an interpolated height. */
+  rowHeight(): number
   invalidate(weeks?: WeekIndex[]): void
   destroy(): void
 }
@@ -133,7 +180,8 @@ export type ScrollController = {
 export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   const pool: HTMLElement[] = []
   const assigned: (number | null)[] = []
-  const expanded: Expanded = null          // stage 04 sets this; the maths already handle it
+  let expanded: Expanded = null
+  let animTimer: ReturnType<typeof setTimeout> | null = null
   let y = 0
   let rowH = MIN_ROW_H
   let viewportH = 0
@@ -159,6 +207,15 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   }
 
   function measure(): void {
+    // A hidden root (main.ts hides the scroller under the year view) reads
+    // clientHeight 0, which rowHeightFor clamps to MIN_ROW_H — a real height,
+    // not an error, so nothing downstream would notice it is wrong. Bailing
+    // here, at the one place a bad reading enters, is what stops it rather
+    // than requiring every future caller of a 'resize'-driven remeasure to
+    // remember the root might be hidden (round 5 review: a resize dispatched
+    // while the year view was showing pinned rowH at 74 until the NEXT
+    // resize with the scroller visible, which could be much later or never).
+    if (root.clientHeight === 0) return
     viewportH = root.clientHeight
     const header = root.previousElementSibling as HTMLElement | null
     rowH = rowHeightFor(viewportH + (header?.offsetHeight ?? 0), header?.offsetHeight ?? 0)
@@ -166,15 +223,96 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     place()
   }
 
+  /** The transition gate. `null` clears it, and every path that moves `y` clears
+   *  it first so a drag is never transitioned.
+   *
+   *  Stamped on EVERY POOLED ROW, not the scroller (round 6 review): this
+   *  engine will not start a `grid-template-columns` transition through an
+   *  ancestor-attribute selector (`.scroller[data-anim] .week`) — confirmed
+   *  by repro, independent of write order — only a same-element one
+   *  (`.week[data-anim]`). Mechanical, not architectural: the gate still
+   *  means exactly what it did, it is still written once per expand, just
+   *  across the 14 pool nodes in this one loop instead of once on `root` —
+   *  never inside `place()`'s per-frame path, so the steady-state cost is
+   *  unaffected.
+   *
+   *  A pending `animTimer` being cancelled here means the timeout that would
+   *  have fired `onExpandEnd()` never runs — so this function fires it in that
+   *  timer's place, before touching any dataset. Safe to call synchronously:
+   *  `setAnim` is the FIRST statement of `onPointerDown`/`onWheel`/`goToWeek`/
+   *  `setExpanded` (a genuine drag, wheel, or programmatic scroll always
+   *  clears the gate before it does anything else), and — since round 4 — of
+   *  `frame` ONLY while `frame` has an actual kinetic animation to advance;
+   *  a `frame` tick with nothing to animate leaves the gate alone rather than
+   *  clobbering one `setExpanded` just set (see `frame`'s own comment). None
+   *  of these ever call `place()` before `setAnim` — never nested inside one.
+   *  It fires at most once per cancelled timer (`animTimer` is nulled
+   *  immediately, so a timer that goes on to fire normally finds nothing
+   *  left to cancel here).
+   *
+   *  The jump stamps are cleared on EVERY call, not only when clearing to
+   *  null: `setExpanded(ex, true)` immediately followed by `setExpanded(null,
+   *  true)` (a double-tap toggle) switches `kind` directly from 'expand' to
+   *  'collapse' without ever passing through null, and a stamp left over from
+   *  the interrupted expand would freeze that row's transition-property at
+   *  'none' for the collapse too (motion.css). */
+  function setAnim(kind: 'expand' | 'collapse' | null): void {
+    if (animTimer !== null) { clearTimeout(animTimer); animTimer = null; host.onExpandEnd() }
+    for (const n of pool) {
+      delete n.dataset['jump']
+      if (kind !== null) {
+        n.dataset['anim'] = kind
+      } else {
+        // data-cols-anim clears HERE, alongside data-anim, ONLY when
+        // actually clearing the gate (kind === null) — a genuine cancel
+        // (drag, wheel, goToWeek, a settled animTimer) is what should end
+        // any column transition too. NOT unconditionally on every call: a
+        // non-null re-arm happens from setExpanded itself, in the SAME task
+        // applyColumns/clearColumns already armed and wrote this row's
+        // OWN column change in (main.ts) — clearing it here as well would
+        // erase that arming before the browser ever paints it (found by
+        // repro: data-cols-anim toggled on then off within the same task,
+        // and the transition never started).
+        delete n.dataset['anim']
+        delete n.dataset['colsAnim']
+      }
+    }
+  }
+
+  /** The effective duration motion.css just applied, read back off the element.
+   *  This is why no expand duration exists in this file: the value has one home,
+   *  and reduced motion's 80ms arrives here without a second code path. */
+  function animMs(node: HTMLElement): number {
+    const cs = getComputedStyle(node)
+    const longest = (v: string) => Math.max(0, ...v.split(',').map(s => parseFloat(s) || 0))
+    return (longest(cs.transitionDuration) + longest(cs.transitionDelay)) * 1000
+  }
+
   /** Two style writes per row. No layout READS here — that is the thrash SPEC forbids. */
   function place(): void {
+    // One property read, no layout read: the stamp is only meaningful while an
+    // animation is running, so steady-state rows keep exactly two style writes.
+    // Read off a pool node, not root (round 6 review): data-anim is now
+    // carried per row, written identically to all 14 by setAnim, so any one
+    // of them reflects the current gate state.
+    const animating = pool[0]!.dataset['anim'] !== undefined
     const first = weekAtY(y, rowH, expanded)
     for (let i = 0; i < POOL_SIZE; i++) {
       const w = asWeek(first + i)
       const slot = ((w % POOL_SIZE) + POOL_SIZE) % POOL_SIZE
       const node = pool[slot]!
-      if (assigned[slot] !== w) {
+      const prev = assigned[slot]
+      if (prev !== w) {
         assigned[slot] = w
+        // Recycled INTO view FROM A DIFFERENT WEEK, mid-animation: without this
+        // it slides in from its previous position, 14 rows away. `prev` must be
+        // non-null and different from `w` — a `null` previous value means this
+        // slot's assignment was merely CLEARED (a full invalidate() resets every
+        // slot to force a refill of the SAME week at the SAME position, which is
+        // not a recycle and must not disable that row's own in-flight transition
+        // — round 3 review: a background cache refresh landing mid-expand used
+        // to stamp every visible row, including the one genuinely expanding).
+        if (animating && prev !== null && prev !== w) node.dataset['jump'] = ''
         host.fillRow(node, w, rowH)
       }
       node.style.transform = `translateY(${posOf(w, rowH, expanded) - y}px)`
@@ -187,6 +325,14 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     return weekAtY(y + viewportH * SNAP_ALIGN, rowH, expanded)
   }
 
+  /** Advances one kinetic tick. Does NOT touch the transition gate — that
+   *  happens once, in `animateTo`, when the kinetic action STARTS, not on
+   *  every tick while it runs: this function can fire dozens of times over
+   *  a single settle, and each `setAnim` call sweeps three dataset entries
+   *  across all 14 pool nodes, so doing it here as well would be 42
+   *  attribute operations per momentum frame for no further effect (the
+   *  gate is already clear by the time any kinetic tick fires — see
+   *  `animateTo`). */
   function frame(now: number): void {
     raf = 0
     if (anim !== null) {
@@ -199,7 +345,14 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
 
   function kick(): void { if (raf === 0) raf = requestAnimationFrame(frame) }
 
+  /** The one place a kinetic animation actually starts, so the one place its
+   *  gate-clear belongs: every caller (`settle`, `goToWeek`) already clears
+   *  the gate itself before reaching here, but doing it again HERE too,
+   *  once, is what makes "cleared for a kinetic action" a property of
+   *  starting one rather than of whichever caller happened to trigger it —
+   *  and it is the only clear `frame`'s own per-tick loop no longer does. */
   function animateTo(target: number): void {
+    setAnim(null)
     anim = { from: y, to: target, t0: performance.now(), ms: settleMs(target - y, rowH) }
     kick()
   }
@@ -218,6 +371,7 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   }
 
   function onPointerDown(e: PointerEvent): void {
+    setAnim(null)
     dragging = true; anim = null
     lastPointerY = e.clientY; lastT = performance.now(); velocity = 0
     root.setPointerCapture(e.pointerId)
@@ -239,6 +393,7 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     settle()
   }
   function onWheel(e: WheelEvent): void {
+    setAnim(null)
     e.preventDefault()
     anim = null
     y += e.deltaY * WHEEL_GAIN
@@ -265,10 +420,52 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
 
   return {
     goToWeek(week, animate) {
+      setAnim(null)
       const target = snapTargetY(week, rowH, expanded, viewportH)
       if (animate) { animateTo(target) } else { y = target; place(); host.onDock(dockedWeek()) }
     },
     setSnapStep(step) { modulus = step === 15 ? 1 : step === 30 ? 2 : 3 },
+    setExpanded(ex, animate) {
+      // The expand takes over positioning itself (fitY, below) — a kinetic
+      // settle still gliding toward its own target would fight it over `y`
+      // (round 4 review: an ordinary tap-while-gliding, via the SAME
+      // pointerdown/pointerup this scroller's own drag handling reacts to,
+      // could kick off a settle that raced the expand and, together with the
+      // old unconditional setAnim(null) in frame(), snapped it — see frame's
+      // comment for the other half of this fix). Cancel it outright rather
+      // than rely on frame() to notice next tick.
+      //
+      // ONLY when the expansion actually changes (fix-wave finding): a
+      // no-op remeasure — the SAME week and delta as already set — must
+      // leave a running settle alone. Concretely: a day is open, the user
+      // presses Today (an animated goToWeek), and a month fetch settles
+      // mid-glide (ctl.invalidate() -> place() -> fillRow -> applyExpansion
+      // -> day.expand -> refresh() -> host.onHeightChange() unconditionally
+      // -> scheduleRemeasure -> setExpanded with the SAME { week, delta }).
+      // Cancelling the glide there aborts it where it stands: onDock never
+      // fires, so the header range label and lastDockedDay are left stale
+      // until the user next touches the view. A genuine change still takes
+      // over positioning outright, per the comment above.
+      const changed = !expandedEq(ex, expanded)
+      if (changed) {
+        if (raf !== 0) { cancelAnimationFrame(raf); raf = 0 }
+        anim = null
+      }
+      setAnim(animate ? (ex === null ? 'collapse' : 'expand') : null)
+      // The maths jump; CSS carries the pixels. Moving y IS writing transforms,
+      // so the row growing and the view sliding to fit it are one transition.
+      expanded = ex
+      y = fitY(y, ex, rowH, viewportH)
+      place()
+      if (!animate) { host.onExpandEnd(); return }
+      const ms = animMs(pool[0]!)
+      animTimer = setTimeout(() => { animTimer = null; setAnim(null); host.onExpandEnd() }, ms)
+    },
+    armAnim(kind) { setAnim(kind) },
+    // ONE node, never the pool (see the type's own doc comment): only the
+    // row(s) the caller names ever have a column value to transition.
+    armColsAnim(node, kind) { node.dataset['colsAnim'] = kind },
+    rowHeight() { return rowH },
     invalidate(weeks) {
       if (weeks === undefined) { for (const s of assigned.keys()) assigned[s] = null }
       else for (const w of weeks) assigned[((w % POOL_SIZE) + POOL_SIZE) % POOL_SIZE] = null
@@ -277,6 +474,7 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     destroy() {
       if (raf !== 0) cancelAnimationFrame(raf)
       if (wheelTimer !== null) clearTimeout(wheelTimer)
+      if (animTimer !== null) clearTimeout(animTimer)
       ac.abort()
       root.replaceChildren()
     },

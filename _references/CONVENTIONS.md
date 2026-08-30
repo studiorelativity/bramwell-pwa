@@ -14,13 +14,16 @@ twice, the rule goes here.
 ## Style
 - Follow `SPEC.md` "Visual direction — Night Depth". When in doubt: less
   chrome. The user's commitments are the only strong colour on screen.
-- Colour and motion values are tokens, defined once. No transition or
-  animation literal outside `motion.css` — with one carve-out: the scroll
+- Colour and motion values are tokens, defined once. CSS `transition`,
+  `animation`, and `@keyframes` declarations live only in `motion.css` — not
+  merely their numeric values — because that is what makes the rule provable
+  by a single grep; a component never carries its own transition, even one
+  built from tokens. (Settled at stage 04, when stage 03's token-based hover
+  transitions were moved out of `style.css`.) One carve-out: the scroll
   engine's physics constants (`PROJECT_MS`, `SETTLE_*`, `WHEEL_GAIN`,
   `WHEEL_IDLE_MS`, `easeOutCubic`) drive per-frame arithmetic rather than CSS
   and live at the top of `scroll.ts`, as SPEC "Perpetual scroll mechanics"
-  requires. CSS transition/animation values still live only in `motion.css`.
-  Neither kind may appear as a literal at a use site.
+  requires.
 
 ## Module boundaries
 - `auth.ts` is the only file that knows about Google auth. `gcal.ts` is
@@ -56,6 +59,29 @@ twice, the rule goes here.
 - **Bump nothing by hand for deploys.** The SW strategy (hashed assets
   cache-first, everything else network-first) makes cache-name bumps
   unnecessary; if one becomes necessary again, the strategy is wrong.
+- **A stale async write completion must never act on whatever module-level
+  state currently points to.** Reading state like `form`/`editing` after an
+  `await` with no request identity lets a user close a busy write, start a
+  second one, and have the first's completion tear down or corrupt the
+  second. Guard with a per-request generation number: a stale success is
+  ignored, but a stale *failure* must still surface — the user has to learn
+  the write failed even though the UI has moved on. (Stage 04: `day.ts`'s
+  `save()`/`remove()`.)
+- **A field driven by a "changed" sentinel (e.g. `!== undefined`) must
+  always be set explicitly, never omitted for being empty or falsy.**
+  Omitting an empty value to avoid "sending nothing" instead sends nothing
+  to *clear* it, and the sentinel never notices the field changed. (Stage
+  04: a cleared note never reached Google because `readDraft` only set
+  `notes` when it was non-empty.)
+- **Guard a measurement function against a hidden or zero-sized read at its
+  own source, not at every call site.** A resize dispatched while a
+  container is hidden otherwise pins derived state permanently, with
+  nothing to re-derive it later. If a caller must force a re-measurement by
+  synthesizing a browser event, fire it only after the state that makes the
+  read valid is restored — firing it one step too early reproduces the same
+  bug on the way back. (Stage 04: `measure()` bailing on a heightless root,
+  and a first attempt at the synthetic resize that regressed stage 03's own
+  gate by firing while `yearRoot` was still hidden.)
 
 ## Verification
 - Headless Chrome (`--headless=new --dump-dom --virtual-time-budget`)
@@ -76,3 +102,10 @@ twice, the rule goes here.
   fallback) — it proves nothing about a file's existence.
 - Every stage ends with a `verification.md`: gate criteria, results,
   rulings the spec left open, and what was not tested.
+- **A fix verified only by the method that found the bug is not verified.**
+  A defect caught by static trace or reasoning needs a new observational
+  probe before it counts as checked; re-running the same reasoning that
+  found it just confirms the reasoning again. (Stage 04: a same-week day
+  switch that snapped its column template, found by static trace, is why a
+  same-week-switch probe was added to the harness rather than trusting the
+  trace a second time.)

@@ -1,6 +1,11 @@
 # Stage 04 — Inline day, motion system, event form
 
-**Status: OPEN.** Gate 3 closed 2026-08-29.
+**Status: CLOSED 2026-08-30.** Gate 4 passed on device; rulings promoted. See
+`output/verification.md`. Two gate rows were deferred by the human's
+decision, not failed: 60fps on a mid phone (row 2, blocked by the
+signed-out-refetch loop), and `grid-template-columns` interpolation on iOS
+Safari (row 9, a disclosed Chrome-only limitation — see `SPEC.md` "Scroll
+engine API").
 
 ## What this stage is
 The primitive first, then its consumer: `motion.css` (tokens, three

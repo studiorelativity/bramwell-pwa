@@ -18,12 +18,13 @@ import {
   GcalError, listMonth, MAX_RESULTS,
 } from './gcal.ts'
 import {
-  easeOutCubic, heightOf, nearestAnchor, posOf, projectY, rowHeightFor,
+  easeOutCubic, fitY, heightOf, nearestAnchor, posOf, projectY, rowHeightFor,
   settleMs, snapTargetY, weekAtY,
 } from './scroll.ts'
 import type { Expanded } from './scroll.ts'
-import { packLanes, visibilityFor, rangeLabel } from './render.ts'
+import { packLanes, visibilityFor, rangeLabel, columnsFor, PHONE_MAX_W } from './render.ts'
 import type { PackedSpan } from './render.ts'
+import { validate } from './day.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -1196,6 +1197,29 @@ const cases: Case[] = [
     return null
   }],
 
+  ['scroll: fitY keeps the expanded row on screen without pushing its top off', () => {
+    const H = 120, VH = 700
+    // Week 2's top sits at 240; y = 0 means the viewport starts at the top of week 0.
+    const ex: Expanded = { week: asWeek(2), delta: 300 }
+    // Fully visible already (240 + 420 = 660 <= 700): nothing moves.
+    if (fitY(0, ex, H, VH) !== 0) return `visible row moved: ${fitY(0, ex, H, VH)}`
+    // No expansion is never a reason to scroll.
+    if (fitY(137, null, H, VH) !== 137) return 'fitY moved the view with nothing expanded'
+    // Overruns the bottom by 20 (top 300, bottom 720 = 300 + (120 + 300)): shift up by exactly 20.
+    if (fitY(-60, ex, H, VH) !== -40) return `bottom overrun: ${fitY(-60, ex, H, VH)}`
+    // Row taller than the viewport: clamp at the row's own top, never past it.
+    const tall: Expanded = { week: asWeek(2), delta: 900 }
+    const clamped = fitY(0, tall, H, VH)
+    if (clamped !== 240) return `tall row did not clamp to its own top: ${clamped}`
+    if (posOf(asWeek(2), H, tall) - clamped !== 0) return 'the clamped row top is not at the fold'
+    // Row above the fold: pull it down to the top edge, not past it.
+    if (fitY(400, ex, H, VH) !== 240) return `above the fold: ${fitY(400, ex, H, VH)}`
+    // Idempotent — fitting an already-fitted view is a no-op.
+    const once = fitY(-500, ex, H, VH)
+    if (fitY(once, ex, H, VH) !== once) return `not idempotent: ${once} -> ${fitY(once, ex, H, VH)}`
+    return null
+  }],
+
   ['scroll: projection, settle duration and easing', () => {
     // velocity is px/ms; projection looks PROJECT_MS ahead
     if (projectY(1000, 0) !== 1000) return 'zero velocity moved the projection'
@@ -1334,6 +1358,50 @@ const cases: Case[] = [
     return null
   }],
 
+  ['render: the expanded row column template, desktop and phone', () => {
+    // Every track is minmax(0, Nfr) — never a bare <flex> — so a collapsed
+    // neighbour's minimum is a literal 0, not an auto (content) floor, and so
+    // the template's track-sizing FUNCTION matches style.css's resting rule
+    // (round 4 review: a mismatched function type is where
+    // grid-template-columns stops interpolating and starts snapping).
+    const desk = columnsFor(asOffset(2), false)
+    if (desk !== 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)') {
+      return `desktop offset 2: "${desk}"`
+    }
+    const phone = columnsFor(asOffset(0), true)
+    if (phone !== 'minmax(0, 1fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr)') {
+      return `phone offset 0: "${phone}"`
+    }
+    const last = columnsFor(asOffset(6), true)
+    if (last !== 'minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 1fr)') {
+      return `phone offset 6: "${last}"`
+    }
+    // Always exactly seven tracks, or the bar overlay stops lining up with the row.
+    for (let o = 0; o <= 6; o++) {
+      for (const full of [false, true]) {
+        const parts = columnsFor(asOffset(o), full).split(/(?<=\)) /)
+        if (parts.length !== 7) return `offset ${o} full=${full}: ${parts.length} tracks`
+        // Every track keeps the SAME function shape — only the flex factor
+        // varies, and the factor is unsigned (a negative flex factor is not
+        // a valid track).
+        if (!parts.every(p => /^minmax\(0, \d+fr\)$/.test(p))) return `offset ${o} full=${full}: not uniform minmax(0, Nfr): ${parts}`
+        // The picked track's flex factor is what actually distinguishes
+        // phone from desktop — 3fr there, 1fr here — pinned to the exact
+        // expected value, not merely "one of the two". An earlier version of
+        // this check instead compared the whole templates for `full` and
+        // `!full` as strings, which is always true by construction (a phone
+        // neighbour is 0fr, a desktop one is 1fr, so the two whole-row
+        // strings can never match regardless of whether `full` is wired
+        // correctly) — that comparison was dead and could never fail.
+        const picked = parts[o]
+        const wantPicked = full ? 'minmax(0, 1fr)' : 'minmax(0, 3fr)'
+        if (picked !== wantPicked) return `offset ${o} full=${full}: picked track "${picked}", expected "${wantPicked}"`
+      }
+    }
+    if (PHONE_MAX_W !== 560) return `phone breakpoint drifted from the SPEC: ${PHONE_MAX_W}`
+    return null
+  }],
+
   ['render: rangeLabel three shapes — same month, same-year straddle, cross-year', () => {
     const savedAnchor = today()
     try {
@@ -1366,6 +1434,34 @@ const cases: Case[] = [
 
       return null
     } finally { _setAnchorForTest(savedAnchor) }
+  }],
+
+  ['day: form validation rules', () => {
+    const base: EventDraft = {
+      title: 'Standup', category: 'work', allDay: false,
+      start: civilToDay(2026, 9, 2), end: civilToDay(2026, 9, 2),
+      startMin: 9 * 60, endMin: 10 * 60, repeat: 'none',
+    }
+    if (validate(base) !== null) return `a good draft was rejected: ${validate(base)}`
+    if (validate({ ...base, title: '' }) === null) return 'an empty title was accepted'
+    if (validate({ ...base, title: '   ' }) === null) return 'a whitespace title was accepted'
+    // End before start, both forms.
+    const backwards = { ...base, end: civilToDay(2026, 9, 1) }
+    if (validate(backwards) === null) return 'an end BEFORE the start was accepted'
+    // Same day, end time not after start.
+    if (validate({ ...base, endMin: 9 * 60 }) === null) return 'a zero-length timed event was accepted'
+    if (validate({ ...base, endMin: 8 * 60 }) === null) return 'a backwards timed event was accepted'
+    // Crossing midnight is legal: the end DAY is later, so the clock may go backwards.
+    const overnight = { ...base, end: civilToDay(2026, 9, 3), startMin: 23 * 60, endMin: 60 }
+    if (validate(overnight) !== null) return `an overnight event was rejected: ${validate(overnight)}`
+    // All-day ignores the clock entirely; the end day is INCLUSIVE in the form.
+    const allDay: EventDraft = { ...base, allDay: true, startMin: 0, endMin: 0 }
+    if (validate(allDay) !== null) return `a one-day all-day event was rejected: ${validate(allDay)}`
+    if (validate({ ...allDay, end: civilToDay(2026, 9, 5) }) !== null) return 'a multi-day all-day event was rejected'
+    // Out-of-range minutes cannot reach the wire.
+    if (validate({ ...base, startMin: -1 }) === null) return 'a negative start minute was accepted'
+    if (validate({ ...base, endMin: 1440 }) === null) return 'minute 1440 was accepted'
+    return null
   }],
 ]
 

@@ -136,8 +136,10 @@ why. New rulings made during the rebuild go at the bottom, dated.
 - Motion tokens, three elevation levels, one enter/exit utility,
   reduced-motion collapse, inline expansion with one variable-height row.
 - Open at plan time: phone (≤560px) inline-full-width vs bottom sheet —
-  leaning inline. Year-view hover panel restyled in the same tokens in a
-  later pass.
+  leaning inline. **CLOSED at the stage-04 plan (2026-08-29): inline full
+  width. Ruling in "Stage 04 rulings" below; the `0fr`/`minmax(0, ...)`
+  amendment is in `04_day/output/verification.md`.** Year-view hover panel
+  restyled in the same tokens in a later pass.
 
 ## Rebuild rulings (2026-08-29)
 
@@ -414,3 +416,140 @@ at their SPEC values; the human approved the palette and the phone's
   that seeds `localStorage` and drives colour scheme with
   `Emulation.setEmulatedMedia`. `hover`/`pointer` are not emulatable media
   features; touch flow is driven with `Emulation.setTouchEmulationEnabled`.
+
+## Stage 04 rulings (2026-08-29, made at plan time)
+
+- **The expand is one CSS transition, not a rAF animation.** `scroll.ts` jumps
+  `expanded` and `y` to their final values, writes each row's final geometry
+  once, and `motion.css` interpolates. Per-frame cost is zero, no cubic-bezier
+  solver is needed to reproduce `--ease-spring`'s overshoot, and the motion
+  carve-out boundary holds without a new constant in `scroll.ts`.
+- **Expansion and scroll-to-fit are the same transition.** Because the scroller
+  is synthetic, moving `y` IS writing transforms — so the row growing and the
+  view sliding up to fit it interpolate together, one duration, nothing to
+  co-ordinate. `fitY` shifts up only as far as the row's own top edge, so
+  opening a day never pushes its top above the fold.
+- **The animation's end is read from computed style, not from a JS constant.**
+  `getComputedStyle(row).transitionDuration + transitionDelay`. Reduced motion's
+  80ms is then correct by construction rather than by a parallel constant.
+- **Accepted, bounded:** hit-testing during the animation resolves against the
+  FINAL layout while the pixels are still in flight. The window is exactly
+  `--t-open` (expand) or `--t-fast + --t-base` (collapse). Preferred over the
+  alternative — mid-flight-accurate maths would mean per-frame recomputation and
+  a click that lands on whatever slid under the finger.
+- **`data-jump` guards recycling during an animation only.** A node recycled into
+  view mid-animation would transition from its position 14 rows away. The stamp
+  is written only while `data-anim` is set, so steady-state recycling keeps its
+  two style writes per row per frame. Asserted in the harness so the guard cannot
+  leak and deaden normal recycling.
+- **Phone (≤560px) is inline full width**, via the same `grid-template-columns`
+  mechanism with `0fr` neighbours and zero column gap. The bottom sheet stays
+  rejected; no new reason was found to retry it.
+- **Reduced motion collapses motion, not dwell.** The global 80ms rule would make
+  a toast unreadable, so `.toast` keeps `--t-toast` and swaps to opacity-only
+  keyframes under `prefers-reduced-motion`.
+- **`chrome.toast` is built at stage 04**, `chrome.mount` stays a stage-05 stub.
+  Toasts belong to `chrome.ts` in the file layout; a temporary home in `day.ts`
+  would be a boundary bend with a deletion attached.
+- **The panel stops pointer events reaching the scroller.** `scroll.ts` calls
+  `setPointerCapture` on every pointerdown in the scroller, which retargets the
+  compat `click` and would break every form control. One `pointerdown`
+  `stopPropagation` on the panel fixes it without `scroll.ts` learning what a
+  day panel is.
+- **Day taps are detected from the pointer sequence, not `click`**, for the same
+  capture reason, with the target resolved by `document.elementFromPoint` at the
+  pointerdown position — which is the hit test CONVENTIONS demands anyway. A
+  movement past `TAP_SLOP` is a drag, not a tap.
+
+## Stage 04 gate close (2026-08-30)
+
+Promoted from `04_day/output/verification.md` after the human closed the gate.
+That file is now a record, not an input. Two gate rows were deferred rather
+than passed, by the human's decision: 60fps on a mid phone (blocked by the
+signed-out-refetch loop, not run to a result) and `grid-template-columns`
+interpolation on iOS Safari (its Chrome findings are already a recorded
+limitation below and in `SPEC.md`, so the iOS answer would refine a disclosed
+gap rather than gate the stage). Rulings 1–8 were made at plan time and are
+already recorded above in "Stage 04 rulings (2026-08-29, made at plan time)";
+what follows is rulings 9–14, made during execution, plus the stage's
+substantive discoveries.
+
+### Toast severity
+- **The toast is `role="alert"`, not `role="status"`.** `status` is an ARIA
+  polite live region: a polite announcement may be skipped entirely, so a
+  blind user could never learn that a calendar write failed, and the toast
+  self-removes after 3.2s with no way to recall it. A severity parameter, so
+  stage 05 could raise benign toasts politely, was rejected as speculative
+  generality — the only caller today is the error path. This changes
+  user-visible behaviour, so it is promoted rather than left in the ledger.
+
+### Two undocumented engine constraints
+Both confirmed by an isolated repro before being treated as fact, and both
+are why the transition gate moved off the scroller and onto the 14 pool rows.
+- **`grid-template-columns` will not transition when JS writes it as an
+  inline style.** The value must travel through a CSS custom property
+  (`--expand-cols`) that a static rule reads with `var()`.
+- **`grid-template-columns` will not transition through an ancestor-attribute
+  selector** (`.scroller[data-anim] .week`), regardless of write order. The
+  gate must be a same-element selector (`.week[data-anim]`).
+
+### The gate is armed, and split by property
+- **The gate must be armed before the gated property's value changes, not
+  merely in the same task as it** — hence `armAnim(kind)` and
+  `armColsAnim(node, kind)`, which raise a gate and do nothing else. This
+  corrects a ruling made earlier in the same stage that writing the columns
+  before `setExpanded` in one task would suffice, on the reasoning that a
+  transition is decided from the after-change style; the repro said otherwise
+  for this property in this engine. The lesson to keep: empirical evidence
+  beat the reasoning, here and generally.
+- **The transition gate is split by property, both halves per-row.**
+  `data-anim` (`transform`, `height`, `column-gap`) is stamped pool-wide,
+  because every row's geometry shifts when one grows; `data-cols-anim`
+  (`grid-template-columns`) is stamped only on the row(s) whose columns
+  actually change — the expanding row, plus the departing row on a
+  cross-week switch. On the row carrying both, a compound rule
+  `.week[data-anim][data-cols-anim]` lists all four properties, because
+  `transition-property` is not additive between two equal-specificity rules
+  — without it the later rule in source order silently wins outright and
+  drops the other's properties. The recycling guard (`data-jump`) pairs with
+  *each* gate on the same element.
+- **`.bars` inherits its column template and gap rather than being written.**
+  `renderWeek` creates a fresh `.bars` on every fill, so an inline column
+  write to it has no before-change value and cannot transition — the bar
+  overlay snapped to the final grid while the cells interpolated, misaligning
+  every multi-day bar from its cells for the full 380ms of every expand.
+  `grid-template-columns: inherit` plus `column-gap: inherit` fixes it by
+  construction: a transitioned value is the computed value for inheritance,
+  so `.bars` tracks `.week` per frame and a freshly created node inherits
+  correctly.
+
+### `grid-template-columns` interpolation — live limitation, not solved
+The column template interpolates at some viewports and paths and snaps at
+others, and it is not a viewport split: the first expand interpolates at
+390×844 and snaps at 1440×900 and 1920×1200, while an in-row day switch does
+the exact reverse. Height, `transform` and `column-gap` animate correctly
+everywhere; the column end state is always correct; only the easing is
+inconsistent. The three engine constraints above and the split-gate
+architecture are each confirmed necessary and, together, not sufficient — an
+isolated reconstruction of the app's real architecture (pre-existing pool
+nodes, the split gate, `--expand-cols`, children replaced mid-task) **does**
+ease correctly, so this is not a hard engine wall. **The cause is not
+established.** Recorded in `SPEC.md` "Scroll engine API" (KNOWN LIMITATION)
+and `04_day/output/verification.md` §3 with the raw widths, so nobody
+re-derives five rounds of findings; do not re-litigate the three constraints
+on the theory that one of them is the missing piece. Also in `OPEN.md`.
+
+### A retracted conclusion, and why it matters beyond this bug
+For five fix rounds this stage's own probe sampled `columnsInterpolated` at
+50% of the transition and concluded several paths "confirmed snap." The
+expand's `--ease-spring` is `cubic-bezier(0.34, 1.56, 0.64, 1)`, which
+overshoots — progress exceeds 1.0 from roughly 35% to 85% of the duration,
+spanning that sample point — so a *correct* implementation, sampled there,
+also reads past the end value and reports `false`. The boolean was pinned to
+false by its own instrument, not by the app. It now samples at ~20%, before
+the overshoot window, and only after that fix did any row report `true`. The
+rule to keep, beyond this one probe: **when an instrument's own sampling
+point interacts with the thing it measures (an easing curve, a debounce, a
+retry window), a negative result is not evidence until the instrument is
+checked against a known-good case.** Reasoning about correctness is not a
+substitute for an instrument that cannot lie in this particular way.

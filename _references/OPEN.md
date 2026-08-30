@@ -42,6 +42,23 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
 - **2026-08-29 — Year view on a phone: CLOSED at the stage-03 gate.** 14
   columns shipped as the phone default (27 rows at 390px, scrolls about one
   row); approved on device. Ruling in `DECISIONS.md` "Stage 03 gate close".
+- **`grid-template-columns` interpolation on iOS Safari.** The expansion
+  animates the column template, but this stage established that even Chrome
+  does not interpolate it uniformly: the first expand interpolates at
+  390×844 and snaps at both desktop widths, while the in-row day switch does
+  the exact reverse — see SPEC "Scroll engine API" (KNOWN LIMITATION) and
+  `04_day/output/verification.md` §3 for the raw widths and the two confirmed
+  Chrome engine constraints behind it. iOS Safari itself is still untested —
+  Chrome is the only engine this stage ran in. If it snaps on a path where
+  Chrome also snaps, that is the recorded degradation, not a surprise, and
+  the fallback is to accept the snap and record it. If it snaps on a path
+  where Chrome interpolates (or the reverse), that is new information for the
+  same open item above, not a second one.
+  **2026-08-30 — DEFERRED at the stage-04 gate, by the human's decision, not
+  closed.** The Chrome findings above are already recorded as a known,
+  partly-delivered limitation in `SPEC.md` "Scroll engine API" and
+  `04_day/output/verification.md` §3, so the iOS answer refines a disclosed
+  gap rather than gates the stage. Still untested on any Safari engine.
 
 ## Opened at the stage-03 gate close
 - **Signed-out refetch pressure.** Stage 02's rule refetches an `error`
@@ -49,6 +66,20 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   range move, but a long signed-out scroll still makes a token attempt per
   month per move. Stage 05 owns connection state and decides whether
   `error` becomes sticky while signed out.
+  **2026-08-30 — OBSERVED on device, still open.** iOS Safari over LAN, signed
+  out, cache seeded for one month only: every other month in the +/-8-week
+  window was `absent`, each asked for a token, and GIS tried to open a popup
+  that mobile Safari blocks without a user gesture. The failure notifies, the
+  repaint re-runs the range, and the cycle repeats — dozens of
+  `[GSI_LOGGER] Failed to open popup window` errors per second, with the stack
+  showing `onRangeChange` -> token attempt -> failure -> repaint. It is
+  self-sustaining while the view moves and settles when it stops, so it is
+  noise and battery rather than a hang. Two consequences for stage 05: the
+  popup path is unreachable on mobile without a gesture, so a signed-out phone
+  cannot recover by itself; and the loop makes any on-device performance
+  measurement worthless until the cache is seeded across the whole visible
+  window. Predicted at the stage-03 gate close; this is the first time it has
+  been seen rather than reasoned about.
 - **The 15/45 snap steps in a browser.** `nearestAnchor` is unit-tested for
   all three moduli, but only 30 is wired; the step control is stage 05's
   Settings, and the device check happens at that gate.
@@ -69,7 +100,11 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   Stage 05's PWA gate is the right place.
 
 ## Rebuild questions
-- Phone expansion: inline full-width or bottom sheet (leaning inline).
+- **2026-08-29 — Phone expansion: CLOSED at the stage-04 plan.** Inline full
+  width: the six neighbours go to `0fr` and the column gap to zero, so it is the
+  desktop mechanism with different numbers rather than a second shell. The sheet
+  was already in `DECISIONS.md` "Rejected — do not retry" and no new reason was
+  found to retry it. Ruling in `DECISIONS.md` "Stage 04 rulings".
 - **2026-08-29 — Variable-height row without an overlay: CLOSED with
   evidence at the stage-03 gate.** The pure maths take `expanded` and the
   round-trip test fails at exactly the expanded row when `posOf` is broken;
@@ -82,3 +117,82 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   `journal_days` index maintained from the vault. See `JOURNAL.md`.
 - Habit streak semantics across the local-day boundary and time zones.
   See `HABITS.md`.
+
+## Opened at the stage-04 final fix wave (2026-08-30)
+- **`npm run shot` is a regression printer, not a regression detector, and its
+  exit code carries no claim.** It exits non-zero only when a probe *throws*;
+  every reported boolean could be false on all nine rows and the run would
+  still exit 0. That is why `04_day/output/verification.md` cites field
+  values rather than the exit code as evidence. Encoding real expectations
+  (an assertion the harness fails on) is deliberately not done this stage —
+  several probes' expectations are still in flux (see the column-interpolation
+  item above) — but stage 05 should make the harness fail on a failed
+  assertion for whichever probes have settled. Until then, a green
+  `npm run shot` re-run proves nothing on its own.
+- **The `remeasure` re-entry mechanism**, one item covering two related races
+  in how `main.ts`'s `scheduleRemeasure`/`remeasure` and `scroll.ts`'s
+  `setExpanded` re-enter each other: (a) `setExpanded` used to cancel any
+  in-flight kinetic animation unconditionally, including when the incoming
+  `Expanded` was unchanged from the current one — a background repaint's own
+  remeasure (`day.ts`'s `refresh()` fires `onHeightChange()` unconditionally
+  on every refill of the open row) could therefore abort an unrelated
+  animated `goToWeek` mid-glide, leaving `onDock` unfired and the header
+  range label / `lastDockedDay` stale until the next interaction. Fixed this
+  fix wave: `setExpanded` now cancels only when the expansion actually
+  changes (week or delta differs). (b) `scheduleRemeasure`'s closure-captured
+  `animate` flag can still be lost when a resize and a tap land in the same
+  animation frame — pre-existing, self-corrects on the next interaction,
+  deliberately left alone to keep the fix-wave diff to (a) legible. Recorded
+  as one item, to be fixed together, because a proper fix likely reworks the
+  same re-entry path both races live in.
+- **`animMs()`'s comma-list parsing and `shot.mjs`'s `parseFloat` of the same
+  computed style are the same latent assumption on both sides of the
+  instrument, unverified on either side.** `scroll.ts`'s `animMs` takes the
+  MAX across a comma-separated `transitionDuration`/`transitionDelay` list;
+  `scripts/shot.mjs`'s probe instead runs a plain `parseFloat`, which reads
+  only the FIRST value. Both are correct today because `motion.css` emits
+  exactly one duration/delay pair per element. The moment `motion.css` grows
+  a per-property duration, the two diverge silently — the app applies the
+  max, the harness reports the first — and nothing flags the mismatch.
+- **The date/time fields stay editable in the form when "Whole series" is
+  selected, even though `state.ts` silently drops them from the write.**
+  `updateEvent`'s `scope === 'series'` branch omits `start`/`end`/`startMin`/
+  `endMin` from `changes` (Google rejects an RRULE PATCHed against an
+  instance id, and a series edit must not also move dates onto the series
+  master) — but nothing in the form tells the user that editing those fields
+  while "Whole series" is picked has no effect. Also newly noted: `state.ts`
+  drops **more** than the dates for a series write — `allDay` is skipped too,
+  under the same `if (scope !== 'series')` guard — so toggling all-day on a
+  series is silently discarded as well.
+- **Three write-path fixes this stage made have no regression test of any
+  kind:** the stale-completion generation guard (`formGen` in `day.ts`'s
+  `save()`/`remove()`), the notes-clearing sentinel (`readDraft` always
+  setting `notes` rather than omitting it when empty), and event-list
+  ordering (`eventsOn`'s all-day-first, then-by-start-time sort). All three
+  need a DOM the node selftest does not have — `day.ts`'s own header comment
+  says the module is in the selftest graph specifically because it has no
+  DOM at module scope — and `scripts/shot.mjs` never opens the form far
+  enough to exercise a write. Stage 05 should decide whether that means a
+  browser-based test layer or accepting these as hand-verified only.
+
+## Opened at the stage-04 gate close (2026-08-30)
+- **60fps on a mid phone: gate row 2, DEFERRED by the human's decision, not
+  measured.** Row 1 measured 60.0fps sustained on the MacBook (~1ms of
+  headroom, no dropped frames); the phone session was set up but blocked by
+  the signed-out-refetch loop above before it produced a result. Not a
+  failure and not verified — stage 05 should re-run it once the refetch loop
+  is contained, ideally with the cache seeded across the visible window so
+  the loop cannot fire mid-measurement.
+- **The harness cannot reliably trigger `data-jump`.** The recycling guard's
+  positive case (the stamp actually firing and disabling a transition) is
+  proven only by an isolated, deterministic repro (`jumpstack` fixture, 150
+  events, two weeks out); embedded in the full nine-row `npm run shot`
+  session it fired on at most one row per run, a different row each time, and
+  the run behind every other figure in `04_day/output/verification.md`
+  reproduced zero of nine. The cause is understood (every user-facing path
+  that moves scroll clears the gate as its own first statement; only
+  `setExpanded`'s `fitY` repositioning can trigger the stamp, and its shift is
+  capped at the row's own distance from the viewport top, so timing relative
+  to a row boundary is what decides whether it fires at all). Either the
+  fixture becomes its own single-purpose run, or the assertion is dropped
+  from the harness and the isolated repro is kept as the record.

@@ -1,5 +1,5 @@
 // STAGE 03 — week rows, bars, chips, lane packing, month badges, header. Sets data-cat and nothing else per frame.
-import type { EventSpan, WeekIndex } from './types.ts'
+import type { EventSpan, WeekIndex, DayOffset } from './types.ts'
 import { dayAt, today } from './state.ts'
 import { asOffset, dayToCivil } from './dates.ts'
 /** EventSpan with the lane render.ts assigned. Not persisted, not exported beyond render.ts's consumers. */
@@ -39,6 +39,35 @@ export function packLanes(spans: EventSpan[]): PackedSpan[] {
   const bars = spans.filter(s => s.event.allDay)
     .map(s => ({ span: s, from: s.from as number, to: s.to as number, id: s.event.id }))
   return assignLanes(bars).map(x => ({ ...x.span, lane: x.lane }))
+}
+
+/** SPEC "Inline day expansion": the phone rule is ≤560px. */
+export const PHONE_MAX_W = 560
+/** Desktop: the open day takes three tracks to a neighbour's one. */
+export const EXPAND_FR = 3
+
+/** The expanded row's column template. `full` is the phone rule: neighbours go to
+ *  `0fr` and the picked day takes the whole row — the same mechanism as the
+ *  desktop `3fr`, not a second shell (DECISIONS "Stage 04 rulings"). Always seven
+ *  tracks, because the bar overlay is set from the same string.
+ *
+ *  Every track is `minmax(0, Nfr)`, never a bare `Nfr` (round 4 review): a bare
+ *  `<flex>` track's MIN sizing function is `auto`, which floors it at its
+ *  content's automatic minimum size — a neighbour's `0fr` track still held its
+ *  populated `.day` cell's own minimum, so "collapsed" was never actually 0px
+ *  (measured ~12px on phone), and `.bars`'s inherited copy, resolving the same
+ *  0fr against an EMPTY track with nothing to floor it, genuinely hit 0 — the
+ *  two grids disagreeing, and the phone rule (picked day takes the WHOLE row)
+ *  not actually being delivered. `minmax(0, Nfr)` fixes the minimum at a literal
+ *  0 regardless of content, so both grids collapse a neighbour to nothing.
+ *  Uniform `minmax(0, …)` on every track, and matched by `.week`'s resting CSS
+ *  rule in style.css, is what keeps `grid-template-columns` interpolable: the
+ *  transition only carries a track's numeric value across if the two states'
+ *  track sizing FUNCTIONS match — mixing bare `<flex>` and `minmax()` (or
+ *  resting-vs-generated forms) would trade this bug for a snap. */
+export function columnsFor(offset: DayOffset, full: boolean): string {
+  return Array.from({ length: 7 }, (_, i) =>
+    `minmax(0, ${i === offset ? (full ? '1' : String(EXPAND_FR)) : (full ? '0' : '1')}fr)`).join(' ')
 }
 
 const BAR_H = 20        // must match --bar height + gap in style.css

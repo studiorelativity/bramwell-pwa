@@ -6,6 +6,7 @@
   --rule: rgba(0, 0, 0, .08);
   --today: #0D9488;
   --ring: rgba(23, 24, 27, .22);
+  --cat-err: #D14343;
   --tile-r: 12px;
   --bar-r: 5px;
   --gap: 3px;
@@ -18,6 +19,7 @@
     --rule: rgba(255, 255, 255, .09);
     --today: #2DD4BF;
     --ring: rgba(232, 230, 225, .26);
+    --cat-err: #F87171;
   }
 }
 
@@ -53,7 +55,24 @@ html, body {
 /* ---------- week rows ---------- */
 .week {
   position: absolute; left: 0; right: 0; top: 0;
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--gap);
+  display: grid;
+  /* var(--expand-cols, …), not a bare value: main.ts writes the expanded template to
+     the --expand-cols CUSTOM property, never to grid-template-columns directly
+     (round 4 review) — this Chrome build renders an inline
+     `el.style.gridTemplateColumns = …` write as a hard cut to the new value,
+     no interpolated in-between frames, even with matching durations and
+     track-sizing functions on both sides; the SAME value change, made
+     through a custom property referenced with var() instead, eases smoothly
+     (confirmed in isolation). The fallback is what applies at rest, when
+     --expand-cols is unset.
+     minmax(0, 1fr), not bare 1fr, in both this fallback and every track
+     columnsFor() generates: must match its track-sizing FUNCTION exactly — a
+     bare-<flex> track and a minmax() track are different shapes, and a
+     mismatched pair snaps instead of easing. minmax(0, …) also fixes each
+     track's minimum at a literal 0 instead of an auto (content-based) floor,
+     which is what makes an expanded neighbour's 0fr track actually collapse
+     to nothing. */
+  grid-template-columns: var(--expand-cols, repeat(7, minmax(0, 1fr))); gap: var(--gap);
   padding: 0 var(--gap);
   will-change: transform;
   touch-action: none;
@@ -79,14 +98,11 @@ html, body {
   content: ""; position: absolute; inset: 0; border-radius: inherit;
   box-shadow: var(--el-hover), inset 0 0 0 1px var(--ring);
   opacity: 0; pointer-events: none;
-  transition: opacity var(--t-fast) var(--ease-out);
 }
 @media (hover: hover) {
   .day:hover {
     transform: translateY(-2px);
-    transition: transform var(--t-fast) var(--ease-out);
   }
-  .day:not(:hover) { transition: transform var(--t-base) var(--ease-out); }
   .day:hover::after { opacity: 1; }
 }
 
@@ -114,7 +130,15 @@ html, body {
    as one object rather than reading as separate stubs (DECISIONS). */
 .bars {
   position: absolute; inset: 0; padding: 0 var(--gap);
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--gap);
+  display: grid; grid-template-columns: inherit; gap: var(--gap);
+  /* After the `gap` shorthand so it wins: `.week[data-full]` (phone, ≤560px)
+     zeroes .week's OWN column-gap, and inherit is what makes .bars track that
+     without a second `[data-full]` rule to remember — the same reasoning as
+     grid-template-columns: inherit above. Without this, .bars kept six 3px
+     gaps that .week no longer had, so the SAME inherited 0fr/1fr track list
+     resolved against a different available width in each grid (round 3
+     review: measured as 0px vs 12px per neighbour track). */
+  column-gap: inherit;
   pointer-events: none;
 }
 .bar {
@@ -137,6 +161,73 @@ html, body {
 .chip .at { color: var(--ink-dim); font-variant-numeric: tabular-nums; flex: none; }
 .chip .ttl { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .chips { position: absolute; left: 6px; right: 6px; bottom: 16px; display: flex; flex-direction: column; gap: 2px; }
+
+/* ---------- inline day expansion ---------- */
+/* The picked cell keeps the open elevation — the third and last level; nothing
+   else on screen casts a shadow (SPEC "Visual direction — Night Depth"). */
+.day[data-open] { box-shadow: var(--el-open); overflow: hidden; }
+.day[data-open]::after { opacity: 0; }        /* the hover layer stands down while open */
+/* Phone (≤560px): neighbours are 0fr, so the gap between them is dead space. */
+.week[data-full] { column-gap: 0; }
+
+.dp {
+  position: relative; margin-top: 18px; padding-bottom: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+  touch-action: auto;                          /* the row is touch-action:none; the panel is not */
+}
+.dp-head { font-weight: 620; font-size: 13px; }
+.dp-list { display: flex; flex-direction: column; gap: 2px; }
+.dp-ev {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  font: inherit; font-size: 12px; text-align: left; color: var(--ink);
+  background: color-mix(in srgb, var(--cat) 16%, transparent);
+  border: 0; border-left: 3px solid var(--cat); border-radius: var(--bar-r);
+  padding: 4px 6px;
+}
+.dp-at { color: var(--ink-dim); font-variant-numeric: tabular-nums; flex: none; }
+.dp-ttl { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
+.dp-cat { color: var(--cat); font-size: 11px; flex: none; }
+.dp-none { color: var(--ink-dim); font-size: 12px; }
+/* Reserved: stage 07 fills habits, stage 08 the journal link. */
+.dp-slot { min-height: 0; }
+.dp-add { font: inherit; font-size: 12px; color: var(--ink); background: var(--band-b-end); border: 0; border-radius: 8px; padding: 5px 9px; align-self: start; }
+
+.dp-form { display: flex; flex-direction: column; gap: 6px; }
+.dp-form input, .dp-form textarea, .dp-form select {
+  font: inherit; font-size: 12px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 5px 7px;
+  min-width: 0; width: 100%; box-sizing: border-box;
+}
+.dp-form textarea { resize: vertical; min-height: 44px; }
+.dp-when { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dp-when input { width: auto; flex: 1 1 96px; }
+.dp-cats { display: flex; flex-wrap: wrap; gap: 4px; }
+.dp-chip {
+  font: inherit; font-size: 11px; color: var(--cat);
+  background: color-mix(in srgb, var(--cat) 14%, transparent);
+  border: 1px solid transparent; border-radius: 999px; padding: 3px 9px;
+}
+.dp-chip[aria-pressed="true"] { border-color: var(--cat); font-weight: 620; }
+.dp-line { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.dp-line input[type="checkbox"], .dp-line input[type="radio"] { width: auto; }
+.dp-err { color: var(--cat-err); font-size: 12px; margin: 0; }
+.dp-actions { display: flex; gap: 6px; align-items: center; }
+.dp-actions button { font: inherit; font-size: 12px; color: var(--ink); background: var(--band-b-end); border: 0; border-radius: 8px; padding: 5px 9px; }
+.dp-save { font-weight: 620; }
+.dp-del { margin-left: auto; color: var(--cat-err); }
+.dp-del[data-confirm] { background: color-mix(in srgb, var(--cat-err) 18%, transparent); }
+.dp-form[data-busy] { opacity: .6; pointer-events: none; }
+
+/* ---------- toasts ---------- */
+#toasts {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  z-index: 10; display: flex; flex-direction: column; gap: 6px; align-items: center;
+  pointer-events: none;
+}
+.toast {
+  background: var(--band-b-end); color: var(--ink); box-shadow: var(--el-open);
+  border-radius: 8px; padding: 8px 14px; font-size: 13px; max-width: min(90vw, 420px);
+}
 
 /* Any selector that sets display must re-assert [hidden] (CONVENTIONS). */
 [hidden] { display: none !important; }

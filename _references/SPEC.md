@@ -161,16 +161,39 @@ the add/edit form, the habit checklist (`HABITS.md`), and the journal link
 - The virtualizer must support **exactly one variable-height row**: rows
   below the expanded one shift by an animated delta. If this cannot be
   done cleanly, stop and revise — do not fake it with an overlay.
-- Phone (≤560px): the day expands to full row width inline (leaning; rule
-  at plan time and record it in `DECISIONS.md`).
+- **Phone (≤560px): inline full width.** Ruled at the stage-04 plan. The other
+  six columns go to `0fr` and the column gap to zero, so it is the same
+  `grid-template-columns` mechanism as the desktop `3fr`, not a second shell.
+  The bottom sheet stays rejected (`DECISIONS.md` "Rejected — do not retry").
 - Transient-UI rule: a background month refresh must never close the
   expanded day, reset the form, or wipe text being typed. `refresh()` is
   a no-op while the form is open.
 
+### Day module API (`src/day.ts`)
+
+```
+configure(host: DayHost): void
+expand(day: DayNumber, into: HTMLElement): void   — attach the panel, rebuild the list
+beginCollapse(): void                             — fade the content, panel stays until detach
+detach(): void                                    — remove the panel from the DOM
+openAdd(day: DayNumber): void                     — the FAB entry point
+refresh(): void                                   — rebuild the list; NO-OP while the form is open
+isFormOpen(): boolean
+closeForm(): void                                 — close the form, keep the day open
+contentHeight(): number                           — panel offsetTop + offsetHeight, 0 unattached
+validate(draft: EventDraft): string | null        — pure; null when writable
+DayHost = { toast(message), onHeightChange(), onFormClosed() }
+```
+
+`day.ts` owns ONE panel node and moves it between cells. A refill or a resize re-attaches
+the same DOM, so typed text cannot be wiped by anything but an explicit rebuild — and
+`refresh()` refuses to rebuild while the form is open.
+
 ## Motion
 
 - Tokens in `:root` beside colour tokens: `--t-fast: 140ms`,
-  `--t-base: 240ms`, `--t-open: 380ms`,
+  `--t-base: 240ms`, `--t-open: 380ms`, `--t-stagger: 40ms`,
+  `--t-toast: 3200ms`,
   `--ease-out: cubic-bezier(0.22, 1, 0.36, 1)`,
   `--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1)`. **No transition or
   animation value may appear outside the token layer.**
@@ -182,16 +205,28 @@ the add/edit form, the habit checklist (`HABITS.md`), and the journal link
   drives a CSS transition or animation belongs in `motion.css`; a value that
   drives per-frame arithmetic belongs in `scroll.ts`.** No third home, and
   neither kind may appear as a literal at a use site.
-  (Stage 04 note: the expand row-height animation may be driven either way;
-  whichever it is decides which home its duration lives in.)
+  (Stage 04 ruling: the expand is driven by CSS, so its duration lives in
+  `motion.css` and `scroll.ts` gains no new constant. `scroll.ts` reads the
+  effective duration back off the element's computed style to know when the
+  animation ended — a token read, not a literal.)
 - Hover enters `--t-fast --ease-out`, leaves `--t-base`. Expand runs
   `--t-open --ease-spring`; content staggers in 40ms apart (fade + 6px
   rise). Collapse runs `--t-base --ease-out`, content fades first, no
   stagger.
-- One shared enter/exit utility solves display:none-vs-animation once
-  (`@starting-style` + `transition-behavior: allow-discrete` on enter,
-  `transitionend` on exit). Components never write their own transitions.
+- One shared enter/exit utility solves display:none-vs-animation once, with
+  three states: `.enter` (hidden at rest — the before-change style), `[data-in]`
+  (entering, staggered by `--i`), `[data-out]` (leaving, opacity only, never
+  staggered). A caller forces a reflow (`void node.offsetWidth`) between
+  adding `.enter` and setting `[data-in]`, so the browser commits the hidden
+  style before the transition-eligible one is applied — that forced reflow is
+  what makes the transition run, not `@starting-style`/`transition-behavior:
+  allow-discrete`, which this utility does not use. Components never write
+  their own transitions. A component sets `--i` as a plain integer; the 40ms
+  cadence stays a token.
 - `prefers-reduced-motion`: everything collapses to 80ms opacity-only.
+  Carve-out: a toast's animation is its LIFETIME, not motion. Collapsing it to
+  80ms would make an error unreadable, so under reduced motion the toast keeps
+  `--t-toast` and swaps to opacity-only keyframes.
 - Performance: hover animates compositor properties only. The expand
   row-height animation is the one permitted layout animation, contained
   to the scroller. 60fps on a mid phone is a gate criterion.
@@ -205,7 +240,11 @@ Ported behaviour (content contract unchanged from the drawer):
   form), repeat (RRULE; **disabled when editing**), notes → `description`.
 - Recurring events show a scope picker (this occurrence / whole series),
   default "this occurrence". Series delete confirms first.
-- Validation and write errors surface in the form and as a toast.
+- Validation and write errors surface in the form **and** as a toast.
+  `chrome.toast` is built at stage 04, because that is where the first write
+  error can happen; `chrome.mount` stays a stage-05 stub. The file layout puts
+  toasts in `chrome.ts` and that is where they go — no interim home to delete
+  later.
 
 ## First-run and connection state
 
@@ -359,11 +398,14 @@ Entry: "Try the demo" on first-run, or `?demo`.
 ```
 scroll.mount(root: HTMLElement, host: ScrollHost): ScrollController
 ScrollHost      = { fillRow(node, week, rowH), mondayOf(week), weekOf(day),
-                    onDock(week), onRangeChange(firstWeek, lastWeek) }
+                    onDock(week), onRangeChange(firstWeek, lastWeek), onExpandEnd() }
 ScrollController= { goToWeek(week, animate), setSnapStep(15|30|45),
-                    invalidate(weeks?), destroy() }
+                    setExpanded(ex: Expanded, animate: boolean), rowHeight(),
+                    invalidate(weeks?), armAnim(kind: 'expand'|'collapse'),
+                    armColsAnim(node: HTMLElement, kind: 'expand'|'collapse'), destroy() }
 render.renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[], rowH: number): void
 render.packLanes(spans: EventSpan[]): PackedSpan[]
+render.columnsFor(offset: DayOffset, full: boolean): string
 render.renderRange(node: HTMLElement, firstWeek: WeekIndex, lastWeek: WeekIndex): void
 year.mount(root: HTMLElement, host: YearHost): YearController
 ```
@@ -384,6 +426,7 @@ year.mount(root: HTMLElement, host: YearHost): YearController
 rowHeightFor(viewportH, headerH)   heightOf(w, rowH, expanded)
 posOf(w, rowH, expanded)           weekAtY(y, rowH, expanded)
 snapTargetY(anchorWeek, rowH, expanded, viewportH)
+fitY(y, ex, rowH, viewportH)
 nearestAnchor(day, modulus, dir)   projectY(y, velocity)
 settleMs(distancePx, rowH)         easeOutCubic(t)
 Expanded = { week: WeekIndex; delta: number } | null
@@ -411,6 +454,119 @@ Expanded = { week: WeekIndex; delta: number } | null
   `SETTLE_BASE/PER_WEEK/MAX_MS 280/42/760`, `WHEEL_GAIN 0.6`,
   `WHEEL_IDLE_MS 140`, `HAPTIC_ON_SNAP false`. Easing `easeOutCubic`,
   velocity smoothed 0.7/0.3, drag 1:1 with row height.
+- **`setExpanded` jumps the maths and lets CSS carry the pixels.** It sets
+  `expanded`, moves `y` through `fitY` so the grown row is fully on screen, and
+  writes each row's FINAL transform and height once. `posOf`/`weekAtY` are
+  therefore never mid-flight-wrong: a click during the animation resolves
+  against the layout the pixels are heading for, bounded by `--t-open`.
+  Expansion and the scroll-to-fit ride are one transition, not two.
+- **`rowHeight()` exists so no consumer measures the row.** The expanded delta
+  is `max(0, panel height − rowHeight())`; reading it off a DOM node would read
+  a mid-animation height.
+- **KNOWN LIMITATION: `grid-template-columns` does not visibly interpolate
+  on every path at every viewport.** `transform` and `height` animate
+  correctly everywhere, and the column END STATE is always correct. What is
+  inconsistent is the easing, and it is path-dependent, not simply
+  size-dependent (Chrome, measured): the FIRST expand interpolates at
+  390×844 and snaps at 1440×900 and 1920×1200, while the in-row day SWITCH
+  does the exact reverse — snapping at 390×844 and interpolating at both
+  desktop widths. Whatever the cause is, it discriminates between two paths
+  that write the same property through the same gate, and it is not
+  established. This is the one confirmed, unresolved gap in the stage's
+  animation work — but not the only thing stage 04 leaves unproven: its
+  row-height-interpolation and positive `data-jump` claims rest on hand and
+  isolated-repro evidence rather than on the suite. See
+  `04_day/output/verification.md` for the raw widths.
+  Every constraint below is independently confirmed by an isolated repro,
+  including one that reconstructs this app's actual architecture (pool
+  nodes pre-existing before the mutation, the split gate below, `--expand-
+  cols`, children replaced mid-task, transform/height/columns all changing
+  together) and DOES ease the columns correctly. The real app, with the
+  same design verified wired exactly right (the gate attribute present and
+  held for the transition's full duration, `transition-property`/
+  `transition-duration` computed correctly throughout), still snaps the
+  column value to its target within the first couple of milliseconds. The
+  cause is not established. Do not re-litigate the constraints below on the
+  theory that one of them is the missing piece — each has already been
+  tested in isolation and confirmed necessary but, together, not sufficient
+  for the full app. The next thing worth trying, if anyone picks this back
+  up: stub `day.ts`'s panel-DOM work (moving the panel between cells,
+  rebuilding its list, the staggered `.enter` transitions) to a no-op and
+  see whether the column transition starts interpolating — it is the one
+  significant thing the working isolated repro does not reproduce.
+- **The transition gate is split in two, both carried per row, never on the
+  scroller.** `data-anim` (`expand`/`collapse`) gates `transform`, `height`,
+  `column-gap` and is stamped on every pooled row — geometry shifts under
+  any row when one grows, so all 14 need it. `data-cols-anim` (`expand`/
+  `collapse`) gates `grid-template-columns` alone and is stamped only on
+  the row(s) whose columns actually change this task — the expanding row,
+  and on a cross-week switch, the departing row whose columns are being
+  cleared — because that is the only row with a value to transition for
+  that property. Both gates use the SAME tokens per kind
+  (`var(--t-open)`/`var(--ease-spring)` for expand,
+  `var(--t-base)`/`var(--ease-out)`/`var(--t-fast)` delay for collapse), so
+  the columns and the geometry never desync. On the row carrying BOTH
+  attributes (the one actually animating), a compound rule,
+  `.week[data-anim][data-cols-anim]`, lists all four properties: the two
+  single-attribute rules have equal specificity and `transition-property`
+  is not additive between them, so without the compound rule the one later
+  in source order would silently win outright and drop the other's
+  properties from that row's eligibility. Both gates are written once per
+  action — `setAnim` sweeps the whole pool once when a geometry action
+  starts or ends, `armColsAnim` writes one node once — never inside
+  `place()`'s per-frame path or a kinetic `frame()` tick (a kinetic
+  settle's own gate-clear happens once, when `animateTo` starts it, not on
+  every tick it runs). Both clear together on every path that already
+  clears the gate (pointerdown, wheel, `goToWeek`, a settled `animTimer`,
+  the start of a kinetic action) — `setAnim`'s one pool loop clears
+  `data-jump` and both gate attributes. A node recycled INTO view
+  mid-animation, from a DIFFERENT week than it last held, is stamped
+  `data-jump`; a refill that keeps the SAME week (a full `invalidate()`
+  resets every slot's bookkeeping, not just the ones that moved) does not.
+  The recycling guard pairs `data-jump` with EACH gate on the same element
+  — `.week[data-anim][data-jump]` and `.week[data-cols-anim][data-jump]`
+  (motion.css) — never an ancestor-and-row pairing.
+- **`armAnim(kind)`/`armColsAnim(node, kind)` raise their gate on its own —
+  no timer, no geometry, no `place()` — so it opens BEFORE the property it
+  gates changes, not merely in the same task as it.** This engine decides
+  transition eligibility at the moment a property's value changes, not
+  retroactively once `transition-property` later includes it — a value
+  already at its target before the gate exists is not eligible one
+  statement later, confirmed by repro. `main.ts`'s `remeasure()` arms
+  `data-anim` first (all rows), then `invalidate()`s the row(s) — which is
+  where `applyColumns`/`clearColumns` arm `data-cols-anim` on the ONE row
+  about to change, immediately before writing `--expand-cols` — then calls
+  `setExpanded`, which measures `contentHeight()` and writes the final
+  transform and height. One task, gate-then-geometry, for both gates.
+  `closeDay()` arms both the same way, in the same order, before
+  `clearColumns` — including ahead of `armAnim('collapse')` itself, because
+  `setAnim`'s own first statement can synchronously cancel a still-pending
+  expand timer and fire a full, ungated refill of every row right there, so
+  `data-cols-anim`'s value must already be set before that can happen, not
+  merely before the next line of `closeDay` runs. `setExpanded` still calls
+  `setAnim` itself on every call, so re-arming `data-anim` in the same task
+  is simply idempotent.
+- **The expanded column template is written to a CSS custom property,
+  `--expand-cols`, never to `grid-template-columns` directly.** This engine
+  does not transition `grid-template-columns` when JS sets it via inline
+  style at all, regardless of gating — repro: a plain grid with nothing
+  else in flight, changed by `el.style.gridTemplateColumns = …` with a
+  correct matching duration and matching track-sizing function, still
+  snaps; the identical value change made through a custom property a
+  static CSS rule reads with `var()` eases normally. `.week`'s rule is
+  `grid-template-columns: var(--expand-cols, repeat(7, minmax(0, 1fr)))`.
+  This, the per-row split above, and the arm-before-write ordering are
+  independently-necessary, load-bearing browser constraints on THIS
+  engine, not incidental style choices — reintroducing a direct
+  `grid-template-columns` write, writing the column template before arming
+  its gate, or gating it from an ancestor's attribute again, each
+  reintroduces a snap with no error to catch it. None of the three,
+  individually or together, has been shown sufficient to fix the app-level
+  gap named at the top of this list.
+- **`onExpandEnd()` fires when the animation is over.** `scroll.ts` reads the
+  duration from the row's own computed `transition-duration` plus
+  `transition-delay`, so `motion.css` keeps the single home for the value and
+  reduced motion's 80ms is honoured without a second code path.
 
 ## PWA
 
@@ -669,9 +825,14 @@ Google Cloud Console — the v3 client carries over:
    users, no review; consent expires periodically — re-clicking sign-in
    fixes it, not a bug).
 3. Credentials → OAuth client ID → Web application → authorized
-   JavaScript origins `http://localhost:5173` and the deployed origin.
-   No redirect URIs. Exact-match: `no.fail` and `www.no.fail` do not cover
-   `cal.no.fail`.
+   JavaScript origins `http://localhost:5173` (dev server),
+   `http://localhost:4173` (`vite preview`, registered 2026-08-30) and the
+   deployed origin. No redirect URIs. **Exact-match, and the port is part of
+   the match**: `no.fail` and `www.no.fail` do not cover `cal.no.fail`, and
+   5173 does not cover 4173 — which is why a production build served by
+   `npm run preview` fails sign-in with `origin_mismatch` unless its own port
+   is registered. Origin changes take a few minutes to propagate; retry in a
+   fresh tab, since GIS caches the rejection.
 4. `.env.local`: `VITE_GOOGLE_CLIENT_ID=`.
 
 Supabase: see `HABITS.md`.
