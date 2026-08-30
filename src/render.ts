@@ -1,5 +1,5 @@
 // STAGE 03 — week rows, bars, chips, lane packing, month badges, header. Sets data-cat and nothing else per frame.
-import type { EventSpan, WeekIndex } from './types.ts'
+import type { EventSpan, WeekIndex, DayOffset } from './types.ts'
 import { dayAt, today } from './state.ts'
 import { asOffset, dayToCivil } from './dates.ts'
 /** EventSpan with the lane render.ts assigned. Not persisted, not exported beyond render.ts's consumers. */
@@ -39,6 +39,20 @@ export function packLanes(spans: EventSpan[]): PackedSpan[] {
   const bars = spans.filter(s => s.event.allDay)
     .map(s => ({ span: s, from: s.from as number, to: s.to as number, id: s.event.id }))
   return assignLanes(bars).map(x => ({ ...x.span, lane: x.lane }))
+}
+
+/** SPEC "Inline day expansion": the phone rule is ≤560px. */
+export const PHONE_MAX_W = 560
+/** Desktop: the open day takes three tracks to a neighbour's one. */
+export const EXPAND_FR = 3
+
+/** The expanded row's column template. `full` is the phone rule: neighbours go to
+ *  `0fr` and the picked day takes the whole row — the same mechanism as the
+ *  desktop `3fr`, not a second shell (DECISIONS "Stage 04 rulings"). Always seven
+ *  tracks, because the bar overlay is set from the same string. */
+export function columnsFor(offset: DayOffset, full: boolean): string {
+  return Array.from({ length: 7 }, (_, i) =>
+    i === offset ? (full ? '1fr' : `${EXPAND_FR}fr`) : (full ? '0fr' : '1fr')).join(' ')
 }
 
 const BAR_H = 20        // must match --bar height + gap in style.css

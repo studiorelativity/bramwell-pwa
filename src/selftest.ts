@@ -22,7 +22,7 @@ import {
   settleMs, snapTargetY, weekAtY,
 } from './scroll.ts'
 import type { Expanded } from './scroll.ts'
-import { packLanes, visibilityFor, rangeLabel } from './render.ts'
+import { packLanes, visibilityFor, rangeLabel, columnsFor, PHONE_MAX_W } from './render.ts'
 import type { PackedSpan } from './render.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
@@ -1354,6 +1354,27 @@ const cases: Case[] = [
     // A day where everything fits shows no "+N" at all.
     if (v[6]!.chipsShown !== 1) return `day 6: expected the 1 chip shown, got ${v[6]!.chipsShown}`
     if (v[6]!.overflow !== 0) return `day 6: expected overflow 0 when everything fits, got ${v[6]!.overflow}`
+    return null
+  }],
+
+  ['render: the expanded row column template, desktop and phone', () => {
+    const desk = columnsFor(asOffset(2), false)
+    if (desk !== '1fr 1fr 3fr 1fr 1fr 1fr 1fr') return `desktop offset 2: "${desk}"`
+    const phone = columnsFor(asOffset(0), true)
+    if (phone !== '1fr 0fr 0fr 0fr 0fr 0fr 0fr') return `phone offset 0: "${phone}"`
+    const last = columnsFor(asOffset(6), true)
+    if (last !== '0fr 0fr 0fr 0fr 0fr 0fr 1fr') return `phone offset 6: "${last}"`
+    // Always exactly seven tracks, or the bar overlay stops lining up with the row.
+    for (let o = 0; o <= 6; o++) {
+      for (const full of [false, true]) {
+        const parts = columnsFor(asOffset(o), full).split(' ')
+        if (parts.length !== 7) return `offset ${o} full=${full}: ${parts.length} tracks`
+        // The picked column is the only one that differs from its neighbours.
+        const picked = parts.filter((p, i) => i === o)
+        if (picked[0] !== '1fr' && picked[0] !== '3fr') return `offset ${o}: picked track "${picked[0]}"`
+      }
+    }
+    if (PHONE_MAX_W !== 560) return `phone breakpoint drifted from the SPEC: ${PHONE_MAX_W}`
     return null
   }],
 
