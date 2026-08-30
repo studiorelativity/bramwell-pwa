@@ -84,6 +84,28 @@ const PROBE = `(async () => {
     el.dispatchEvent(new PointerEvent('pointerdown', opts))
     el.dispatchEvent(new PointerEvent('pointerup', opts))
   }
+  const waitFrame = () => new Promise(r => requestAnimationFrame(r))
+  // openDayAt defers its real work to a requestAnimationFrame (main.ts's
+  // scheduleRemeasure), so data-anim is not set until that frame runs. A fixed
+  // sleep after tap() risks reading transitionDuration before the browser has
+  // applied it (reads the CSS default 0s, not what motion.css actually set) —
+  // poll, bounded, rather than assume one frame is always enough headless.
+  const waitForAnim = async (scrollerEl, maxFrames = 10) => {
+    for (let i = 0; i < maxFrames && scrollerEl.dataset.anim === undefined; i++) await waitFrame()
+    return scrollerEl.dataset.anim ?? null
+  }
+  // Two independently-laid-out grids (.week in flow, .bars position:absolute)
+  // can legitimately resolve a shared 1fr/0fr track list ~0.01-0.02px apart
+  // per track from Chrome's own fractional-pixel rounding, even when nothing
+  // is wrong — exact string equality is too strict. 0.05px is three orders of
+  // magnitude below the ~12px/track gap the real .bars column-gap bug produced,
+  // so it still catches genuine divergence.
+  const TRACK_TOL_PX = 0.05
+  const colsClose = (a, b) => {
+    const pa = a.trim().split(/\s+/).map(parseFloat)
+    const pb = b.trim().split(/\s+/).map(parseFloat)
+    return pa.length === pb.length && pa.every((v, i) => Math.abs(v - pb[i]) <= TRACK_TOL_PX)
+  }
   const scroller = document.querySelector('.scroller')
   const sr = scroller.getBoundingClientRect()
   const contentCentre = sr.top + sr.height * 0.5              // SNAP_ALIGN 0.5
@@ -171,13 +193,16 @@ const PROBE = `(async () => {
   const restRowH = Math.round(targetRow.getBoundingClientRect().height)
   const restCellW = target.getBoundingClientRect().width
   const restCols = cols(targetRow)
-  const barsMatchAtRest = cols(targetRow.querySelector('.bars')) === restCols
+  const barsMatchAtRest = colsClose(cols(targetRow.querySelector('.bars')), restCols)
   const dayHitBeforeOpen = hits(target)
 
   // The duration motion.css actually applied — the bound on the click-during-
-  // animation tradeoff, reported rather than assumed.
+  // animation tradeoff, reported rather than assumed. Wait for data-anim to
+  // actually land (openDayAt defers to a requestAnimationFrame) before reading
+  // transitionDuration off it — reading immediately after tap() races the
+  // frame that sets it and always reads 0.
   tap(target)
-  const animAttr = document.querySelector('.scroller').dataset.anim ?? null
+  const animAttr = await waitForAnim(document.querySelector('.scroller'))
   const animDurMs = Math.round((parseFloat(getComputedStyle(targetRow).transitionDuration) +
                                 parseFloat(getComputedStyle(targetRow).transitionDelay)) * 1000)
   // Mid-flight: the column width must be strictly between its start and end, which
@@ -193,7 +218,7 @@ const PROBE = `(async () => {
   const midRow = openCellNow === null ? null : openCellNow.closest('.week')
   const midWeekCols = midRow === null ? null : cols(midRow)
   const midBarsCols = midRow === null ? null : cols(midRow.querySelector('.bars'))
-  const barsTrackDuringAnim = midRow !== null && midBarsCols !== null && midWeekCols === midBarsCols
+  const barsTrackDuringAnim = midRow !== null && midBarsCols !== null && colsClose(midBarsCols, midWeekCols)
   await sleep(animDurMs + 200)
 
   const openCell = document.querySelector('.day[data-open]')
@@ -206,7 +231,7 @@ const PROBE = `(async () => {
   // Strictly between the resting width and the open width is what separates
   // interpolation from a snap — measured, not assumed from the browser version.
   const columnsInterpolated = midW > Math.min(restCellW, endW) + 1 && midW < Math.max(restCellW, endW) - 1
-  const barsTrackColumns = openRow !== null && cols(openRow.querySelector('.bars')) === cols(openRow)
+  const barsTrackColumns = openRow !== null && colsClose(cols(openRow.querySelector('.bars')), cols(openRow))
   const neighbours = openRow === null ? [] : [...openRow.querySelectorAll('.day')]
     .filter(d => d !== openCell).map(d => Math.round(d.getBoundingClientRect().width))
   const rowsBelow = [...document.querySelectorAll('.week')]
