@@ -5,12 +5,11 @@ import * as auth from './auth.ts'
 import * as categories from './categories.ts'
 import * as chrome from './chrome.ts'
 import * as day from './day.ts'
-import * as gcal from './gcal.ts'
 import * as render from './render.ts'
 import * as scroll from './scroll.ts'
 import * as state from './state.ts'
 import * as year from './year.ts'
-import { asDay, asOffset, asWeek, dayToCivil } from './dates.ts'
+import { addDays, asDay, asOffset, asWeek, dayToCivil, monthKey } from './dates.ts'
 import type { DayNumber, WeekIndex } from './types.ts'
 
 const app = document.getElementById('app')
@@ -54,7 +53,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
   modeBtn.id = 'btn-mode'
   modeBtn.textContent = 'Year'
   const avatar = document.createElement('span')
-  avatar.className = 'hdr-avatar'          // reserved; stage 05 fills it
+  avatar.className = 'hdr-avatar'          // filled by chrome.ts (avatar, reconnect pill, or nothing)
   // Year steppers — header, year view only (SPEC "Layout details").
   const prevY = document.createElement('button'); prevY.id = 'btn-prev-year'; prevY.textContent = '‹'
   const nextY = document.createElement('button'); nextY.id = 'btn-next-year'; nextY.textContent = '›'
@@ -71,6 +70,31 @@ if (new URLSearchParams(location.search).has('selftest')) {
 
   const MON = asOffset(0)
   let lastRange = { first: NaN, last: NaN }
+
+  /** The FAB's anchor in the calendar view (DECISIONS: mid-week day of the
+   *  docked week). Local, not read back from prefs — lastDockedDay is written
+   *  at dock and never read at launch (SPEC "Settings"). */
+  let dockedWeek: WeekIndex = state.weekOf(state.today())
+
+  /** DECISIONS: warmCache is computed from monthState over the render window.
+   *  `ready` alone is not enough: a warm start loads months as `ready` from
+   *  localStorage and then flips them to `loading`/`error` as the stale-token
+   *  refresh fails — and the first-run screen must NEVER cover a warm cache
+   *  (SPEC). Both of those states KEEP the prior events, so events-on-screen is
+   *  the durable signal. A genuinely empty cached month reads as cold; recorded
+   *  in verification.md as a known edge. */
+  function warmCache(): boolean {
+    if (!Number.isFinite(lastRange.first)) return false
+    for (let w = lastRange.first; w <= lastRange.last; w++) {
+      const mon = state.dayAt(asWeek(w), MON)
+      for (const k of [monthKey(mon), monthKey(addDays(mon, 6))]) {
+        const s = state.monthState(k)
+        if (s === 'ready') return true
+        if ((s === 'loading' || s === 'error') && state.eventsForMonth(k).length > 0) return true
+      }
+    }
+    return false
+  }
 
   // ---- inline day expansion (SPEC "Inline day expansion") ----
   // One day open at a time; main.ts is the only owner of that fact.
@@ -215,6 +239,15 @@ if (new URLSearchParams(location.search).has('selftest')) {
       // fillRow -> applyExpansion -> day.expand: attaches the panel to
       // openDay's cell and writes its column template, in this same task.
       ctl.invalidate([week])
+      // The panel is attached by the invalidate above, so openAdd's precondition
+      // (its day is the one shown) now holds. Called BEFORE the contentHeight
+      // read below, so the first expansion is already sized for the open form
+      // instead of growing again a frame later.
+      if (pendingOpenAdd !== null && pendingOpenAdd === openDay) {
+        const d = pendingOpenAdd
+        pendingOpenAdd = null
+        day.openAdd(d)
+      }
     } else {
       // A plain remeasure (resize, or a height change from the panel
       // itself): the row is already showing the right day, so just
@@ -278,6 +311,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
 
   function closeDay(): void {
     if (openDay === null) return
+    pendingOpenAdd = null
     // See openDayAt's comment: collapsing the day abandons any form it was
     // holding a repaint for, same as switching days does. Escape always
     // closes the form first (day.isFormOpen() above), which already
@@ -305,6 +339,30 @@ if (new URLSearchParams(location.search).has('selftest')) {
     ctl.setExpanded(null, true)         // onExpandEnd detaches and repaints the row
   }
 
+  /** Set by addHere when the day has to be expanded first; consumed by the very
+   *  next remeasure, in the SAME task as the invalidate that attaches the panel.
+   *  day.openAdd is documented to do nothing unless its day is already shown. */
+  let pendingOpenAdd: DayNumber | null = null
+
+  /** DECISIONS "FAB date": calendar → mid-week day of the docked week; year → today. */
+  function fabDay(): DayNumber {
+    return inYear() ? state.today() : state.dayAt(dockedWeek, asOffset(3))
+  }
+
+  function addHere(): void {
+    // fabDay() is read BEFORE any view switch below: in the year view the anchor
+    // is today, and leaving the year view first would make it read the calendar's
+    // docked week instead (DECISIONS "FAB date").
+    const d = fabDay()
+    if (inYear()) {
+      showYear(false)
+      ctl.goToWeek(state.weekOf(d), false)   // the year's anchor is off-screen here
+    }
+    if (openDay === d) { day.openAdd(d); return }
+    pendingOpenAdd = d
+    openDayAt(d)
+  }
+
   const ctl = scroll.mount(scroller, {
     fillRow: (node, week, rowH) => {
       render.renderWeek(node, week, state.spansForWeek(week), rowH)
@@ -313,6 +371,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     mondayOf: week => state.dayAt(week, MON),
     weekOf: day => state.weekOf(day),
     onDock: week => {
+      dockedWeek = week
       // CORRECTION: onDock reports the week at the viewport centre, and ~6.5
       // weeks are visible — so the header window is centred on the dock,
       // not anchored to it (the brief's `[week, week+6]` names a window
@@ -343,8 +402,27 @@ if (new URLSearchParams(location.search).has('selftest')) {
     },
   })
 
-  ctl.setSnapStep(30)
+  ctl.setSnapStep(state.prefs().snapStepDays ?? 30)
   ctl.goToWeek(state.weekOf(state.today()), false)
+
+  const chromeCtl = chrome.mount(app, {
+    avatarSlot: avatar,
+    warmCache,
+    setSnapStep: step => ctl.setSnapStep(step),
+    addHere,
+    // Clearing the auth gate is only half the recovery: onRangeChange
+    // short-circuits while the range is unchanged, so without resetting
+    // lastRange nothing would ever ask for the suppressed months again.
+    onConnected: () => {
+      lastRange = { first: NaN, last: NaN }
+      ctl.invalidate()
+    },
+    onPrefsChanged: () => {
+      applyTheme()
+      ctl.invalidate()
+      yearCtl?.invalidate()
+    },
+  })
 
   day.configure({
     toast: chrome.toast,
@@ -388,6 +466,17 @@ if (new URLSearchParams(location.search).has('selftest')) {
     closeDay()
   })
 
+  // SPEC "Layout details": `n` opens the form on the centred date, ignored inside
+  // inputs or with a day open. No modifier, so it cannot eat a browser shortcut.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'n' || e.metaKey || e.ctrlKey || e.altKey) return
+    const t = e.target
+    if (t instanceof HTMLElement && (t.isContentEditable || /^(?:INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+    if (openDay !== null) return
+    e.preventDefault()
+    addHere()
+  })
+
   // The panel's natural height is width-dependent, so a resize re-derives the delta.
   window.addEventListener('resize', () => { if (openDay !== null) scheduleRemeasure(false) })
 
@@ -418,10 +507,9 @@ if (new URLSearchParams(location.search).has('selftest')) {
   const step = (d: number) => { shownYear += d; yearCtl?.setYear(shownYear); range.textContent = String(shownYear) }
   prevY.addEventListener('click', () => step(-1))
   nextY.addEventListener('click', () => step(1))
-  modeBtn.addEventListener('click', () => {
-    const toYear = !inYear()
-    showYear(toYear)
-    if (toYear && yearCtl === null) {
+  function openYear(): void {
+    showYear(true)
+    if (yearCtl === null) {
       // Mounted AFTER unhiding so columnsFor sees a real clientWidth.
       yearCtl = year.mount(yearRoot, { onPickDay: d => {
         // Clicking a day returns to the calendar on that day (SPEC "Year view").
@@ -429,7 +517,14 @@ if (new URLSearchParams(location.search).has('selftest')) {
         ctl.goToWeek(state.weekOf(d), false)   // onDock restores the range label
       } })
     }
+  }
+  modeBtn.addEventListener('click', () => {
+    if (inYear()) showYear(false)
+    else openYear()
   })
+
+  // SPEC "Settings": defaultView IS read at launch, unlike lastDockedDay.
+  if (state.prefs().defaultView === 'year') openYear()
 
   // SPEC "Layout details": Today goes to today WITHOUT changing the view —
   // the calendar scrolls and re-snaps; the year view pages back to this year.
@@ -462,7 +557,12 @@ if (new URLSearchParams(location.search).has('selftest')) {
       // day.expand's dayChanged branch and from detach() — fires neither
       // callback, which is why the release also lives at the two main.ts
       // call sites that reach it, not only in day.ts.
-      if (day.isFormOpen()) { heldRepaint = true; return }
+      // CONVENTIONS: a background refresh must never destroy transient UI. The
+      // settings sheet obeys the same rule as the form (DECISIONS).
+      if (day.isFormOpen() || chromeCtl.isSheetOpen()) { heldRepaint = true; return }
+      // A cache change is also how a withToken failure deep inside state.ts
+      // reaches the pill: there is no auth event to subscribe to.
+      chromeCtl.syncConnection()
       ctl.invalidate()
       if (inYear() && yearDirty) yearCtl?.invalidate()
       yearDirty = false
@@ -477,35 +577,37 @@ if (new URLSearchParams(location.search).has('selftest')) {
   function releaseHeldRepaint(): void {
     if (!heldRepaint) return
     heldRepaint = false
+    chromeCtl.syncConnection()
     ctl.invalidate()
   }
 
+  // Quiet renewal on load. Real behaviour, not a harness: its outcome is what
+  // decides first-run vs the reconnect pill, and its failure is what arms
+  // state.ts's auth gate. A signed-out phone cannot recover from here — the
+  // popup needs a gesture — so the pill and Connect are the only ways back.
+  void auth.getToken().then(
+    () => {
+      state.clearAuthGate()
+      chromeCtl.syncConnection()
+      // Re-arm the window the gate suppressed while the renewal was in flight.
+      lastRange = { first: NaN, last: NaN }
+      ctl.invalidate()
+    },
+    () => { chromeCtl.syncConnection() },
+  )
+
+  // SPEC "PWA": production only. Headless Chrome hangs on registration
+  // (CONVENTIONS), which is the other reason this never runs in dev.
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => { void navigator.serviceWorker.register('/sw.js') })
+  }
+
   if (import.meta.env.DEV) {
-    // STAGE 02 HARNESS — deleted in stage 05, which builds the real first-run screen.
-    // GIS needs real user activation, which a devtools call does not have, so the gate
-    // needs a button that a human actually clicks.
-    const status = document.createElement('p')
-    status.id = 'harness-status'
-    const connect = document.createElement('button')
-    connect.id = 'harness-connect'
-    connect.textContent = 'Connect Google Calendar'
-    const paint = () => { status.textContent = auth.isSignedIn() ? 'Connected' : 'Not connected' }
-    connect.addEventListener('click', () => {
-      status.textContent = 'Connecting…'
-      void auth.signIn().then(paint, (e: Error) => { status.textContent = `Sign-in failed: ${e.message}` })
-    })
-    const out = document.createElement('button')
-    out.id = 'harness-signout'
-    out.textContent = 'Sign out'
-    out.addEventListener('click', () => { void auth.signOut().then(paint) })
-    const bar = document.createElement('div')
-    bar.id = 'devbar'
-    bar.append(connect, out, status)
-    document.body.append(bar)
-    paint()
-    // why: augmenting window for a dev-only console handle, without widening the global type
-    ;(window as unknown as { bramwell: unknown }).bramwell = { auth, gcal, categories, state, applyTheme, ctl, day }
-    // A quiet renewal on load is what the gate's "reload, no popup" criterion exercises.
-    void auth.getToken().then(paint, paint)
+    // The DEV console seam scripts/shot.mjs drives. NOT a harness UI: #devbar and
+    // the #harness-* buttons were deleted this stage, because the real first-run
+    // screen is what they stood in for. Kept because shot.mjs reads `ctl` and
+    // `day` directly (shot.mjs:429-430) and has no other way in.
+    // why: augmenting window for a dev-only test seam, without widening the global type
+    ;(window as unknown as { bramwell: unknown }).bramwell = { ctl, day, chrome: chromeCtl }
   }
 }
