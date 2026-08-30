@@ -6,6 +6,10 @@
   --t-fast: 140ms;
   --t-base: 240ms;
   --t-open: 380ms;
+  --t-stagger: 40ms;
+  /* A toast's dwell. Not a motion value in the reduced-motion sense: see the
+     carve-out at the bottom of this file. */
+  --t-toast: 3200ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
@@ -22,17 +26,81 @@
   }
 }
 
-/* One shared enter/exit utility, so components never write their own. */
+/* One shared enter/exit utility, so components never write their own.
+   Three states: at rest (hidden), entering (staggered by --i), leaving.
+   --i is a plain integer a component sets; the 40ms cadence stays a token,
+   and anything that never sets --i gets no delay. */
 .enter { opacity: 0; transform: translateY(6px); }
 .enter[data-in] {
   opacity: 1; transform: none;
   transition: opacity var(--t-base) var(--ease-out), transform var(--t-base) var(--ease-out);
+  transition-delay: calc(var(--t-stagger) * var(--i, 0));
 }
+/* Collapse fades content first and never staggers (SPEC "Motion"). */
+.enter[data-out] {
+  opacity: 0; transform: none;
+  transition: opacity var(--t-base) var(--ease-out);
+  transition-delay: 0s;
+}
+
+/* Day-tile hover elevation (SPEC "Visual direction — Night Depth"). The
+   compositor-only properties (opacity, transform) are set in style.css;
+   relocated here — pre-existing since stage 03 — because a transition value
+   may not appear outside this file (CONVENTIONS "Style"). */
+.day::after { transition: opacity var(--t-fast) var(--ease-out); }
+@media (hover: hover) {
+  .day:hover { transition: transform var(--t-fast) var(--ease-out); }
+  .day:not(:hover) { transition: transform var(--t-base) var(--ease-out); }
+}
+
+/* The one permitted layout animation (SPEC "Motion"), contained to the scroller.
+   scroll.ts writes each row's FINAL geometry once and CSS interpolates: there is
+   no per-frame JavaScript in an expand. The columns are set on the row and its
+   bar overlay together so the two interpolate in lockstep. */
+.scroller[data-anim] .week,
+.scroller[data-anim] .bars {
+  transition-property: transform, height, grid-template-columns, column-gap;
+}
+.scroller[data-anim="expand"] .week,
+.scroller[data-anim="expand"] .bars {
+  transition-duration: var(--t-open);
+  transition-timing-function: var(--ease-spring);
+}
+.scroller[data-anim="collapse"] .week,
+.scroller[data-anim="collapse"] .bars {
+  transition-duration: var(--t-base);
+  transition-timing-function: var(--ease-out);
+  transition-delay: var(--t-fast);        /* content fades first (SPEC "Motion") */
+}
+/* A pool node recycled INTO view mid-animation would otherwise slide in from its
+   previous position, 14 rows away. Stamped by scroll.ts only while data-anim is
+   set, so steady-state recycling pays nothing. */
+.scroller[data-anim] .week[data-jump],
+.scroller[data-anim] .week[data-jump] .bars { transition-property: none; }
+
+/* A toast's whole life is one animation, so its timing has a single home. */
+@keyframes toast-life {
+  0%        { opacity: 0; transform: translateY(6px); }
+  10%, 90%  { opacity: 1; transform: none; }
+  100%      { opacity: 0; transform: translateY(6px); }
+}
+@keyframes toast-life-plain {
+  0%        { opacity: 0; }
+  10%, 90%  { opacity: 1; }
+  100%      { opacity: 0; }
+}
+.toast { animation: toast-life var(--t-toast) var(--ease-out) both; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition-duration: 80ms !important;
     transition-property: opacity !important;
     animation-duration: 80ms !important;
+  }
+  /* A toast's animation is its LIFETIME, not motion: collapsing it to 80ms would
+     make an error message unreadable. The dwell stays; the movement goes. */
+  .toast {
+    animation-name: toast-life-plain !important;
+    animation-duration: var(--t-toast) !important;
   }
 }
