@@ -114,6 +114,14 @@ html, body {
 .bars {
   position: absolute; inset: 0; padding: 0 var(--gap);
   display: grid; grid-template-columns: inherit; gap: var(--gap);
+  /* After the `gap` shorthand so it wins: `.week[data-full]` (phone, ≤560px)
+     zeroes .week's OWN column-gap, and inherit is what makes .bars track that
+     without a second `[data-full]` rule to remember — the same reasoning as
+     grid-template-columns: inherit above. Without this, .bars kept six 3px
+     gaps that .week no longer had, so the SAME inherited 0fr/1fr track list
+     resolved against a different available width in each grid (round 3
+     review: measured as 0px vs 12px per neighbour track). */
+  column-gap: inherit;
   pointer-events: none;
 }
 .bar {

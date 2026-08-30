@@ -231,11 +231,18 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
       const w = asWeek(first + i)
       const slot = ((w % POOL_SIZE) + POOL_SIZE) % POOL_SIZE
       const node = pool[slot]!
-      if (assigned[slot] !== w) {
+      const prev = assigned[slot]
+      if (prev !== w) {
         assigned[slot] = w
-        // Recycled INTO view mid-animation: without this it slides in from its
-        // previous position, 14 rows away.
-        if (animating) node.dataset['jump'] = ''
+        // Recycled INTO view FROM A DIFFERENT WEEK, mid-animation: without this
+        // it slides in from its previous position, 14 rows away. `prev` must be
+        // non-null and different from `w` — a `null` previous value means this
+        // slot's assignment was merely CLEARED (a full invalidate() resets every
+        // slot to force a refill of the SAME week at the SAME position, which is
+        // not a recycle and must not disable that row's own in-flight transition
+        // — round 3 review: a background cache refresh landing mid-expand used
+        // to stamp every visible row, including the one genuinely expanding).
+        if (animating && prev !== null && prev !== w) node.dataset['jump'] = ''
         host.fillRow(node, w, rowH)
       }
       node.style.transform = `translateY(${posOf(w, rowH, expanded) - y}px)`
