@@ -617,8 +617,14 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // The DEV console seam scripts/shot.mjs drives. NOT a harness UI: #devbar and
     // the #harness-* buttons were deleted this stage, because the real first-run
     // screen is what they stood in for. Kept because shot.mjs reads `ctl` and
-    // `day` directly (shot.mjs:429-430) and has no other way in.
+    // `day` directly (shot.mjs:429-430) and has no other way in. `addHere` is
+    // exposed too: the FAB is disabled in every connection state the harness can
+    // reach (headless Chrome cannot be signed in), so a synthetic click on it
+    // exercises no real code path — a synthetic call to `addHere` here exercises
+    // the pendingOpenAdd disarm logic through a route a real pointer can actually
+    // reach once signed in. Same justification as `openSheet()` on
+    // ChromeController. Stripped from production builds.
     // why: augmenting window for a dev-only test seam, without widening the global type
-    ;(window as unknown as { bramwell: unknown }).bramwell = { ctl, day, chrome: chromeCtl }
+    ;(window as unknown as { bramwell: unknown }).bramwell = { ctl, day, chrome: chromeCtl, addHere }
   }
 }

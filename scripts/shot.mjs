@@ -614,6 +614,11 @@ const PROBE = `(async () => {
 
 // Probe 5 (Task 7): the FAB must never sit over the last visible row's Sunday —
 // a control fixed at the bottom-right and a scrollable grid genuinely can overlap.
+// REVIEW FIX (Critical): must run on a FRESH navigation (see probeFabClears below)
+// — the pre-existing PROBE focuses .dp-title (day.ts:439), which reproducibly
+// drifts innerHeight in headless Chrome's emulation for the rest of that
+// navigation's life, corrupting both the "lowest visible row" selection and the
+// hit-test coordinates this const computes.
 const FAB_CLEARS = `() => {
   const weeks = [...document.querySelectorAll('.week')]
   // The lowest row actually on screen, not the lowest in the pool.
@@ -633,6 +638,29 @@ const FAB_CLEARS = `() => {
     sunBottom: Math.round(r.bottom),
   }
 }`
+
+/** Probe 5 (Task 7), review fix: FAB_CLEARS must run on its own fresh navigation,
+ *  the same way probeFirstRunCold isolates itself. #fab's CSS is static
+ *  (bottom: calc(16px + env(safe-area-inset-bottom)), height: 48px), so on a
+ *  SOUND viewport fabTop must equal innerHeight - 64 exactly — asserted
+ *  explicitly here, not just reported, per the review ruling: "If that identity
+ *  does not hold on a fresh navigation, stop and report it rather than working
+ *  around it." */
+async function probeFabClears(w, h, mobile) {
+  await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile })
+  loaded = false
+  await send('Page.navigate', { url: URL_ })
+  for (let i = 0; i < 100 && !loaded; i++) await sleep(100)
+  await sleep(800)
+  const result = await evalJs(`(${FAB_CLEARS})()`)
+  const innerHeightNow = await evalJs('innerHeight')
+  return {
+    ...result,
+    innerHeight: innerHeightNow,
+    expectedFabTop: innerHeightNow - 64,
+    fabTopIdentityHolds: result.fabTop === innerHeightNow - 64,
+  }
+}
 
 // Probe 6 (Task 7): THE INVARIANT (chrome.ts) — no two categories may share a
 // colorId, because the colorId is the only channel a read resolves back to a
@@ -694,33 +722,29 @@ const PENDING_ADD_ORIGINAL_DAY = `() => {
 
 // Probe 8 (Task 7): the regression probe for Task 6's pendingOpenAdd leak. Driven
 // through the seam, since it is a same-frame race no synthetic pointer sequence
-// reproduces reliably: arm via the FAB, then switch days before the queued rAF
-// runs. The second openDayAt must disarm the pending add, or a later tap back
-// onto the FAB's day pops a form nobody asked for.
+// reproduces reliably: arm via the REAL addHere(), then switch days before the
+// queued rAF runs. The second openDayAt must disarm the pending add, or a later
+// tap back onto the FAB's day pops a form nobody asked for.
+// REVIEW FIX (Important): previously dispatched a synthetic 'click' at the
+// DISABLED #fab directly — a real pointer press on a disabled button dispatches
+// no click at all, so that only proved the disarm logic correct when triggered,
+// not that a user could reach the trigger. main.ts now exposes `addHere` on
+// window.bramwell FOR EXACTLY THIS REASON (the FAB is disabled in every
+// connection state this harness can reach), so this calls the real function
+// main.ts's own FAB listener calls, rather than dispatching at the control.
 const PENDING_ADD_LEAK = `() => {
   const b = window.bramwell
-  const fab = document.getElementById('fab')
-  const fabDisabledAtTap = fab.disabled
-  // Diagnostic, not part of the brief's given shape: proves whether a dispatched
-  // (not real-user) click is even delivered to a disabled button's listeners at
-  // all, same element, same dispatch, same synchronous tick as chrome.ts's own
-  // listener — so a false in formOpen below cannot be misread as this leak being
-  // fixed when it may just be that the disabled control never armed anything to
-  // leak in the first place (this harness is permanently signed out — Context).
-  let dispatchDelivered = false
-  fab.addEventListener('click', () => { dispatchDelivered = true }, { once: true })
-  fab.dispatchEvent(new PointerEvent('click', { bubbles: true }))
-  const openCellRightAfterFabTap = document.querySelector('.day[data-open]') !== null
+  b.addHere()
   const cells = [...document.querySelectorAll('.day[data-day]')]
   const other = cells.find(c => !c.hasAttribute('data-open'))
-  if (other === undefined) return { ok: false, why: 'no second day cell', fabDisabledAtTap, dispatchDelivered, openCellRightAfterFabTap }
+  if (other === undefined) return { ok: false, why: 'no second day cell' }
   const d2 = Number(other.dataset.day)
   const r = other.getBoundingClientRect()
   const x = r.left + r.width / 2, y = r.top + r.height / 2
   for (const t of ['pointerdown', 'pointerup']) {
     other.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, clientY: y }))
   }
-  return { armedThenSwitched: true, openedDay: d2, formOpen: b.day.isFormOpen(), fabDisabledAtTap, dispatchDelivered, openCellRightAfterFabTap }
+  return { armedThenSwitched: true, openedDay: d2, formOpen: b.day.isFormOpen() }
 }`
 
 // Probe 8's follow-up: let a frame pass, then tap back onto the ORIGINAL FAB day
@@ -766,6 +790,15 @@ await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-sch
 results.push({ probe: 'firstRunCold', ...(await probeFirstRunCold().catch(e => ({ ok: false, error: String(e) }))) })
 await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
 results.push({ probe: 'heldRepaint', ...(await probeHeldRepaint().catch(e => ({ ok: false, error: String(e) }))) })
+// Probe 5, review fix: one fresh navigation per viewport, before anything else
+// has had a chance to focus an input and drift innerHeight.
+for (const [w, h] of VIEWPORTS) {
+  results.push({
+    probe: 'fabClears',
+    viewport: `${w}x${h}`,
+    ...(await probeFabClears(w, h, w < 500).catch(e => ({ ok: false, error: String(e) }))),
+  })
+}
 
 for (const [w, h] of VIEWPORTS) {
   for (const scheme of SCHEMES) {
@@ -782,9 +815,12 @@ for (const [w, h] of VIEWPORTS) {
       await sleep(800)
       try {
         const row = { viewport: `${w}x${h}`, scheme, motion, ...(await evalJs(PROBE)) }
-        // Task 7: sheet closed here (PROBE's own Escape sequence left the day
-        // collapsed, never opened the sheet) — a clean read on the calendar at rest.
-        row.fabClearance = await evalJs(`(${FAB_CLEARS})()`)
+        // Task 7: FAB clearance is measured separately, on its own fresh
+        // navigation (probeFabClears, above the loop) — PROBE's own .dp-title
+        // focus (day.ts:439) drifts innerHeight in headless Chrome's emulation
+        // for the rest of THIS navigation's life, which corrupted it here before
+        // the review caught it. Sheet closed here (PROBE's own Escape sequence
+        // left the day collapsed, never opened the sheet) for what follows.
         row.colorInvariant = await evalJs(`(${COLOR_INVARIANT})()`)          // opens the sheet
         row.catAddDeadAt11 = await evalJs(`(${CAT_ADD_DEAD})()`)              // sheet stays open
         // Close the sheet before the FAB/day-cell probes below: open, it would
