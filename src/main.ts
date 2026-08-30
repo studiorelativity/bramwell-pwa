@@ -81,6 +81,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
       render.renderRange(range, asWeek(week - 3), asWeek(week + 3))
       state.savePrefs({ ...state.prefs(), lastDockedDay: state.dayAt(week, MON) })
     },
+    onExpandEnd: () => {},   // TEMPORARY: Task 6 replaces this with the real body.
     onRangeChange: (first, last) => {
       // SPEC: months load as weeks come within ~8 weeks of the viewport, both ways.
       // Only when the range actually moves: place() reports it on every

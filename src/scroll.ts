@@ -60,6 +60,20 @@ export function snapTargetY(anchorWeek: WeekIndex, rowH: number, ex: Expanded, v
   return posOf(anchorWeek, rowH, ex) - viewportH * SNAP_ALIGN
 }
 
+/** Scroll offset that keeps the expanded row fully on screen: shift up by however
+ *  much its bottom overruns the viewport, but NEVER past its own top edge, and
+ *  pull it back down if it starts above the fold. Pure — no layout read, so the
+ *  scroll-to-fit ride is decided before a single pixel moves and rides the same
+ *  transition as the expansion itself. */
+export function fitY(y: number, ex: Expanded, rowH: number, viewportH: number): number {
+  if (ex === null) return y
+  const top = posOf(ex.week, rowH, ex) - y
+  const bottom = top + heightOf(ex.week, rowH, ex)
+  if (top < 0) return y + top
+  if (bottom > viewportH) return y + Math.min(bottom - viewportH, top)
+  return y
+}
+
 // ---------- Anchors ----------
 // Anchors are REAL DATES — the 1st and the 16th — never a rolling day count,
 // which drifts ~5 days/year against the calendar (DECISIONS).
@@ -122,10 +136,16 @@ export type ScrollHost = {
   weekOf(day: DayNumber): WeekIndex
   onDock(week: WeekIndex): void
   onRangeChange(firstWeek: WeekIndex, lastWeek: WeekIndex): void
+  /** The expand/collapse transition is over. Fired for a non-animated set too. */
+  onExpandEnd(): void
 }
 export type ScrollController = {
   goToWeek(week: WeekIndex, animate: boolean): void
   setSnapStep(step: 15 | 30 | 45): void
+  setExpanded(ex: Expanded, animate: boolean): void
+  /** The UNEXPANDED row height. Consumers derive the delta from this rather than
+   *  measuring a DOM node, which mid-animation would read an interpolated height. */
+  rowHeight(): number
   invalidate(weeks?: WeekIndex[]): void
   destroy(): void
 }
@@ -133,7 +153,8 @@ export type ScrollController = {
 export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   const pool: HTMLElement[] = []
   const assigned: (number | null)[] = []
-  const expanded: Expanded = null          // stage 04 sets this; the maths already handle it
+  let expanded: Expanded = null
+  let animTimer: ReturnType<typeof setTimeout> | null = null
   let y = 0
   let rowH = MIN_ROW_H
   let viewportH = 0
@@ -166,8 +187,31 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     place()
   }
 
+  /** The transition gate. `null` clears it, and every path that moves `y` clears
+   *  it first so a drag is never transitioned. Clearing also drops the jump
+   *  stamps, which only mean anything while an animation is running. */
+  function setAnim(kind: 'expand' | 'collapse' | null): void {
+    if (animTimer !== null) { clearTimeout(animTimer); animTimer = null }
+    if (kind !== null) { root.dataset['anim'] = kind; return }
+    if (root.dataset['anim'] === undefined) return
+    delete root.dataset['anim']
+    for (const n of pool) delete n.dataset['jump']
+  }
+
+  /** The effective duration motion.css just applied, read back off the element.
+   *  This is why no expand duration exists in this file: the value has one home,
+   *  and reduced motion's 80ms arrives here without a second code path. */
+  function animMs(node: HTMLElement): number {
+    const cs = getComputedStyle(node)
+    const longest = (v: string) => Math.max(0, ...v.split(',').map(s => parseFloat(s) || 0))
+    return (longest(cs.transitionDuration) + longest(cs.transitionDelay)) * 1000
+  }
+
   /** Two style writes per row. No layout READS here — that is the thrash SPEC forbids. */
   function place(): void {
+    // One property read, no layout read: the stamp is only meaningful while an
+    // animation is running, so steady-state rows keep exactly two style writes.
+    const animating = root.dataset['anim'] !== undefined
     const first = weekAtY(y, rowH, expanded)
     for (let i = 0; i < POOL_SIZE; i++) {
       const w = asWeek(first + i)
@@ -175,6 +219,9 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
       const node = pool[slot]!
       if (assigned[slot] !== w) {
         assigned[slot] = w
+        // Recycled INTO view mid-animation: without this it slides in from its
+        // previous position, 14 rows away.
+        if (animating) node.dataset['jump'] = ''
         host.fillRow(node, w, rowH)
       }
       node.style.transform = `translateY(${posOf(w, rowH, expanded) - y}px)`
@@ -188,6 +235,7 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   }
 
   function frame(now: number): void {
+    setAnim(null)
     raf = 0
     if (anim !== null) {
       const t = Math.min(1, (now - anim.t0) / anim.ms)
@@ -218,6 +266,7 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   }
 
   function onPointerDown(e: PointerEvent): void {
+    setAnim(null)
     dragging = true; anim = null
     lastPointerY = e.clientY; lastT = performance.now(); velocity = 0
     root.setPointerCapture(e.pointerId)
@@ -239,6 +288,7 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     settle()
   }
   function onWheel(e: WheelEvent): void {
+    setAnim(null)
     e.preventDefault()
     anim = null
     y += e.deltaY * WHEEL_GAIN
@@ -265,10 +315,23 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
 
   return {
     goToWeek(week, animate) {
+      setAnim(null)
       const target = snapTargetY(week, rowH, expanded, viewportH)
       if (animate) { animateTo(target) } else { y = target; place(); host.onDock(dockedWeek()) }
     },
     setSnapStep(step) { modulus = step === 15 ? 1 : step === 30 ? 2 : 3 },
+    setExpanded(ex, animate) {
+      setAnim(animate ? (ex === null ? 'collapse' : 'expand') : null)
+      // The maths jump; CSS carries the pixels. Moving y IS writing transforms,
+      // so the row growing and the view sliding to fit it are one transition.
+      expanded = ex
+      y = fitY(y, ex, rowH, viewportH)
+      place()
+      if (!animate) { host.onExpandEnd(); return }
+      const ms = animMs(pool[0]!)
+      animTimer = setTimeout(() => { animTimer = null; setAnim(null); host.onExpandEnd() }, ms)
+    },
+    rowHeight() { return rowH },
     invalidate(weeks) {
       if (weeks === undefined) { for (const s of assigned.keys()) assigned[s] = null }
       else for (const w of weeks) assigned[((w % POOL_SIZE) + POOL_SIZE) % POOL_SIZE] = null
@@ -277,6 +340,7 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     destroy() {
       if (raf !== 0) cancelAnimationFrame(raf)
       if (wheelTimer !== null) clearTimeout(wheelTimer)
+      if (animTimer !== null) clearTimeout(animTimer)
       ac.abort()
       root.replaceChildren()
     },

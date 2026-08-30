@@ -18,7 +18,7 @@ import {
   GcalError, listMonth, MAX_RESULTS,
 } from './gcal.ts'
 import {
-  easeOutCubic, heightOf, nearestAnchor, posOf, projectY, rowHeightFor,
+  easeOutCubic, fitY, heightOf, nearestAnchor, posOf, projectY, rowHeightFor,
   settleMs, snapTargetY, weekAtY,
 } from './scroll.ts'
 import type { Expanded } from './scroll.ts'
@@ -1193,6 +1193,29 @@ const cases: Case[] = [
     const t2 = snapTargetY(asWeek(4), H, ex, VP)
     if (t2 - t !== 300) return `expanded row above did not shift the target by delta: ${t2 - t}`
     if (posOf(asWeek(4), H, ex) - t2 !== VP * 0.5) return 'anchor did not stay centred with a row expanded above'
+    return null
+  }],
+
+  ['scroll: fitY keeps the expanded row on screen without pushing its top off', () => {
+    const H = 120, VH = 700
+    // Week 2's top sits at 240; y = 0 means the viewport starts at the top of week 0.
+    const ex: Expanded = { week: asWeek(2), delta: 300 }
+    // Fully visible already (240 + 420 = 660 <= 700): nothing moves.
+    if (fitY(0, ex, H, VH) !== 0) return `visible row moved: ${fitY(0, ex, H, VH)}`
+    // No expansion is never a reason to scroll.
+    if (fitY(137, null, H, VH) !== 137) return 'fitY moved the view with nothing expanded'
+    // Overruns the bottom by 20 (top 300, bottom 720 = 300 + (120 + 300)): shift up by exactly 20.
+    if (fitY(-60, ex, H, VH) !== -40) return `bottom overrun: ${fitY(-60, ex, H, VH)}`
+    // Row taller than the viewport: clamp at the row's own top, never past it.
+    const tall: Expanded = { week: asWeek(2), delta: 900 }
+    const clamped = fitY(0, tall, H, VH)
+    if (clamped !== 240) return `tall row did not clamp to its own top: ${clamped}`
+    if (posOf(asWeek(2), H, tall) - clamped !== 0) return 'the clamped row top is not at the fold'
+    // Row above the fold: pull it down to the top edge, not past it.
+    if (fitY(400, ex, H, VH) !== 240) return `above the fold: ${fitY(400, ex, H, VH)}`
+    // Idempotent — fitting an already-fitted view is a no-op.
+    const once = fitY(-500, ex, H, VH)
+    if (fitY(once, ex, H, VH) !== once) return `not idempotent: ${once} -> ${fitY(once, ex, H, VH)}`
     return null
   }],
 
