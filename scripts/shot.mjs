@@ -95,7 +95,10 @@ async function evalJs(expression) {
   return r.result?.result?.value
 }
 await send('Page.enable'); await send('Runtime.enable')
-await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('bramwell.cache.v1', ${JSON.stringify(SEED)})` })
+// Kept as its own const (not inlined) so probeFirstRunCold below can remove and
+// re-add exactly this script around the one navigation that must NOT see it.
+const SEED_SCRIPT = `localStorage.setItem('bramwell.cache.v1', ${JSON.stringify(SEED)})`
+let seedScriptId = (await send('Page.addScriptToEvaluateOnNewDocument', { source: SEED_SCRIPT })).result.identifier
 
 // The positive jump-stamp case (Important 4): jumpDuringSteadyState/
 // jumpAfterSettle only prove the guard never leaks, never that data-jump
@@ -152,6 +155,107 @@ async function probeJumpStamp() {
       if (document.querySelectorAll('.week[data-anim][data-jump]').length > 0) return true
     }
     return false
+  })()`)
+}
+
+// Task 7 (stage 05): CONVENTIONS — a control "works" only if elementFromPoint at
+// its CENTRE resolves to it (or to a descendant). element.click() bypasses hit
+// testing entirely and would report success on a control no user could reach.
+const HIT = `(sel) => {
+  const el = document.querySelector(sel)
+  if (el === null) return { found: false }
+  const r = el.getBoundingClientRect()
+  if (r.width === 0 || r.height === 0) return { found: true, sized: false }
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+  return { found: true, sized: true, hits: hit !== null && (hit === el || el.contains(hit)) }
+}`
+
+/** Probe 1 (Task 7): first-run over a COLD cache. The harness's own SEED script
+ *  (Page.addScriptToEvaluateOnNewDocument, above) makes warmCache() true from the
+ *  very first navigation onward, so the "stale" state exercised everywhere else in
+ *  this file is the harness's steady state, not first-run — SPEC's first-run
+ *  screen only ever shows over a cold cache. This probe removes the seed script
+ *  for exactly one navigation to see it, then restores the seed before anything
+ *  else runs. Isolated on its own navigation, like probeJumpStamp below, so
+ *  nothing else in the run inherits this browsing context's cleared localStorage.
+ */
+async function probeFirstRunCold() {
+  await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: seedScriptId })
+  loaded = false
+  await send('Page.navigate', { url: URL_ })
+  for (let i = 0; i < 100 && !loaded; i++) await sleep(100)
+  await sleep(300)
+  // Belt and braces against a reused profile carrying a stale cache forward:
+  // force it empty and reload, still without the seed script, before reading the DOM.
+  await evalJs('localStorage.clear()')
+  loaded = false
+  await send('Page.navigate', { url: URL_ })
+  for (let i = 0; i < 100 && !loaded; i++) await sleep(100)
+  await sleep(500)
+  const result = await evalJs(`(() => {
+    const HIT = ${HIT}
+    const fr = document.getElementById('firstrun')
+    return {
+      found: fr !== null,
+      visible: fr !== null && !fr.hidden,
+      connectHit: HIT('#fr-connect'),
+    }
+  })()`)
+  const reAdd = await send('Page.addScriptToEvaluateOnNewDocument', { source: SEED_SCRIPT })
+  seedScriptId = reAdd.result.identifier
+  return result
+}
+
+/** Probe 9's other half (Task 7): main.ts's heldRepaint gate only engages on a
+ *  REAL state.ts cache-change (state.onCacheChange's listener) — a direct
+ *  window.bramwell.ctl.invalidate() call, used elsewhere in this file (see the
+ *  "transient-UI rule" probe below and SHEET_SURVIVES further down) as a harsher
+ *  stand-in for a cache change, bypasses that listener entirely and so can never
+ *  exercise the gate. createEvent() (state.ts) applies its optimistic update and
+ *  calls notify() BEFORE it ever awaits the network, so saving a form fires one
+ *  synchronously even signed out — the network call afterward rejects and rolls
+ *  back harmlessly on its own. Isolated on its own navigation, like
+ *  probeFirstRunCold above: an offline save is exactly the kind of side effect
+ *  (a stuck form, a rejected promise) that should not leak into any other probe.
+ */
+async function probeHeldRepaint() {
+  loaded = false
+  await send('Page.navigate', { url: URL_ })
+  for (let i = 0; i < 100 && !loaded; i++) await sleep(100)
+  await sleep(1200)
+  return await evalJs(`(async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms))
+    const b = window.bramwell
+    const day0 = document.querySelector('.day[data-day]')
+    if (day0 === null) return { ok: false, why: 'no day cell' }
+    const r = day0.getBoundingClientRect()
+    const opts = { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, pointerId: 1, pointerType: 'mouse', isPrimary: true }
+    day0.dispatchEvent(new PointerEvent('pointerdown', opts))
+    day0.dispatchEvent(new PointerEvent('pointerup', opts))
+    await sleep(700)
+    const addBtn = document.querySelector('.dp-add')
+    if (addBtn === null) return { ok: false, why: 'no add button' }
+    addBtn.click()
+    await sleep(150)
+    const form = document.querySelector('.dp-form')
+    if (form === null) return { ok: false, why: 'no form' }
+    b.chrome.openSheet()
+    // Marked on a CHILD of .week, not the row container itself: render.renderWeek
+    // only ever calls node.replaceChildren() on the row — it never touches the
+    // container's own dataset (data-anim/data-jump are scroll.ts's, set on the
+    // container directly) — so a marker on the container would survive ANY
+    // refill regardless of the gate and prove nothing. A child is genuinely
+    // destroyed the moment fillRow -> renderWeek actually reruns for that row.
+    const markerRow = document.querySelector('.week')
+    const markerChild = markerRow === null ? null : markerRow.querySelector('.day')
+    if (markerChild !== null) markerChild.dataset['probeMarker'] = 'x'
+    form.querySelector('.dp-title').value = 'shot-probe-heldrepaint'
+    form.querySelector('.dp-save').click()
+    await sleep(50)   // the notify() above is synchronous; this just lets the DOM settle
+    const heldWhileSheetOpen = markerChild !== null && markerChild.isConnected && markerChild.dataset['probeMarker'] === 'x'
+    b.ctl.invalidate()   // the harsher direct call — this SHOULD win through regardless
+    const clearedByDirectInvalidate = !(markerChild !== null && markerChild.isConnected && markerChild.dataset['probeMarker'] === 'x')
+    return { ok: true, heldWhileSheetOpen, clearedByDirectInvalidate, sheetOpenThroughout: b.chrome.isSheetOpen() }
   })()`)
 }
 
@@ -216,6 +320,21 @@ const PROBE = `(async () => {
   const clippedDayNum = dayNums.some(n => { const r = n.getBoundingClientRect(); const c = n.closest('.day').getBoundingClientRect(); return r.left < c.left || r.right > c.right + 0.5 })
   const stackCell = [...document.querySelectorAll('.day')].find(d => d.dataset.day === String(Date.UTC(2026, 7, 20) / 86400000))
   const more = stackCell?.querySelector('.more')?.textContent ?? null
+
+  // ---- Task 7: shell chrome (first-run / reconnect / avatar), hit-tested ----
+  // The harness is permanently signed out over a warm (seeded) cache, i.e. "stale"
+  // (see Context in the plan): #firstrun must never cover that, #reconnect should
+  // be up once the 2.5s grace has elapsed, and #avatar can never appear headless
+  // (auth is real) — recorded, not asserted false, since it exists only signed in.
+  const HIT = ${HIT}
+  const firstRunEl = document.getElementById('firstrun')
+  const firstRunAbsentOrHidden = firstRunEl === null || firstRunEl.hidden
+  const reconnectEl = document.getElementById('reconnect')
+  const reconnectPresent = reconnectEl !== null
+  const reconnectHit = reconnectPresent ? HIT('#reconnect') : null
+  const avatarEl = document.getElementById('avatar')
+  const avatarPresent = avatarEl !== null
+  const avatarHit = avatarPresent ? HIT('#avatar') : null
 
   // -- settle: a small wheel nudge, then WHEEL_IDLE_MS + settle → the docked row must hold an anchor (the 1st at step 30) --
   scroller.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true }))
@@ -464,6 +583,7 @@ const PROBE = `(async () => {
   const colsBackToRest = rowBeforeCollapse !== null && cols(rowBeforeCollapse) === restCols
 
   return {
+    firstRunAbsentOrHidden, reconnectPresent, reconnectHit, avatarPresent, avatarHit,
     weekNodes: rows().length, rowH, gaps: [...new Set(gaps)],
     spacingEqualsHeight: gaps.every(g => Math.abs(g - rowH) <= 1),
     dockTopAtCentre: Math.abs(dockDelta) <= 1, dockDelta,
@@ -492,7 +612,161 @@ const PROBE = `(async () => {
   }
 })()`
 
+// Probe 5 (Task 7): the FAB must never sit over the last visible row's Sunday —
+// a control fixed at the bottom-right and a scrollable grid genuinely can overlap.
+const FAB_CLEARS = `() => {
+  const weeks = [...document.querySelectorAll('.week')]
+  // The lowest row actually on screen, not the lowest in the pool.
+  const vis = weeks.filter(w => w.getBoundingClientRect().bottom <= innerHeight + 1)
+  const last = vis.sort((a, b) => a.getBoundingClientRect().bottom - b.getBoundingClientRect().bottom).pop()
+  if (last === undefined) return { ok: false, why: 'no visible week' }
+  const sun = last.querySelector('.day:nth-child(7)')
+  if (sun === null) return { ok: false, why: 'no sunday cell' }
+  const target = sun.querySelector('.chips') ?? sun
+  const r = target.getBoundingClientRect()
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+  const fab = document.getElementById('fab')
+  return {
+    ok: hit !== null && fab !== null && hit !== fab && !fab.contains(hit),
+    hit: hit === null ? null : hit.className || hit.id,
+    fabTop: fab === null ? null : Math.round(fab.getBoundingClientRect().top),
+    sunBottom: Math.round(r.bottom),
+  }
+}`
+
+// Probe 6 (Task 7): THE INVARIANT (chrome.ts) — no two categories may share a
+// colorId, because the colorId is the only channel a read resolves back to a
+// category through. Every option another row's select has chosen must be
+// disabled here, and this row's own choice must stay selectable.
+const COLOR_INVARIANT = `() => {
+  window.bramwell.chrome.openSheet()
+  const rows = [...document.querySelectorAll('.set-cat')]
+  const chosen = rows.map(r => r.querySelector('select').value)
+  const bad = []
+  rows.forEach((r, i) => {
+    const sel = r.querySelector('select')
+    for (const o of sel.options) {
+      const takenElsewhere = chosen.some((v, j) => j !== i && v === o.value)
+      if (takenElsewhere !== o.disabled) bad.push(\`row \${i} option \${o.value}: disabled=\${o.disabled}\`)
+    }
+  })
+  return { rows: rows.length, chosen, ok: bad.length === 0, bad }
+}`
+
+// Probe 7 (Task 7): "add is dead at 11" (SPEC) — Google has 11 event colours and
+// the colour is the only way a read finds its category, so the eleventh category
+// must retire the add control, with the reason shown alongside it. Reaches 11 by
+// clicking the REAL control repeatedly (rebuild() swaps the node under #cat-add
+// on every add, so it is re-queried each pass) rather than writing prefs from
+// here — chrome.ts is the only writer this task is allowed to drive through.
+const CAT_ADD_DEAD = `() => {
+  window.bramwell.chrome.openSheet()
+  let add = document.getElementById('cat-add')
+  let clicks = 0
+  while (add !== null && !add.disabled && clicks < 20) {
+    add.click()
+    add = document.getElementById('cat-add')
+    clicks++
+  }
+  const note = add === null ? null : add.parentElement.querySelector('.set-note')
+  return {
+    disabled: add === null ? null : add.disabled,
+    noteText: note === null ? null : note.textContent,
+    clicksToReach11: clicks,
+    rowCount: document.querySelectorAll('.set-cat').length,
+  }
+}`
+
+// Task 7, probe 8's setup: the FAB's target day (DECISIONS "FAB date": calendar ->
+// mid-week day of the docked week) has no getter on window.bramwell, so this
+// re-derives it the same way FAB_CLEARS re-derives the bottom visible row — from
+// the geometry scroll.ts itself docks against, not from an app internal.
+const PENDING_ADD_ORIGINAL_DAY = `() => {
+  const scroller = document.querySelector('.scroller')
+  const sr = scroller.getBoundingClientRect()
+  const centre = sr.top + sr.height * 0.5
+  const rows = [...document.querySelectorAll('.week')]
+  const docked = rows.find(r => Math.abs(r.getBoundingClientRect().top - centre) <= 1) ?? rows[0]
+  if (docked === undefined) return null
+  const wed = docked.querySelector('.day:nth-child(4)')   // offset 3 from Monday: the row's middle day
+  return wed === null ? null : wed.dataset.day
+}`
+
+// Probe 8 (Task 7): the regression probe for Task 6's pendingOpenAdd leak. Driven
+// through the seam, since it is a same-frame race no synthetic pointer sequence
+// reproduces reliably: arm via the FAB, then switch days before the queued rAF
+// runs. The second openDayAt must disarm the pending add, or a later tap back
+// onto the FAB's day pops a form nobody asked for.
+const PENDING_ADD_LEAK = `() => {
+  const b = window.bramwell
+  const fab = document.getElementById('fab')
+  const fabDisabledAtTap = fab.disabled
+  // Diagnostic, not part of the brief's given shape: proves whether a dispatched
+  // (not real-user) click is even delivered to a disabled button's listeners at
+  // all, same element, same dispatch, same synchronous tick as chrome.ts's own
+  // listener — so a false in formOpen below cannot be misread as this leak being
+  // fixed when it may just be that the disabled control never armed anything to
+  // leak in the first place (this harness is permanently signed out — Context).
+  let dispatchDelivered = false
+  fab.addEventListener('click', () => { dispatchDelivered = true }, { once: true })
+  fab.dispatchEvent(new PointerEvent('click', { bubbles: true }))
+  const openCellRightAfterFabTap = document.querySelector('.day[data-open]') !== null
+  const cells = [...document.querySelectorAll('.day[data-day]')]
+  const other = cells.find(c => !c.hasAttribute('data-open'))
+  if (other === undefined) return { ok: false, why: 'no second day cell', fabDisabledAtTap, dispatchDelivered, openCellRightAfterFabTap }
+  const d2 = Number(other.dataset.day)
+  const r = other.getBoundingClientRect()
+  const x = r.left + r.width / 2, y = r.top + r.height / 2
+  for (const t of ['pointerdown', 'pointerup']) {
+    other.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, clientY: y }))
+  }
+  return { armedThenSwitched: true, openedDay: d2, formOpen: b.day.isFormOpen(), fabDisabledAtTap, dispatchDelivered, openCellRightAfterFabTap }
+}`
+
+// Probe 8's follow-up: let a frame pass, then tap back onto the ORIGINAL FAB day
+// and report isFormOpen(). Expected false — the form must not reopen uninvited.
+const PENDING_ADD_TAP_BACK = `(dayStr) => (async () => {
+  const waitFrame = () => new Promise(r => requestAnimationFrame(r))
+  await waitFrame()
+  const cell = document.querySelector('.day[data-day="' + dayStr + '"]')
+  if (cell === null) return { ok: false, why: 'original day cell not found' }
+  const r = cell.getBoundingClientRect()
+  const opts = { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }
+  cell.dispatchEvent(new PointerEvent('pointerdown', opts))
+  cell.dispatchEvent(new PointerEvent('pointerup', opts))
+  await waitFrame()
+  return { ok: true, formOpenAfterTapBack: window.bramwell.day.isFormOpen() }
+})()`
+
+// Probe 9 (Task 7), structural half: the sheet is transient UI (CONVENTIONS) and
+// must survive a background refresh intact, not get torn down by it. The OTHER
+// half — that main.ts's heldRepaint actually holds a real cache-change while the
+// sheet is open, rather than this direct call simply not tearing anything down —
+// is covered separately by probeHeldRepaint above, on its own navigation.
+const SHEET_SURVIVES = `() => {
+  window.bramwell.chrome.openSheet()
+  const before = window.bramwell.chrome.isSheetOpen()
+  // Harsher than a real cache change, matching the existing form probe (the
+  // "transient-UI rule" block above, PROBE): a full pool refill, not a single row.
+  window.bramwell.ctl.invalidate()
+  const el = document.getElementById('sheet')
+  return {
+    before,
+    stillThere: el !== null && !el.hidden,
+    stillOpen: window.bramwell.chrome.isSheetOpen(),
+  }
+}`
+
 const results = []
+
+// One-off probes (Task 7): each drives its own navigation and must run before the
+// main viewport loop, which assumes the SEED script is active on every load.
+await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
+await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-motion', value: 'no-preference' }] })
+results.push({ probe: 'firstRunCold', ...(await probeFirstRunCold().catch(e => ({ ok: false, error: String(e) }))) })
+await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
+results.push({ probe: 'heldRepaint', ...(await probeHeldRepaint().catch(e => ({ ok: false, error: String(e) }))) })
+
 for (const [w, h] of VIEWPORTS) {
   for (const scheme of SCHEMES) {
     for (const motion of MOTION) {
@@ -508,6 +782,20 @@ for (const [w, h] of VIEWPORTS) {
       await sleep(800)
       try {
         const row = { viewport: `${w}x${h}`, scheme, motion, ...(await evalJs(PROBE)) }
+        // Task 7: sheet closed here (PROBE's own Escape sequence left the day
+        // collapsed, never opened the sheet) — a clean read on the calendar at rest.
+        row.fabClearance = await evalJs(`(${FAB_CLEARS})()`)
+        row.colorInvariant = await evalJs(`(${COLOR_INVARIANT})()`)          // opens the sheet
+        row.catAddDeadAt11 = await evalJs(`(${CAT_ADD_DEAD})()`)              // sheet stays open
+        // Close the sheet before the FAB/day-cell probes below: open, it would
+        // intercept every pointer event aimed at the calendar underneath it.
+        await evalJs("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))")
+        const originalFabDay = await evalJs(`(${PENDING_ADD_ORIGINAL_DAY})()`)
+        row.pendingAddLeak = await evalJs(`(${PENDING_ADD_LEAK})()`)
+        row.pendingAddTapBack = originalFabDay === null
+          ? { ok: false, why: 'no docked row found' }
+          : await evalJs(`(${PENDING_ADD_TAP_BACK})(${JSON.stringify(originalFabDay)})`)
+        row.sheetSurvivesRefresh = await evalJs(`(${SHEET_SURVIVES})()`)      // reopens the sheet
         row.jumpStampedOnRecycle = await probeJumpStamp()
         results.push(row)
       }
