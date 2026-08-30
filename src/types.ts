@@ -132,6 +132,11 @@ export type Prefs = {
   fallbackCategory?: string
   /** Absent -> "warm". */
   mood?: MoodId
+  /** Absent -> 30. */
+  snapStepDays?: 15 | 30 | 45
+  /** Absent -> "cal". Read at launch, unlike lastDockedDay: the view a session
+   *  opens in is a setting, where the scroll position is not (SPEC "Settings"). */
+  defaultView?: 'cal' | 'year'
   /** Written at dock, not read at launch. */
   lastDockedDay?: DayNumber
 }

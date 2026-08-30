@@ -220,6 +220,7 @@ export function _resetForTest(): void {
   pending.clear()
   loaded = false
   inflight.clear()
+  authGate = false
 }
 
 export function _flushForTest(): void {
@@ -246,9 +247,31 @@ function notify(months: MonthKey[]): void {
 
 // ---------- Network ----------
 
+/** Set when a token request fails; stops every BACKGROUND month load from asking
+ *  again for the rest of the session. Signed out, `getToken()` already coalesces
+ *  concurrent callers, so a cold window costs one request — but each range move
+ *  re-runs `ensureMonthsFor` over months left in `error`, and on a phone every
+ *  retry is a popup the browser blocks without a gesture (SPEC "First-run and
+ *  connection state"; observed on iOS Safari as dozens per second). Writes are
+ *  deliberately NOT gated: a Save press is itself the gesture, and the user has
+ *  to learn the write failed. Cleared only by main.ts, on a successful sign-in
+ *  or renewal. */
+let authGate = false
+
+export function clearAuthGate(): void {
+  authGate = false
+}
+
 /** The one place the 401 rule lives. gcal.ts owns the transport retry; this owns identity. */
 async function withToken<T>(fn: (t: string) => Promise<T>): Promise<T> {
-  const t = await getToken()
+  let t: string
+  try {
+    t = await getToken()
+  } catch (e) {
+    // Identity failed, not the API. Arm the gate and let the caller surface it.
+    authGate = true
+    throw e
+  }
   try {
     return await fn(t)
   } catch (e) {
@@ -310,6 +333,7 @@ function fetchMonth(key: MonthKey, force = false): Promise<void> {
     const behind = (): Promise<void> => inflight.get(key) ?? startFetch(key)
     return running.then(behind, behind)
   }
+  if (authGate && !force) return Promise.resolve()
   if (!force && !needsFetch(key)) return Promise.resolve()
   return startFetch(key)
 }

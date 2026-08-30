@@ -8,7 +8,7 @@ import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, mon
 import {
   today, weekOf, dayAt, _setAnchorForTest, _resetForTest, _flushForTest,
   prefs, savePrefs, monthState, eventsForMonth, spansForWeek,
-  ensureMonthsFor, onCacheChange, _settleForTest,
+  ensureMonthsFor, onCacheChange, _settleForTest, clearAuthGate,
   createEvent, updateEvent, deleteEvent,
 } from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, sanitize, themeCss } from './categories.ts'
@@ -1461,6 +1461,43 @@ const cases: Case[] = [
     // Out-of-range minutes cannot reach the wire.
     if (validate({ ...base, startMin: -1 }) === null) return 'a negative start minute was accepted'
     if (validate({ ...base, endMin: 1440 }) === null) return 'minute 1440 was accepted'
+    return null
+  }],
+
+  ['state: a signed-out session issues ONE token request, and a gesture re-arms it', async () => {
+    const savedAnchor = today()
+    // Every reply fails: this is a signed-out session, and GIS's popup is blocked.
+    const s = stubStorage(), g = stubGis([{ error: 'popup_failed' }])
+    const f = stubFetch([{ body: { items: [] } }])
+    try {
+      _resetForTest(); configure({})
+      _setAnchorForTest(civilToDay(2026, 2, 11))
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (monthState('2026-02') !== 'error') return `state after a failed token: ${monthState('2026-02')}`
+      if (f.calls.length !== 0) return `${f.calls.length} requests reached the wire with no token`
+      const cold = g.prompts.length
+      if (cold !== 1) return `a cold window made ${cold} token requests, not 1`
+      // THE LOOP: each range move re-runs the same months, which are now `error`,
+      // and needsFetch says yes every time. The gate must stop it dead.
+      for (let i = 0; i < 5; i++) { ensureMonthsFor([asWeek(0)]); await _settleForTest() }
+      if (g.prompts.length !== cold) return `the gate leaked: ${g.prompts.length} token requests after 5 range moves`
+      // A write is NOT gated: a Save press is itself the gesture a popup needs,
+      // and the user has to learn it failed.
+      const draft: EventDraft = {
+        title: 'T', category: 'work', allDay: true,
+        start: civilToDay(2026, 2, 11), end: civilToDay(2026, 2, 11), repeat: 'none',
+      }
+      const wrote = await createEvent(draft).then(() => true, () => false)
+      if (wrote) return 'a create succeeded with no token'
+      if (g.prompts.length !== cold + 1) return 'a write was blocked by the auth gate'
+      // A gesture re-arms: the error month is refetch-eligible the moment the gate is down.
+      const armed = g.prompts.length
+      clearAuthGate()
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (g.prompts.length !== armed + 1) return `clearAuthGate did not re-arm: ${g.prompts.length} vs ${armed + 1}`
+    } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
 ]
