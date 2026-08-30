@@ -231,6 +231,44 @@ and check one. And confirm the first-run support address
 
 ---
 
+## 5b. Found on the deployed app, fixed 2026-08-30
+
+The human opened a day on `bramwell.no.fail` and saw every event twice. One
+cause, three reported symptoms:
+
+`render.ts` paints the collapsed read-out into every cell on every fill, and
+`main.ts` appends the panel into that same cell without standing it down.
+`.chips` and `.more` are positioned against the cell's **bottom**, so a cell
+grown to fit the panel pins them on top of the list — each event appeared once
+as a `.dp-ev` pill and once as a bare chip, with `+ Add` caught among them.
+`.bars` and `.rule` are later siblings inside `.week` at `z-index: auto`, so an
+all-day bar also drew a stripe across the panel's header — not yet reported, but
+one 72h event away from being.
+
+**Two of the three reported symptoms were consequences, and are recorded as
+such rather than "fixed":** the row was always growing correctly
+(`panelOverflowsCell: false` at 3 events and at 10, both viewports), and `+ Add`
+was already the panel's last child. Only the duplicate was real.
+
+Fixed in `style.css` under `.day[data-open]`: `.chips`/`.more` to `display:
+none`, and `z-index: 1` on the open cell so it covers the row overlay crossing
+it while the six collapsed neighbours keep their own bar segments.
+
+Regression probe `dayOpenSingleReadout`, on its own fresh navigation (the
+`probeFabClears` pattern — in the per-row loop it reported "nothing open" on six
+rows of nine while still exiting 0). All three viewports:
+
+```
+ok true · openedDay 20677 · chipsHidden true · moreHidden true
+dpEvCount 2 · addIsLastChild true · addReachable true · addHit "dp-add"
+barAbovePanel false · barAbovePanel_fixOff TRUE
+```
+
+That last pair is the point: the probe re-takes the reading with the fix toggled
+off and gets `true`, so it demonstrably can fail. A rectangle-intersection test
+could not — the bar spans the column either way — and would have passed on the
+broken build. Both rules are now in `CONVENTIONS.md`.
+
 ## 6. What review caught that testing did not
 
 Eight defects reached the tree and were caught by review rather than by a

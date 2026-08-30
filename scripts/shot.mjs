@@ -65,10 +65,6 @@ const SEED = (() => {
   return JSON.stringify({ v: 1, months })
 })()
 const JUMPSTACK_DAY = Date.UTC(2026, 8, 13) / 86400000
-// SEED puts the timed 'nine-fifteen' here, under 'long-21' which spans Aug 10-30 —
-// so this one day exercises BOTH collapsed layers the panel has to stand down:
-// a .chip inside the cell, and a .bar crossing it from the row's overlay.
-const DUAL_LAYER_DAY = Date.UTC(2026, 7, 12) / 86400000
 
 // ---- driver ----
 const port = 9300 + Math.floor(Math.random() * 500)
@@ -681,14 +677,46 @@ async function probeFabClears(w, h, mobile) {
 // stacking, so the returned order is the real paint order, topmost first. Each
 // assertion is re-taken with the fix toggled OFF, so a probe that could not
 // fail is caught here rather than trusted.
-const DAY_OPEN_SINGLE_READOUT = `() => {
-  const cell = document.querySelector('.day[data-open]')
-  if (cell === null) return { ok: false, why: 'nothing open' }
+const DAY_OPEN_SINGLE_READOUT = `async () => {
+  const frame = () => new Promise(r => requestAnimationFrame(r))
+  const onScreen = c => {
+    const r = c.getBoundingClientRect()
+    const x = r.left + r.width / 2, y = r.top + r.height / 2
+    return x >= 0 && y >= 0 && x <= innerWidth && y <= innerHeight
+      && document.elementFromPoint(x, y) !== null
+  }
+  // A cell that is on screen AND carries a collapsed read-out: main.ts resolves
+  // a tap through document.elementFromPoint, so an off-screen cell is dispatched
+  // at and never opens, and a cell with no .chips proves nothing.
+  const pick = [...document.querySelectorAll('.day[data-day]')]
+    .filter(c => c.querySelector('.chips') !== null && onScreen(c))[0] ?? null
+  if (pick === null) return { ok: false, why: 'no on-screen cell has .chips' }
+  const pr = pick.getBoundingClientRect()
+  const o = { bubbles: true, clientX: pr.left + pr.width / 2, clientY: pr.top + pr.height / 2 }
+  pick.dispatchEvent(new PointerEvent('pointerdown', o))
+  pick.dispatchEvent(new PointerEvent('pointerup', o))
+  // openDayAt defers to a rAF and the expansion animates; poll rather than
+  // guess a sleep (the same reasoning as waitForAnim above).
+  let cell = null
+  for (let i = 0; i < 90 && cell === null; i++) { await frame(); cell = document.querySelector('.day[data-open]') }
+  if (cell === null) return { ok: false, why: 'tap did not open', tappedDay: pick.dataset.day }
+  for (let i = 0; i < 30; i++) await frame()          // let the row settle at full height
+  const openedDay = cell.dataset.day
   const wk = cell.closest('.week')
   const chips = cell.querySelector('.chips'), more = cell.querySelector('.more')
-  const bars = wk.querySelector('.bars'), bar = wk.querySelector('.bar')
+  const bars = wk.querySelector('.bars')
+  // The bar that actually crosses THIS cell, not the row's first bar — a bar in
+  // another column puts the sample point outside the cell, and the stack then
+  // holds no day* so the comparison returns null and proves nothing.
+  const c0 = cell.getBoundingClientRect()
+  const bar = [...wk.querySelectorAll('.bar')].find(b => {
+    const r = b.getBoundingClientRect()
+    return r.left < c0.right - 8 && r.right > c0.left + 8
+  }) ?? null
   const hidden = n => n === null || getComputedStyle(n).display === 'none'
   const out = {
+    ok: true,
+    openedDay,
     chipsHidden: hidden(chips),
     moreHidden: hidden(more),
     chipsInDom: chips !== null,
@@ -720,6 +748,20 @@ const DAY_OPEN_SINGLE_READOUT = `() => {
   }
   return out
 }`
+
+// Runs on its OWN fresh navigation, like probeFabClears above and for the same
+// reason: PROBE leaves the pool wherever its scroll/Escape sequence ended, so in
+// the per-row loop this reported "nothing open" on six rows of nine while still
+// exiting 0. Once, not per viewport x scheme x motion — the stand-down is a
+// stacking and display question, not a colour-scheme or motion one.
+async function probeDayReadout(w, h) {
+  await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false })
+  loaded = false
+  await send('Page.navigate', { url: URL_ })
+  for (let i = 0; i < 100 && !loaded; i++) await sleep(100)
+  await sleep(1200)
+  return await evalJs(`(${DAY_OPEN_SINGLE_READOUT})()`)
+}
 
 // Probe 6 (Task 7): THE INVARIANT (chrome.ts) — no two categories may share a
 // colorId, because the colorId is the only channel a read resolves back to a
@@ -859,6 +901,17 @@ for (const [w, h] of VIEWPORTS) {
   })
 }
 
+// Same placement reasoning as fabClears: before any row has focused an input
+// or moved the pool. Both viewports, because the phone collapses neighbours to
+// 0fr and the desktop does not — different column geometry under the same bar.
+for (const [w, h] of VIEWPORTS) {
+  results.push({
+    probe: 'dayOpenSingleReadout',
+    viewport: `${w}x${h}`,
+    ...(await probeDayReadout(w, h).catch(e => ({ ok: false, error: String(e) }))),
+  })
+}
+
 for (const [w, h] of VIEWPORTS) {
   for (const scheme of SCHEMES) {
     for (const motion of MOTION) {
@@ -882,19 +935,6 @@ for (const [w, h] of VIEWPORTS) {
         // left the day collapsed, never opened the sheet) for what follows.
         // Day-cell probes run FIRST, while PROBE has left the calendar clean and
         // no sheet is up to intercept pointers aimed at it.
-        await evalJs(`(() => {
-          const c = document.querySelector('.day[data-day="${DUAL_LAYER_DAY}"]')
-          if (c === null) return false
-          const r = c.getBoundingClientRect()
-          const o = { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }
-          c.dispatchEvent(new PointerEvent('pointerdown', o))
-          c.dispatchEvent(new PointerEvent('pointerup', o))
-          return true
-        })()`)
-        await sleep(900)
-        row.dayOpenSingleReadout = await evalJs(`(${DAY_OPEN_SINGLE_READOUT})()`)
-        await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
-        await sleep(500)
         row.colorInvariant = await evalJs(`(${COLOR_INVARIANT})()`)          // opens the sheet
         row.catAddDeadAt11 = await evalJs(`(${CAT_ADD_DEAD})()`)              // sheet stays open
         // Close the sheet before the FAB/day-cell probes below: open, it would
