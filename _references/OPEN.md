@@ -61,6 +61,20 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   range move, but a long signed-out scroll still makes a token attempt per
   month per move. Stage 05 owns connection state and decides whether
   `error` becomes sticky while signed out.
+  **2026-08-30 — OBSERVED on device, still open.** iOS Safari over LAN, signed
+  out, cache seeded for one month only: every other month in the +/-8-week
+  window was `absent`, each asked for a token, and GIS tried to open a popup
+  that mobile Safari blocks without a user gesture. The failure notifies, the
+  repaint re-runs the range, and the cycle repeats — dozens of
+  `[GSI_LOGGER] Failed to open popup window` errors per second, with the stack
+  showing `onRangeChange` -> token attempt -> failure -> repaint. It is
+  self-sustaining while the view moves and settles when it stops, so it is
+  noise and battery rather than a hang. Two consequences for stage 05: the
+  popup path is unreachable on mobile without a gesture, so a signed-out phone
+  cannot recover by itself; and the loop makes any on-device performance
+  measurement worthless until the cache is seeded across the whole visible
+  window. Predicted at the stage-03 gate close; this is the first time it has
+  been seen rather than reasoned about.
 - **The 15/45 snap steps in a browser.** `nearestAnchor` is unit-tested for
   all three moduli, but only 30 is wired; the step control is stage 05's
   Settings, and the device check happens at that gate.
