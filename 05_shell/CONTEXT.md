@@ -5,7 +5,7 @@
 ## What this stage is
 `chrome.ts` (first-run, settings sheet incl. the Colors section and Mood,
 FAB, toasts, avatar + reconnect pill), `sw.ts`, manifest and icons to
-spec, `public/_headers`, and the first deploy to `cal.no.fail`. Deploying
+spec, `public/_headers`, and the first deploy to `bramwell.no.fail`. Deploying
 is part of this stage's gate, not after it.
 
 ## Inputs

@@ -117,7 +117,7 @@ create index on habit_logs (user_id, day);
    secret from a **Web application** OAuth client in the same Google Cloud
    project as the calendar client (a second client, or the same one with
    Supabase's callback URL added as an authorized redirect URI).
-2. Authentication → URL configuration: site URL `https://cal.no.fail`,
+2. Authentication → URL configuration: site URL `https://bramwell.no.fail`,
    redirect URLs for localhost and the deployed origin.
 3. Run the schema above in the SQL editor.
 4. `.env.local`: `VITE_SUPABASE_URL=`, `VITE_SUPABASE_ANON_KEY=`. Same two

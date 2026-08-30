@@ -260,6 +260,17 @@ Ported behaviour (content contract unchanged from the drawer):
 - Signed in: a generic avatar with a connection dot bound to auth state
   (no profile scope — `calendar.events` carries no name). Avatar opens
   Settings.
+- **A signed-out session issues exactly one token request.** `getToken()`
+  already coalesces concurrent callers, so a cold window's dozen month loads
+  share one attempt; the damage is the *loop*. Every range move re-runs
+  `ensureMonthsFor` over months left in `error`, `needsFetch` says yes again,
+  and on a phone each retry is a popup the browser blocks without a gesture —
+  observed on iOS Safari as dozens of `Failed to open popup window` per
+  second, self-sustaining for as long as the view keeps moving. The auth gate
+  in "State API" caps this at one attempt per session. The consequence to
+  hold onto: **a signed-out phone cannot recover by itself**, because the
+  popup path needs a gesture, so the reconnect pill and the first-run Connect
+  button are the only ways back.
 
 ## Settings
 
@@ -267,6 +278,22 @@ A sheet from the avatar: account row ("Google Calendar · Connected") with
 sign-out; snap 15/30/45; default view (Cal/Year); a **Colors** section
 (below); Mood; sound row is a labelled stub. All prefs; no new storage. A
 background refresh must not close or reset the sheet.
+
+The whole of `prefs` (`bramwell.prefs.v1`). Every field is optional so a
+blob written by an older build still loads and `state.ts`'s fallbacks keep
+compiling:
+
+```
+categories?       StoredCategory[]     absent -> seed
+fallbackCategory? name                 absent -> "other"
+mood?             MoodId               absent -> "warm"
+snapStepDays?     15 | 30 | 45         absent -> 30
+defaultView?      "cal" | "year"       absent -> "cal"
+lastDockedDay?    DayNumber            written at dock, not read at launch
+```
+
+`defaultView` **is** read at launch, unlike `lastDockedDay`: the view a
+session opens in is a setting, where the scroll position is not.
 
 ## Categories and customization
 
@@ -725,6 +752,7 @@ prefs(): Prefs / savePrefs(p: Prefs): void
 createEvent(draft) / updateEvent(id, draft, scope) / deleteEvent(id, scope)
 onCacheChange(fn: (months: MonthKey[]) => void): () => void
 today() / weekOf() / dayAt() / enableDemo()
+clearAuthGate(): void                       — see the auth gate, below
 ```
 
 `loadCache`/`saveCache` are private: nothing outside `state.ts` touches the
@@ -746,6 +774,15 @@ writes immediately.
 - The 401 rule lives in one place, a `withToken(fn)` wrapper: `getToken()`
   → call → on a 401 `GcalError`, `getToken(true)` and call once more →
   else clear and surface.
+- **The auth gate.** When `withToken`'s opening `getToken()` rejects, a
+  module-private latch is set and `fetchMonth` returns immediately for every
+  subsequent *background* month load — no token request is issued at all —
+  until `clearAuthGate()` is called. Writes are deliberately not gated:
+  they reach `withToken` directly, a Save press is itself the user gesture a
+  popup needs, and they surface their own failure. `main.ts` clears the gate
+  on a successful `signIn()` or renewal; `error` months are refetch-eligible
+  again the moment it is down, so nothing else has to be re-armed. Rationale
+  in "First-run and connection state".
 
 ## Dates
 
@@ -828,7 +865,7 @@ Google Cloud Console — the v3 client carries over:
    JavaScript origins `http://localhost:5173` (dev server),
    `http://localhost:4173` (`vite preview`, registered 2026-08-30) and the
    deployed origin. No redirect URIs. **Exact-match, and the port is part of
-   the match**: `no.fail` and `www.no.fail` do not cover `cal.no.fail`, and
+   the match**: `no.fail` and `www.no.fail` do not cover `bramwell.no.fail`, and
    5173 does not cover 4173 — which is why a production build served by
    `npm run preview` fails sign-in with `origin_mismatch` unless its own port
    is registered. Origin changes take a few minutes to propagate; retry in a
@@ -837,12 +874,12 @@ Google Cloud Console — the v3 client carries over:
 
 Supabase: see `HABITS.md`.
 
-## DEPLOY (Cloudflare → https://cal.no.fail)
+## DEPLOY (Cloudflare → https://bramwell.no.fail)
 
 - The origin must be a **domain root**: `sw.ts` precaches `/`, the
   manifest declares `start_url`/`scope` `/`, icons link at `/`. HTTPS is
   required (GIS refuses insecure origins; SWs will not register).
-- `cal.no.fail` is a dedicated subdomain in the `no.fail` zone; the apex
+- `bramwell.no.fail` is a dedicated subdomain in the `no.fail` zone; the apex
   is an unrelated Astro site. A subpath under the apex is not an option.
 - Build `npm run build`, output `dist`, Node pinned by `.node-version`,
   env vars `VITE_GOOGLE_CLIENT_ID`, `VITE_SUPABASE_URL`,
@@ -850,6 +887,6 @@ Supabase: see `HABITS.md`.
   `.env.local` is gitignored). Client IDs and the anon key are public by
   design; the origin allowlist and RLS are the security boundaries.
 - Preview deployments cannot sign in (Google rejects wildcard origins).
-  Anything touching auth or the API is tested on `cal.no.fail`.
+  Anything touching auth or the API is tested on `bramwell.no.fail`.
 - Deploying is a prerequisite for PWA/offline gate items, not a step after
   them: a phone reaching `http://<lan-ip>:4173` is not a secure context.
