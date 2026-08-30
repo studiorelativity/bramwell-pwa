@@ -177,8 +177,24 @@ html, body {
 /* ---------- inline day expansion ---------- */
 /* The picked cell keeps the open elevation — the third and last level; nothing
    else on screen casts a shadow (SPEC "Visual direction — Night Depth"). */
-.day[data-open] { box-shadow: var(--el-open); overflow: hidden; }
+.day[data-open] {
+  box-shadow: var(--el-open); overflow: hidden;
+  /* Above .bars and .rule. Both are LATER siblings inside .week, so with every
+     child at z-index auto they paint over the open cell — an all-day bar drew
+     a stripe across the panel's header. .week's `will-change: transform` makes
+     it a stacking context, so 1 is enough here and nothing page-level (the
+     toast at 30, the sheet at 15) is touched. The six collapsed neighbours keep
+     their own bar segments; only the open cell covers the one crossing it. */
+  z-index: 1;
+}
 .day[data-open]::after { opacity: 0; }        /* the hover layer stands down while open */
+/* The collapsed read-out stands down too, for the same reason the hover layer
+   does: the panel IS the read-out now. Not cosmetic — .chips and .more are
+   positioned against the cell's BOTTOM, so a cell grown to fit the panel pins
+   them on top of it, and every event appears twice: once as a .dp-ev pill in
+   the list, once as a bare .chip over the bottom of that list. */
+.day[data-open] .chips,
+.day[data-open] .more { display: none; }
 /* Phone (≤560px): neighbours are 0fr, so the gap between them is dead space. */
 .week[data-full] { column-gap: 0; }
 

@@ -56,6 +56,23 @@ twice, the rule goes here.
   snapshot; only shows up if you look at a later moment. `refresh()` is a
   no-op while a form is open.
 - **Any selector that sets `display` re-asserts `[hidden]`.**
+- **A state that adds a new rendering to an element must stand the old one
+  down — including the layers that are siblings, not children.** Twice now the
+  expanded day has shipped with the collapsed rendering still painting under or
+  over it: the hover `::after` (stage 04, caught at the gate) and then `.chips`,
+  `.more`, `.bars` and `.rule` (stage 05, caught by the human on the deployed
+  app — every event rendered twice). The trap is that the leftovers are
+  absolutely positioned or in a sibling overlay, so they do not move when the
+  cell grows: `.chips` pins to the cell's bottom, `.bars` is a later sibling
+  inside `.week` and paints over everything at `z-index: auto`. Enumerate what
+  the base state draws, and suppress each piece explicitly.
+- **A rectangle-intersection test cannot see paint order.** Two elements that
+  legitimately overlap in geometry still overlap after a stacking fix, so a rect
+  test reports a clean pass on the broken build. Use `elementsFromPoint`, which
+  returns the true stack topmost-first, and re-take the reading with the fix
+  toggled off in the same probe — a probe that cannot fail proves nothing.
+  (`pointer-events: none` hides a layer from hit testing but not from painting;
+  setting it hit-testable inside the probe changes neither stacking nor paint.)
 - **Bump nothing by hand for deploys.** The SW strategy (hashed assets
   cache-first, everything else network-first) makes cache-name bumps
   unnecessary; if one becomes necessary again, the strategy is wrong.

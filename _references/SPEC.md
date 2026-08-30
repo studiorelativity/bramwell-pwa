@@ -165,6 +165,15 @@ the add/edit form, the habit checklist (`HABITS.md`), and the journal link
   six columns go to `0fr` and the column gap to zero, so it is the same
   `grid-template-columns` mechanism as the desktop `3fr`, not a second shell.
   The bottom sheet stays rejected (`DECISIONS.md` "Rejected — do not retry").
+- **The collapsed read-out stands down while the day is open.** The panel is
+  the read-out; the cell's own `.chips` and `.more`, and the row-level `.bars`
+  and `.rule` crossing it, must not also be showing. This is not cosmetic:
+  `.chips`/`.more` are positioned against the cell's BOTTOM, so a cell grown to
+  fit the panel pins them on top of it, and every event renders twice — once as
+  a `.dp-ev` pill in the list, once as a bare chip over the bottom of that list.
+  The six collapsed neighbours keep their own bar segments; only the open cell
+  covers the one crossing it. The day number and the month badge stay: they are
+  the cell's identity, and the panel's top margin is their clearance.
 - Transient-UI rule: a background month refresh must never close the
   expanded day, reset the form, or wipe text being typed. `refresh()` is
   a no-op while the form is open.

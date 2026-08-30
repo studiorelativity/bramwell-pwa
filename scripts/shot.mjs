@@ -65,6 +65,10 @@ const SEED = (() => {
   return JSON.stringify({ v: 1, months })
 })()
 const JUMPSTACK_DAY = Date.UTC(2026, 8, 13) / 86400000
+// SEED puts the timed 'nine-fifteen' here, under 'long-21' which spans Aug 10-30 —
+// so this one day exercises BOTH collapsed layers the panel has to stand down:
+// a .chip inside the cell, and a .bar crossing it from the row's overlay.
+const DUAL_LAYER_DAY = Date.UTC(2026, 7, 12) / 86400000
 
 // ---- driver ----
 const port = 9300 + Math.floor(Math.random() * 500)
@@ -662,6 +666,61 @@ async function probeFabClears(w, h, mobile) {
   }
 }
 
+// Regression probe (2026-08-30, reported from the deployed app): an OPEN day
+// must show each event exactly ONCE. render.ts paints the collapsed read-out
+// into every cell on every fill; main.ts then appends the panel into that same
+// cell. .chips and .more are positioned against the cell's BOTTOM, so a cell
+// grown to fit the panel pins them on top of it, and .bars/.rule are later
+// siblings inside .week that paint over the whole thing. Both are stood down in
+// style.css under .day[data-open].
+//
+// PAINT ORDER, NOT GEOMETRY. Rectangles still intersect after the fix — the bar
+// spans the column either way — so a rect test cannot see this and would report
+// a clean pass on the broken build. .bars is pointer-events:none so
+// elementsFromPoint skips it; making it hit-testable changes hit-testing, never
+// stacking, so the returned order is the real paint order, topmost first. Each
+// assertion is re-taken with the fix toggled OFF, so a probe that could not
+// fail is caught here rather than trusted.
+const DAY_OPEN_SINGLE_READOUT = `() => {
+  const cell = document.querySelector('.day[data-open]')
+  if (cell === null) return { ok: false, why: 'nothing open' }
+  const wk = cell.closest('.week')
+  const chips = cell.querySelector('.chips'), more = cell.querySelector('.more')
+  const bars = wk.querySelector('.bars'), bar = wk.querySelector('.bar')
+  const hidden = n => n === null || getComputedStyle(n).display === 'none'
+  const out = {
+    chipsHidden: hidden(chips),
+    moreHidden: hidden(more),
+    chipsInDom: chips !== null,
+    dpEvCount: cell.querySelectorAll('.dp-ev').length,
+    addIsLastChild: cell.querySelector('.dp')?.lastElementChild?.classList.contains('dp-add') ?? false,
+  }
+  if (bar !== null) {
+    const prev = bars.style.pointerEvents
+    bars.style.pointerEvents = 'auto'
+    const r = bar.getBoundingClientRect(), c = cell.getBoundingClientRect()
+    const x = Math.max(r.left, c.left) + 8, y = r.top + r.height / 2
+    const order = () => [...document.elementsFromPoint(x, y)].map(n => n.className || n.tagName)
+    const above = a => {
+      const b = a.findIndex(n => n.startsWith('bar')), d = a.findIndex(n => n.startsWith('day'))
+      return b !== -1 && d !== -1 ? b < d : null
+    }
+    out.barAbovePanel = above(order())
+    const z = cell.style.zIndex; cell.style.zIndex = 'auto'
+    out.barAbovePanel_fixOff = above(order())     // must be TRUE, or this probe cannot fail
+    cell.style.zIndex = z; bars.style.pointerEvents = prev
+  }
+  // The add button must be reachable, not merely present (CONVENTIONS).
+  const add = cell.querySelector('.dp-add')
+  if (add !== null) {
+    const r = add.getBoundingClientRect()
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+    out.addHit = hit === null ? null : (hit.className || hit.tagName)
+    out.addReachable = hit !== null && (hit === add || add.contains(hit))
+  }
+  return out
+}`
+
 // Probe 6 (Task 7): THE INVARIANT (chrome.ts) — no two categories may share a
 // colorId, because the colorId is the only channel a read resolves back to a
 // category through. Every option another row's select has chosen must be
@@ -821,6 +880,21 @@ for (const [w, h] of VIEWPORTS) {
         // for the rest of THIS navigation's life, which corrupted it here before
         // the review caught it. Sheet closed here (PROBE's own Escape sequence
         // left the day collapsed, never opened the sheet) for what follows.
+        // Day-cell probes run FIRST, while PROBE has left the calendar clean and
+        // no sheet is up to intercept pointers aimed at it.
+        await evalJs(`(() => {
+          const c = document.querySelector('.day[data-day="${DUAL_LAYER_DAY}"]')
+          if (c === null) return false
+          const r = c.getBoundingClientRect()
+          const o = { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }
+          c.dispatchEvent(new PointerEvent('pointerdown', o))
+          c.dispatchEvent(new PointerEvent('pointerup', o))
+          return true
+        })()`)
+        await sleep(900)
+        row.dayOpenSingleReadout = await evalJs(`(${DAY_OPEN_SINGLE_READOUT})()`)
+        await evalJs(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+        await sleep(500)
         row.colorInvariant = await evalJs(`(${COLOR_INVARIANT})()`)          // opens the sheet
         row.catAddDeadAt11 = await evalJs(`(${CAT_ADD_DEAD})()`)              // sheet stays open
         // Close the sheet before the FAB/day-cell probes below: open, it would
