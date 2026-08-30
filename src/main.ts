@@ -91,6 +91,13 @@ if (new URLSearchParams(location.search).has('selftest')) {
     scroller.querySelector<HTMLElement>('.day[data-open]')?.closest<HTMLElement>('.week') ?? null
 
   function clearColumns(node: HTMLElement): void {
+    // Armed on this ONE node only, never the pool (round 7 review): this
+    // engine will not start a grid-template-columns transition when its
+    // gate is written to more than one element in the same batch, which is
+    // exactly what armAnim's pool-wide reach would do for this property.
+    // colsAnimKind is null for an unrelated refill (ordinary recycling also
+    // reaches here), so most calls arm nothing.
+    if (colsAnimKind !== null) ctl.armColsAnim(node, colsAnimKind)
     node.style.removeProperty('--expand-cols')
     node.removeAttribute('data-full')
     // .bars is NOT written here: its CSS is `grid-template-columns: inherit`
@@ -121,6 +128,9 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // nothing of its own to snap — writing the same value directly to a
     // brand-new node has no before-change style to interpolate FROM
     // (round 2 review).
+    // Armed on this ONE node before the write, same reasoning as
+    // clearColumns above (round 7 review) — never via armAnim's pool loop.
+    if (colsAnimKind !== null) ctl.armColsAnim(node, colsAnimKind)
     node.style.setProperty('--expand-cols', cols)
     if (full) { node.dataset['full'] = '' } else { node.removeAttribute('data-full') }
   }
@@ -157,9 +167,20 @@ if (new URLSearchParams(location.search).has('selftest')) {
    *  frame before its height animated down). */
   let pendingDetachWeek: WeekIndex | null = null
 
+  /** Threads the CURRENT geometry-gate kind into applyColumns/clearColumns,
+   *  which fillRow calls with a fixed signature (SPEC "Scroll engine API")
+   *  that has no room for an extra parameter. Bracketed tightly by remeasure()
+   *  and closeDay() — set immediately before the ctl.invalidate()/
+   *  clearColumns() call(s) it is meant for, reset to null immediately after
+   *  — so an UNRELATED refill (ordinary wheel-scroll recycling also calls
+   *  fillRow -> applyExpansion -> applyColumns for every row that changes)
+   *  never sees a stale value and arms a column gate nothing asked for. null
+   *  means "no column change is expected this task, do not arm". */
+  let colsAnimKind: 'expand' | 'collapse' | null = null
+
   /** The delta comes from scroll's own rowHeight, never from a DOM read — mid
    *  animation a measured row height is an interpolated one. Columns and height
-   *  are written in ONE task, under the data-anim gate setExpanded raises, so
+   *  are written in ONE task, under the gates armAnim/armColsAnim raise, so
    *  both interpolate instead of one snapping. */
   function remeasure(animate: boolean): void {
     const week = weekOfOpen()
@@ -173,6 +194,12 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // a repro disproved). Only when animate: a plain resize-driven remeasure
     // (animate=false) wants no transition at all.
     if (animate) ctl.armAnim('expand')
+    // Brackets applyColumns/clearColumns's read of colsAnimKind (see its own
+    // declaration) to exactly this remeasure() call: set before the
+    // invalidate()/applyColumns calls below that may change a column
+    // template, reset to null once they're done so a LATER, unrelated
+    // refill (ordinary scrolling) never reads a stale value.
+    colsAnimKind = animate ? 'expand' : null
     if (pendingFill) {
       pendingFill = false
       if (pendingDetachWeek !== null) {
@@ -194,6 +221,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
       const row = openRow()
       if (row !== null) applyColumns(row, week)
     }
+    colsAnimKind = null
     delta = Math.max(0, day.contentHeight() - ctl.rowHeight())
     ctl.setExpanded({ week, delta }, animate)
   }
@@ -247,7 +275,11 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // reaches — it passed on every prior round even while this genuinely
     // snapped instead of animating, confirmed by sampling mid-collapse.
     ctl.armAnim('collapse')
+    // Brackets clearColumns's read of colsAnimKind to exactly this call,
+    // same reasoning as remeasure() (see colsAnimKind's own declaration).
+    colsAnimKind = 'collapse'
     if (row !== null) clearColumns(row)
+    colsAnimKind = null
     ctl.setExpanded(null, true)         // onExpandEnd detaches and repaints the row
   }
 

@@ -62,13 +62,18 @@
    (style.css), which resolves from .week's COMPUTED value every frame, so it
    tracks .week's interpolation exactly instead of racing a second transition
    against it.
-   Same-element selectors, not `.scroller[data-anim] .week` (round 6 review):
+   TWO gates, both same-element, never `.scroller[data-anim] .week` (round 7):
    this engine will not start a grid-template-columns transition through an
-   ancestor's attribute, confirmed by repro, independent of write order — only
-   a rule matching .week directly does. scroll.ts stamps data-anim on every
-   pooled row instead of on the scroller for exactly this reason. */
+   ancestor's attribute, and separately will not start one AT ALL when its
+   enabling attribute is written to more than one element in the same batch
+   — confirmed by repro, independent of write order either way. transform/
+   height/column-gap tolerate a pool-wide stamp; grid-template-columns does
+   not, so it gets its OWN attribute, written by scroll.ts to only the row(s)
+   whose columns actually change this task (SPEC "Scroll engine API"). Both
+   gates share the same duration/easing tokens per kind so the columns and
+   the geometry never desync. */
 .week[data-anim] {
-  transition-property: transform, height, grid-template-columns, column-gap;
+  transition-property: transform, height, column-gap;
 }
 .week[data-anim="expand"] {
   transition-duration: var(--t-open);
@@ -79,12 +84,25 @@
   transition-timing-function: var(--ease-out);
   transition-delay: var(--t-fast);        /* content fades first (SPEC "Motion") */
 }
+.week[data-cols-anim] {
+  transition-property: grid-template-columns;
+}
+.week[data-cols-anim="expand"] {
+  transition-duration: var(--t-open);
+  transition-timing-function: var(--ease-spring);
+}
+.week[data-cols-anim="collapse"] {
+  transition-duration: var(--t-base);
+  transition-timing-function: var(--ease-out);
+  transition-delay: var(--t-fast);
+}
 /* A pool node recycled INTO view mid-animation would otherwise slide in from its
-   previous position, 14 rows away. Stamped by scroll.ts only while data-anim is
-   set, so steady-state recycling pays nothing. Same-element pairing, both
-   attributes on the row being tested — not one on the scroller and one on the
-   row (round 6 review). */
-.week[data-anim][data-jump] { transition-property: none; }
+   previous position, 14 rows away. Stamped by scroll.ts only while a gate is
+   set, so steady-state recycling pays nothing. Same-element pairing per gate,
+   both attributes on the row being tested — not one on the scroller and one
+   on the row (round 6/7). */
+.week[data-anim][data-jump],
+.week[data-cols-anim][data-jump] { transition-property: none; }
 
 /* A toast's whole life is one animation, so its timing has a single home. */
 @keyframes toast-life {

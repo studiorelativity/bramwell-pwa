@@ -143,14 +143,21 @@ export type ScrollController = {
   goToWeek(week: WeekIndex, animate: boolean): void
   setSnapStep(step: 15 | 30 | 45): void
   setExpanded(ex: Expanded, animate: boolean): void
-  /** Raises `data-anim` on its own — no timer, no geometry, no `place()` — so a
-   *  caller can open the gate BEFORE writing the column template, not merely in
-   *  the same task as it (SPEC "Scroll engine API"): this engine will not start
-   *  a `grid-template-columns` transition for a value that already reached its
-   *  target before the property became eligible, even one statement earlier
-   *  with no yield in between. `setExpanded` still calls `setAnim` itself, so
-   *  arming again inside it is simply idempotent. */
+  /** Raises `data-anim` (geometry: transform/height/column-gap) on its own —
+   *  no timer, no geometry, no `place()` — so the gate can open BEFORE the
+   *  property it gates changes, not merely in the same task as it (SPEC
+   *  "Scroll engine API"). Stamped on every pooled row: geometry shifts under
+   *  all of them when one row grows. `setExpanded` still calls `setAnim`
+   *  itself, so arming again inside it is simply idempotent. */
   armAnim(kind: 'expand' | 'collapse'): void
+  /** Raises `data-cols-anim` on ONE node only — never the whole pool (SPEC
+   *  "Scroll engine API"): this engine will not start a `grid-template-
+   *  columns` transition when its enabling attribute is written to more than
+   *  one element in the same batch, confirmed by repro. The caller identifies
+   *  the row(s) actually about to have their columns change — the expanding
+   *  row, or the departing row on a cross-week switch — since `armAnim`'s
+   *  pool-wide reach is exactly what this must NOT do. */
+  armColsAnim(node: HTMLElement, kind: 'expand' | 'collapse'): void
   /** The UNEXPANDED row height. Consumers derive the delta from this rather than
    *  measuring a DOM node, which mid-animation would read an interpolated height. */
   rowHeight(): number
@@ -241,7 +248,22 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     if (animTimer !== null) { clearTimeout(animTimer); animTimer = null; host.onExpandEnd() }
     for (const n of pool) {
       delete n.dataset['jump']
-      if (kind !== null) { n.dataset['anim'] = kind } else { delete n.dataset['anim'] }
+      if (kind !== null) {
+        n.dataset['anim'] = kind
+      } else {
+        // data-cols-anim clears HERE, alongside data-anim, ONLY when
+        // actually clearing the gate (kind === null) — a genuine cancel
+        // (drag, wheel, goToWeek, a settled animTimer) is what should end
+        // any column transition too. NOT unconditionally on every call: a
+        // non-null re-arm happens from setExpanded itself, in the SAME task
+        // applyColumns/clearColumns already armed and wrote this row's
+        // OWN column change in (main.ts) — clearing it here as well would
+        // erase that arming before the browser ever paints it (found by
+        // repro: data-cols-anim toggled on then off within the same task,
+        // and the transition never started).
+        delete n.dataset['anim']
+        delete n.dataset['colsAnim']
+      }
     }
   }
 
@@ -409,6 +431,10 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
       animTimer = setTimeout(() => { animTimer = null; setAnim(null); host.onExpandEnd() }, ms)
     },
     armAnim(kind) { setAnim(kind) },
+    // ONE node, never the pool: the multi-element batch constraint (see the
+    // type's own doc comment) is exactly what armAnim's pool-wide reach
+    // would trigger for this property.
+    armColsAnim(node, kind) { node.dataset['colsAnim'] = kind },
     rowHeight() { return rowH },
     invalidate(weeks) {
       if (weeks === undefined) { for (const s of assigned.keys()) assigned[s] = null }
