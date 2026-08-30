@@ -124,7 +124,153 @@ function buildFirstRun(onConnect: () => void): HTMLElement {
 }
 
 let sheet: HTMLElement | null = null
-function toggleSheet(): void { /* Task 4 */ }
+let scrim: HTMLElement | null = null
+/** Set by mount so the sheet's rows can reach the host without threading it
+ *  through every builder. One chrome instance per document. */
+let hostRef: ChromeHost | null = null
+
+/** Enter/exit via motion.css's shared utility. The forced reflow between `.enter`
+ *  and [data-in] is what makes the transition run — the browser has to commit the
+ *  hidden style first (SPEC "Motion"). */
+function showEnter(n: HTMLElement): void {
+  n.classList.add('enter')
+  n.removeAttribute('data-out')
+  void n.offsetWidth
+  n.dataset['in'] = ''
+}
+
+function row(label: string): HTMLElement {
+  const r = el('div', 'set-row')
+  r.append(el('span', 'set-lbl', label))
+  return r
+}
+
+/** A segmented control. Values are compared as strings; the caller re-widens. */
+function segment(values: readonly string[], current: string, pick: (v: string) => void): HTMLElement {
+  const wrap = el('div', 'set-seg')
+  for (const v of values) {
+    const b = el('button', 'set-segb', v)
+    b.type = 'button'
+    b.dataset['val'] = v
+    b.setAttribute('aria-pressed', String(v === current))
+    b.addEventListener('click', () => {
+      for (const other of wrap.querySelectorAll('button')) other.setAttribute('aria-pressed', 'false')
+      b.setAttribute('aria-pressed', 'true')
+      pick(v)
+    })
+    wrap.append(b)
+  }
+  return wrap
+}
+
+const MOOD_IDS: readonly MoodId[] = ['warm', 'paper', 'cool', 'sage', 'dusk']
+const MOOD_LABELS: Record<MoodId, string> =
+  { warm: 'Warm', paper: 'Paper', cool: 'Cool', sage: 'Sage', dusk: 'Dusk' }
+
+// TASK 5 deletes this stub and supplies the real Colors section builder.
+function buildColors(): HTMLElement { return el('div') }
+
+function buildSheet(): HTMLElement {
+  const h = hostRef
+  if (h === null) throw new Error('chrome: sheet built before mount')
+  const s = el('div', 'set-sheet')
+  s.id = 'sheet'
+  s.setAttribute('role', 'dialog')
+  s.setAttribute('aria-label', 'Settings')
+
+  const body = el('div', 'set-body')
+  body.id = 'sheet-body'
+
+  // --- account ---
+  const acct = row(auth.isSignedIn() ? 'Google Calendar · Connected' : 'Google Calendar · Not connected')
+  const out = el('button', 'set-btn', 'Sign out')
+  out.id = 'signout'
+  out.type = 'button'
+  out.addEventListener('click', () => {
+    void auth.signOut().finally(() => { closeSheet(); syncRef?.() })
+  })
+  acct.append(out)
+  body.append(acct)
+
+  // --- snap ---
+  const p0 = state.prefs()
+  const snap = row('Snap')
+  snap.append(segment(['15', '30', '45'], String(p0.snapStepDays ?? 30), v => {
+    const step = Number(v) as 15 | 30 | 45
+    state.savePrefs({ ...state.prefs(), snapStepDays: step })
+    h.setSnapStep(step)
+  }))
+  body.append(snap)
+
+  // --- default view ---
+  // Written only; never switches the CURRENT view. It is the view a session
+  // OPENS in (SPEC "Settings"), which main.ts reads at boot.
+  const view = row('Default view')
+  view.append(segment(['Cal', 'Year'], p0.defaultView === 'year' ? 'Year' : 'Cal', v => {
+    state.savePrefs({ ...state.prefs(), defaultView: v === 'Year' ? 'year' : 'cal' })
+  }))
+  body.append(view)
+
+  // --- Colors: filled by Task 5 ---
+  body.append(buildColors())
+
+  // --- mood ---
+  const mood = row('Mood')
+  const cur = p0.mood ?? 'warm'
+  const moods = el('div', 'set-seg')
+  for (const id of MOOD_IDS) {
+    const b = el('button', 'set-segb', MOOD_LABELS[id])
+    b.type = 'button'
+    b.dataset['mood'] = id
+    b.setAttribute('aria-pressed', String(id === cur))
+    b.addEventListener('click', () => {
+      for (const other of moods.querySelectorAll('button')) other.setAttribute('aria-pressed', 'false')
+      b.setAttribute('aria-pressed', 'true')
+      state.savePrefs({ ...state.prefs(), mood: id })
+      h.onPrefsChanged()
+    })
+    moods.append(b)
+  }
+  mood.append(moods)
+  body.append(mood)
+
+  // --- sound: a labelled stub (SPEC "Settings") ---
+  const sound = row('Sound')
+  const soundBtn = el('button', 'set-btn', 'Off')
+  soundBtn.type = 'button'
+  soundBtn.disabled = true
+  sound.append(soundBtn, el('span', 'set-note', 'Not yet'))
+  body.append(sound)
+
+  s.append(body)
+  return s
+}
+
+/** Set by mount; the sheet's sign-out row needs to re-sync the connection. */
+let syncRef: (() => void) | null = null
+
+function closeSheet(): void {
+  if (sheet === null) return
+  sheet.hidden = true
+  if (scrim !== null) scrim.hidden = true
+}
+
+function toggleSheet(): void {
+  if (sheet !== null && !sheet.hidden) { closeSheet(); return }
+  if (scrim === null) {
+    scrim = el('div', 'set-scrim')
+    scrim.addEventListener('click', () => closeSheet())
+    document.body.append(scrim)
+  }
+  // Rebuilt on every open so it always shows current prefs, and so a category
+  // deleted elsewhere cannot leave a stale row behind.
+  sheet?.remove()
+  sheet = buildSheet()
+  document.body.append(sheet)
+  scrim.hidden = false
+  sheet.hidden = false
+  showEnter(sheet)
+}
 
 export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
   let conn: Conn = 'first-run'
@@ -132,6 +278,9 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
   /** True once the grace has elapsed for the CURRENT stale spell. Reset whenever
    *  the connection state changes, so a reconnect-then-drop waits again. */
   let graced = false
+
+  hostRef = host
+  syncRef = () => { api.syncConnection() }
 
   let firstRun: HTMLElement | null = null
 
@@ -198,6 +347,16 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
   fab.setAttribute('aria-label', 'Add event')
   fab.addEventListener('click', () => host.addHere())
   document.body.append(fab)
+
+  // Escape closes the sheet. day.ts's own Escape handler in main.ts unwinds the
+  // form and the expansion; this listener is added AFTER it, so a sheet opened
+  // over an expanded day still closes the sheet first.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !api.isSheetOpen()) return
+    e.preventDefault()
+    e.stopPropagation()
+    closeSheet()
+  }, { capture: true })
 
   api.syncConnection()
   return api

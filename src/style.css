@@ -302,6 +302,42 @@ html, body {
 }
 .set-fab:disabled { opacity: .35; }
 
+.set-scrim { position: fixed; inset: 0; z-index: 14; background: rgba(0, 0, 0, .35); }
+.set-sheet {
+  position: fixed; z-index: 15;
+  top: calc(var(--hdr-h) + 6px);
+  right: calc(8px + env(safe-area-inset-right));
+  width: min(380px, calc(100vw - 16px));
+  max-height: calc(100vh - var(--hdr-h) - 24px);
+  overflow-y: auto;
+  background: var(--band-b); color: var(--ink);
+  border-radius: 14px; box-shadow: var(--el-open);
+}
+/* Bottom sheet on a phone: a top-right popover is unreachable one-handed. */
+@media (max-width: 560px) {
+  .set-sheet {
+    top: auto; right: 0; left: 0; width: auto;
+    bottom: 0; max-height: 82vh;
+    border-radius: 14px 14px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+.set-body { display: flex; flex-direction: column; gap: 2px; padding: 10px; }
+.set-row { display: flex; align-items: center; gap: 8px; padding: 8px 6px; min-height: 34px; }
+.set-lbl { flex: 1; min-width: 0; }
+.set-note { font-size: 12px; color: var(--ink-dim); }
+.set-btn {
+  font: inherit; font-size: 12px; color: var(--ink); background: var(--band-b-end);
+  border: 0; border-radius: 8px; padding: 5px 9px;
+}
+.set-btn:disabled { opacity: .45; }
+.set-seg { display: flex; gap: 2px; background: var(--band-b-end); border-radius: 8px; padding: 2px; }
+.set-segb {
+  font: inherit; font-size: 12px; color: var(--ink-dim);
+  background: none; border: 0; border-radius: 6px; padding: 4px 9px;
+}
+.set-segb[aria-pressed="true"] { color: var(--ink); font-weight: 620; background: var(--surface); }
+
 /* ---------- year view ---------- */
 .yearview { flex: 1; overflow: auto; position: relative; }
 .yr { display: flex; flex-direction: column; gap: 2px; padding: 8px; }
