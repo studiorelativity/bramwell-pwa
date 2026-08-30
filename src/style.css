@@ -55,7 +55,24 @@ html, body {
 /* ---------- week rows ---------- */
 .week {
   position: absolute; left: 0; right: 0; top: 0;
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--gap);
+  display: grid;
+  /* var(--expand-cols, …), not a bare value: main.ts writes the expanded template to
+     the --expand-cols CUSTOM property, never to grid-template-columns directly
+     (round 4 review) — this Chrome build renders an inline
+     `el.style.gridTemplateColumns = …` write as a hard cut to the new value,
+     no interpolated in-between frames, even with matching durations and
+     track-sizing functions on both sides; the SAME value change, made
+     through a custom property referenced with var() instead, eases smoothly
+     (confirmed in isolation). The fallback is what applies at rest, when
+     --expand-cols is unset.
+     minmax(0, 1fr), not bare 1fr, in both this fallback and every track
+     columnsFor() generates: must match its track-sizing FUNCTION exactly — a
+     bare-<flex> track and a minmax() track are different shapes, and a
+     mismatched pair snaps instead of easing. minmax(0, …) also fixes each
+     track's minimum at a literal 0 instead of an auto (content-based) floor,
+     which is what makes an expanded neighbour's 0fr track actually collapse
+     to nothing. */
+  grid-template-columns: var(--expand-cols, repeat(7, minmax(0, 1fr))); gap: var(--gap);
   padding: 0 var(--gap);
   will-change: transform;
   touch-action: none;

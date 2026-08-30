@@ -193,11 +193,16 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
    *  A pending `animTimer` being cancelled here means the timeout that would
    *  have fired `onExpandEnd()` never runs — so this function fires it in that
    *  timer's place, before touching any dataset. Safe to call synchronously:
-   *  `setAnim` is always the FIRST statement of `frame`/`onPointerDown`/
-   *  `onWheel`/`goToWeek`/`setExpanded`, so this runs before any of them reach
-   *  their own `place()` — never nested inside one. It fires at most once per
-   *  cancelled timer (`animTimer` is nulled immediately, so a timer that goes
-   *  on to fire normally finds nothing left to cancel here).
+   *  `setAnim` is the FIRST statement of `onPointerDown`/`onWheel`/`goToWeek`/
+   *  `setExpanded` (a genuine drag, wheel, or programmatic scroll always
+   *  clears the gate before it does anything else), and — since round 4 — of
+   *  `frame` ONLY while `frame` has an actual kinetic animation to advance;
+   *  a `frame` tick with nothing to animate leaves the gate alone rather than
+   *  clobbering one `setExpanded` just set (see `frame`'s own comment). None
+   *  of these ever call `place()` before `setAnim` — never nested inside one.
+   *  It fires at most once per cancelled timer (`animTimer` is nulled
+   *  immediately, so a timer that goes on to fire normally finds nothing
+   *  left to cancel here).
    *
    *  The jump stamps are cleared on EVERY call, not only when clearing to
    *  null: `setExpanded(ex, true)` immediately followed by `setExpanded(null,
@@ -255,10 +260,20 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     return weekAtY(y + viewportH * SNAP_ALIGN, rowH, expanded)
   }
 
+  /** setAnim(null) moved INSIDE the "there is actually a kinetic animation"
+   *  branch (round 4 review): the old unconditional call at the top fired on
+   *  EVERY tick this function was ever invoked for, including a trailing
+   *  tick whose `anim` a concurrent `setExpanded` had just cleared — so it
+   *  clobbered an expand's gate that setExpanded had only just set, one
+   *  frame later, even after setExpanded cancels the pending rAF (belt and
+   *  suspenders: a defensive gate-clear for a callback that fires anyway
+   *  should still be a no-op, not an active clobber). A GENUINE drag/wheel/
+   *  goToWeek still clears the gate before it ever reaches here — see
+   *  setAnim's own doc comment. */
   function frame(now: number): void {
-    setAnim(null)
     raf = 0
     if (anim !== null) {
+      setAnim(null)
       const t = Math.min(1, (now - anim.t0) / anim.ms)
       y = anim.from + (anim.to - anim.from) * easeOutCubic(t)
       place()
@@ -342,6 +357,16 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     },
     setSnapStep(step) { modulus = step === 15 ? 1 : step === 30 ? 2 : 3 },
     setExpanded(ex, animate) {
+      // The expand takes over positioning itself (fitY, below) — a kinetic
+      // settle still gliding toward its own target would fight it over `y`
+      // (round 4 review: an ordinary tap-while-gliding, via the SAME
+      // pointerdown/pointerup this scroller's own drag handling reacts to,
+      // could kick off a settle that raced the expand and, together with the
+      // old unconditional setAnim(null) in frame(), snapped it — see frame's
+      // comment for the other half of this fix). Cancel it outright rather
+      // than rely on frame() to notice next tick.
+      if (raf !== 0) { cancelAnimationFrame(raf); raf = 0 }
+      anim = null
       setAnim(animate ? (ex === null ? 'collapse' : 'expand') : null)
       // The maths jump; CSS carries the pixels. Moving y IS writing transforms,
       // so the row growing and the view sliding to fit it are one transition.

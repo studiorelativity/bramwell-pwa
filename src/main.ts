@@ -91,7 +91,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     scroller.querySelector<HTMLElement>('.day[data-open]')?.closest<HTMLElement>('.week') ?? null
 
   function clearColumns(node: HTMLElement): void {
-    node.style.removeProperty('grid-template-columns')
+    node.style.removeProperty('--expand-cols')
     node.removeAttribute('data-full')
     // .bars is NOT written here: its CSS is `grid-template-columns: inherit`
     // (style.css), so it already reads back to 7-equal the instant .week's
@@ -102,14 +102,26 @@ if (new URLSearchParams(location.search).has('selftest')) {
     if (openDay === null || !expandReady || state.weekOf(openDay) !== week) { clearColumns(node); return }
     const full = window.innerWidth <= render.PHONE_MAX_W
     const cols = render.columnsFor(asOffset(openDay - state.dayAt(week, MON)), full)
-    // Written ONLY on .week. .bars inherits it (style.css) rather than
-    // getting its own copy: inheritance resolves from .week's COMPUTED
-    // value every frame, so a freshly-created .bars (renderWeek makes a new
-    // one on every fill) tracks .week's in-flight transition immediately,
-    // with nothing of its own to snap — writing the same value directly to
-    // a brand-new node has no before-change style to interpolate FROM
+    // Written to the --expand-cols CUSTOM property, not grid-template-columns itself
+    // (round 4 review): this Chrome build does not transition
+    // grid-template-columns when it is set directly via inline style — the
+    // computed value jumps straight to the new one, no interpolation, even
+    // with data-anim, the transition-duration, and a matching track-sizing
+    // function all correct (confirmed in isolation: an inline `el.style.
+    // gridTemplateColumns = ...` snaps; toggling a CLASS that changes the
+    // same property, or writing a custom property the CSS rule reads with
+    // var(), both interpolate). style.css's rule is `grid-template-columns:
+    // var(--expand-cols, repeat(7, minmax(0, 1fr)))`, so the property that's
+    // actually declared to transition is never itself touched by JS.
+    // Written ONLY on .week. .bars inherits the RESULT (style.css's `inherit`
+    // reads .week's computed grid-template-columns, not --expand-cols) rather than
+    // getting its own copy: inheritance resolves from .week's COMPUTED value
+    // every frame, so a freshly-created .bars (renderWeek makes a new one on
+    // every fill) tracks .week's in-flight transition immediately, with
+    // nothing of its own to snap — writing the same value directly to a
+    // brand-new node has no before-change style to interpolate FROM
     // (round 2 review).
-    node.style.gridTemplateColumns = cols
+    node.style.setProperty('--expand-cols', cols)
     if (full) { node.dataset['full'] = '' } else { node.removeAttribute('data-full') }
   }
 

@@ -1359,20 +1359,36 @@ const cases: Case[] = [
   }],
 
   ['render: the expanded row column template, desktop and phone', () => {
+    // Every track is minmax(0, Nfr) — never a bare <flex> — so a collapsed
+    // neighbour's minimum is a literal 0, not an auto (content) floor, and so
+    // the template's track-sizing FUNCTION matches style.css's resting rule
+    // (round 4 review: a mismatched function type is where
+    // grid-template-columns stops interpolating and starts snapping).
     const desk = columnsFor(asOffset(2), false)
-    if (desk !== '1fr 1fr 3fr 1fr 1fr 1fr 1fr') return `desktop offset 2: "${desk}"`
+    if (desk !== 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)') {
+      return `desktop offset 2: "${desk}"`
+    }
     const phone = columnsFor(asOffset(0), true)
-    if (phone !== '1fr 0fr 0fr 0fr 0fr 0fr 0fr') return `phone offset 0: "${phone}"`
+    if (phone !== 'minmax(0, 1fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr)') {
+      return `phone offset 0: "${phone}"`
+    }
     const last = columnsFor(asOffset(6), true)
-    if (last !== '0fr 0fr 0fr 0fr 0fr 0fr 1fr') return `phone offset 6: "${last}"`
+    if (last !== 'minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 0fr) minmax(0, 1fr)') {
+      return `phone offset 6: "${last}"`
+    }
     // Always exactly seven tracks, or the bar overlay stops lining up with the row.
     for (let o = 0; o <= 6; o++) {
       for (const full of [false, true]) {
-        const parts = columnsFor(asOffset(o), full).split(' ')
+        const parts = columnsFor(asOffset(o), full).split(/(?<=\)) /)
         if (parts.length !== 7) return `offset ${o} full=${full}: ${parts.length} tracks`
+        // Every track keeps the SAME function shape — only the flex factor varies.
+        if (!parts.every(p => /^minmax\(0, -?\d+fr\)$/.test(p))) return `offset ${o} full=${full}: not uniform minmax(0, Nfr): ${parts}`
         // The picked column is the only one that differs from its neighbours.
-        const picked = parts.filter((p, i) => i === o)
-        if (picked[0] !== '1fr' && picked[0] !== '3fr') return `offset ${o}: picked track "${picked[0]}"`
+        const picked = parts[o]
+        if (picked !== 'minmax(0, 1fr)' && picked !== 'minmax(0, 3fr)') return `offset ${o}: picked track "${picked}"`
+        // Phone and desktop are genuinely distinct forms, not the same string.
+        const other = full ? columnsFor(asOffset(o), false) : columnsFor(asOffset(o), true)
+        if (other === columnsFor(asOffset(o), full)) return `offset ${o}: phone and desktop forms are identical`
       }
     }
     if (PHONE_MAX_W !== 560) return `phone breakpoint drifted from the SPEC: ${PHONE_MAX_W}`
