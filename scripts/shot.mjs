@@ -9,8 +9,17 @@
 // flag forces it, and the two must vary independently to prove motion.css's
 // reduced-motion block only strips duration, never behaviour.
 //
-//   npm run dev &  →  PORT=5173 npm run shot   (PORT MUST match the dev
-//   server actually listening — several vite servers run on this machine)
+// This script has NO safety net of its own around PORT: it reads
+// process.env.PORT (defaulting to 5173, below) and will happily test
+// whatever is listening there, matching app or not — there is no derivation
+// or verification here, only in whatever invoked it. Several vite servers
+// run on this machine, so hardcoding PORT=5173 is how this went wrong once
+// already (verification.md, "How the evidence was produced"). Derive it from
+// the dev server actually started, every run:
+//
+//   npm run dev >/tmp/bramwell-dev.log 2>&1 &
+//   P=$(grep -oE 'localhost:[0-9]+' /tmp/bramwell-dev.log | head -1 | cut -d: -f2)
+//   PORT=$P npm run shot
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

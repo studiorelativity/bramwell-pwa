@@ -1381,14 +1381,21 @@ const cases: Case[] = [
       for (const full of [false, true]) {
         const parts = columnsFor(asOffset(o), full).split(/(?<=\)) /)
         if (parts.length !== 7) return `offset ${o} full=${full}: ${parts.length} tracks`
-        // Every track keeps the SAME function shape — only the flex factor varies.
-        if (!parts.every(p => /^minmax\(0, -?\d+fr\)$/.test(p))) return `offset ${o} full=${full}: not uniform minmax(0, Nfr): ${parts}`
-        // The picked column is the only one that differs from its neighbours.
+        // Every track keeps the SAME function shape — only the flex factor
+        // varies, and the factor is unsigned (a negative flex factor is not
+        // a valid track).
+        if (!parts.every(p => /^minmax\(0, \d+fr\)$/.test(p))) return `offset ${o} full=${full}: not uniform minmax(0, Nfr): ${parts}`
+        // The picked track's flex factor is what actually distinguishes
+        // phone from desktop — 3fr there, 1fr here — pinned to the exact
+        // expected value, not merely "one of the two". An earlier version of
+        // this check instead compared the whole templates for `full` and
+        // `!full` as strings, which is always true by construction (a phone
+        // neighbour is 0fr, a desktop one is 1fr, so the two whole-row
+        // strings can never match regardless of whether `full` is wired
+        // correctly) — that comparison was dead and could never fail.
         const picked = parts[o]
-        if (picked !== 'minmax(0, 1fr)' && picked !== 'minmax(0, 3fr)') return `offset ${o}: picked track "${picked}"`
-        // Phone and desktop are genuinely distinct forms, not the same string.
-        const other = full ? columnsFor(asOffset(o), false) : columnsFor(asOffset(o), true)
-        if (other === columnsFor(asOffset(o), full)) return `offset ${o}: phone and desktop forms are identical`
+        const wantPicked = full ? 'minmax(0, 1fr)' : 'minmax(0, 3fr)'
+        if (picked !== wantPicked) return `offset ${o} full=${full}: picked track "${picked}", expected "${wantPicked}"`
       }
     }
     if (PHONE_MAX_W !== 560) return `phone breakpoint drifted from the SPEC: ${PHONE_MAX_W}`
