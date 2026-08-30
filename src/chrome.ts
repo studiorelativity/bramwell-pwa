@@ -8,7 +8,9 @@ let host: HTMLElement | null = null
 
 /** One animation is the toast's whole life — appear, dwell, leave — so its timing
  *  lives in motion.css and nothing here counts milliseconds. Under reduced motion
- *  the dwell survives and only the movement goes (motion.css carve-out). */
+ *  the dwell survives and only the movement goes (motion.css carve-out). The role
+ *  is `alert` not `status`: this is the error surface; a polite region can be skipped,
+ *  and the toast self-removes with no way to recall it (SPEC "Event form" + DECISIONS). */
 export function toast(message: string): void {
   if (host === null || !host.isConnected) {
     host = document.createElement('div')
@@ -17,7 +19,7 @@ export function toast(message: string): void {
   }
   const el = document.createElement('div')
   el.className = 'toast'
-  el.setAttribute('role', 'status')
+  el.setAttribute('role', 'alert')
   el.textContent = message
   el.addEventListener('animationend', () => el.remove())
   host.append(el)
