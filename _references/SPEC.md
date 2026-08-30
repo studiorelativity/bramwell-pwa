@@ -397,7 +397,7 @@ ScrollHost      = { fillRow(node, week, rowH), mondayOf(week), weekOf(day),
                     onDock(week), onRangeChange(firstWeek, lastWeek), onExpandEnd() }
 ScrollController= { goToWeek(week, animate), setSnapStep(15|30|45),
                     setExpanded(ex: Expanded, animate: boolean), rowHeight(),
-                    invalidate(weeks?), destroy() }
+                    invalidate(weeks?), armAnim(kind: 'expand'|'collapse'), destroy() }
 render.renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[], rowH: number): void
 render.packLanes(spans: EventSpan[]): PackedSpan[]
 render.columnsFor(offset: DayOffset, full: boolean): string
@@ -460,10 +460,43 @@ Expanded = { week: WeekIndex; delta: number } | null
   a mid-animation height.
 - **`data-anim` on the scroller gates the transition**, carrying `expand` or
   `collapse`. Any pointerdown, wheel or `goToWeek` clears it first, so a drag is
-  never transitioned. A node recycled INTO view mid-animation is stamped
-  `data-jump` — without it the node would fly in from its position 14 rows away.
-  The stamp is written only while `data-anim` is set, so steady-state recycling
-  keeps its two style writes per row per frame.
+  never transitioned. A node recycled INTO view mid-animation, from a
+  DIFFERENT week than it last held, is stamped `data-jump` — without it the
+  node would fly in from its position 14 rows away. A refill that keeps the
+  SAME week (a full `invalidate()` resets every slot's bookkeeping, not just
+  the ones that actually moved) does not stamp it — that row isn't recycling,
+  it's the one genuinely animating, and stamping it would disable its own
+  transition. The stamp is written only while `data-anim` is set, so
+  steady-state recycling keeps its two style writes per row per frame.
+- **`armAnim(kind)` raises `data-anim` on its own — no timer, no geometry, no
+  `place()` — so the gate can open BEFORE the column write, not merely in the
+  same task as it.** This engine will not start a `grid-template-columns`
+  transition for a value that already reached its target before `data-anim`
+  made the property eligible, even when the write and the gate are one
+  statement apart with no yield between them: eligibility is decided at the
+  moment a property's value changes, not retroactively once
+  `transition-property` later includes it (confirmed by repro: an identical
+  before/after value and duration, changed one statement earlier than the
+  gate versus one statement later, transitions in the second case and snaps
+  in the first). `main.ts`'s `remeasure()` therefore arms first, then
+  `invalidate()`s the row — which attaches the day panel and writes the
+  column template, now transition-eligible — then calls `setExpanded`, which
+  measures `contentHeight()` and writes the final transform and height. One
+  task, gate-then-geometry. `setExpanded` still calls `setAnim` itself on
+  every call, so arming twice in the same task is simply idempotent.
+- **The expanded column template is written to a CSS custom property,
+  `--expand-cols`, never to `grid-template-columns` directly.** This engine
+  does not transition `grid-template-columns` when JS sets it via inline
+  style at all — repro: a plain grid with nothing else in flight, changed by
+  `el.style.gridTemplateColumns = …` with a correct matching duration and
+  matching track-sizing function on both sides, still snaps; the identical
+  value change made through a custom property that a static CSS rule reads
+  with `var()` eases normally. `.week`'s rule is `grid-template-columns:
+  var(--expand-cols, repeat(7, minmax(0, 1fr)))`. Both this and the
+  `armAnim` ordering above are load-bearing browser constraints on THIS
+  engine, not incidental style choices — reintroducing a direct
+  `grid-template-columns` write, or writing the column template before
+  arming the gate, silently reintroduces a snap with no error to catch it.
 - **`onExpandEnd()` fires when the animation is over.** `scroll.ts` reads the
   duration from the row's own computed `transition-duration` plus
   `transition-delay`, so `motion.css` keeps the single home for the value and

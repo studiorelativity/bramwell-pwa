@@ -165,6 +165,14 @@ if (new URLSearchParams(location.search).has('selftest')) {
     const week = weekOfOpen()
     if (week === null) return
     expandReady = true
+    // Arm the gate BEFORE any column write below, not merely in the same task
+    // as it: this engine needs data-anim present at the moment the column
+    // template's value actually changes, or grid-template-columns is not
+    // transition-eligible even one statement later (SPEC "Scroll engine API"
+    // — armAnim; round 5 review, overturning an earlier same-task assumption
+    // a repro disproved). Only when animate: a plain resize-driven remeasure
+    // (animate=false) wants no transition at all.
+    if (animate) ctl.armAnim('expand')
     if (pendingFill) {
       pendingFill = false
       if (pendingDetachWeek !== null) {
@@ -230,8 +238,15 @@ if (new URLSearchParams(location.search).has('selftest')) {
     openDay = null                      // before setExpanded: onExpandEnd reads it
     expandReady = false
     delta = 0
-    // Clearing the template in the same task as setExpanded is what makes the
-    // columns animate BACK rather than snap at the end of the collapse.
+    // Arm BEFORE clearing the template, not merely in the same task as it —
+    // the same rule as remeasure() above, and verified to matter here too
+    // (round 5 review): being in the same task as setExpanded's own
+    // setAnim call is not enough, because the column value has already
+    // reached its target (the rest state) by the time that call runs.
+    // colsBackToRest only ever checked the FINAL value, which a snap also
+    // reaches — it passed on every prior round even while this genuinely
+    // snapped instead of animating, confirmed by sampling mid-collapse.
+    ctl.armAnim('collapse')
     if (row !== null) clearColumns(row)
     ctl.setExpanded(null, true)         // onExpandEnd detaches and repaints the row
   }
@@ -335,6 +350,16 @@ if (new URLSearchParams(location.search).has('selftest')) {
     prevY.hidden = !on
     nextY.hidden = !on
     if (on) range.textContent = String(shownYear)
+    // Returning to the calendar: the scroller was hidden (clientHeight 0)
+    // for however long the year view was open, so scroll.ts's own cached
+    // row height may now be stale if the window was resized during that
+    // time (its measure() bails on a hidden root rather than trusting a
+    // zero reading — scroll.ts, round 5 review). A synthetic 'resize' is
+    // the least-invasive way to reach that EXISTING, already-documented
+    // listener with the scroller visible again, rather than adding a new
+    // public method for what is, from scroll.ts's side, exactly the event
+    // it already knows how to handle.
+    if (!on) window.dispatchEvent(new Event('resize'))
   }
   const step = (d: number) => { shownYear += d; yearCtl?.setYear(shownYear); range.textContent = String(shownYear) }
   prevY.addEventListener('click', () => step(-1))

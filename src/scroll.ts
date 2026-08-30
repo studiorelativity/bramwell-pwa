@@ -143,6 +143,14 @@ export type ScrollController = {
   goToWeek(week: WeekIndex, animate: boolean): void
   setSnapStep(step: 15 | 30 | 45): void
   setExpanded(ex: Expanded, animate: boolean): void
+  /** Raises `data-anim` on its own — no timer, no geometry, no `place()` — so a
+   *  caller can open the gate BEFORE writing the column template, not merely in
+   *  the same task as it (SPEC "Scroll engine API"): this engine will not start
+   *  a `grid-template-columns` transition for a value that already reached its
+   *  target before the property became eligible, even one statement earlier
+   *  with no yield in between. `setExpanded` still calls `setAnim` itself, so
+   *  arming again inside it is simply idempotent. */
+  armAnim(kind: 'expand' | 'collapse'): void
   /** The UNEXPANDED row height. Consumers derive the delta from this rather than
    *  measuring a DOM node, which mid-animation would read an interpolated height. */
   rowHeight(): number
@@ -180,6 +188,15 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   }
 
   function measure(): void {
+    // A hidden root (main.ts hides the scroller under the year view) reads
+    // clientHeight 0, which rowHeightFor clamps to MIN_ROW_H — a real height,
+    // not an error, so nothing downstream would notice it is wrong. Bailing
+    // here, at the one place a bad reading enters, is what stops it rather
+    // than requiring every future caller of a 'resize'-driven remeasure to
+    // remember the root might be hidden (round 5 review: a resize dispatched
+    // while the year view was showing pinned rowH at 74 until the NEXT
+    // resize with the scroller visible, which could be much later or never).
+    if (root.clientHeight === 0) return
     viewportH = root.clientHeight
     const header = root.previousElementSibling as HTMLElement | null
     rowH = rowHeightFor(viewportH + (header?.offsetHeight ?? 0), header?.offsetHeight ?? 0)
@@ -377,6 +394,7 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
       const ms = animMs(pool[0]!)
       animTimer = setTimeout(() => { animTimer = null; setAnim(null); host.onExpandEnd() }, ms)
     },
+    armAnim(kind) { setAnim(kind) },
     rowHeight() { return rowH },
     invalidate(weeks) {
       if (weeks === undefined) { for (const s of assigned.keys()) assigned[s] = null }
