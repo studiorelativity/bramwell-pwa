@@ -110,10 +110,22 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
         if (dayAttr === undefined) return
         const day = asDay(Number(dayAttr))
         for (const ev of eventsForMonth(monthKey(day))) {
-          if (!ev.allDay || seen.has(ev.id)) continue
-          if (ev.end < day || ev.start > day) continue
+          if (seen.has(ev.id)) continue
+          // Timed events get a bar HERE, unlike a calendar week row, where
+          // render.ts's packLanes excludes them because they already have a
+          // chip. The year grid has no chips, so the same exclusion made a day
+          // with only timed events read as empty — the whole point of the view
+          // is seeing where the year is busy (SPEC "Year view": bars are for
+          // "that day's events", not that day's all-day events).
+          // A timed event occupies its START day only, the rule day.ts's
+          // eventsOn already uses; only an all-day event runs on to ev.end.
+          const last = ev.allDay ? ev.end : ev.start
+          if (last < day || ev.start > day) continue
           seen.add(ev.id)
-          items.push({ from: i, to: Math.min(cols - 1, i + (ev.end - day)), id: ev.id, cat: ev.category })
+          // One cell for a timed event; a real run for an all-day one, so
+          // longest-first still hands multi-day events their lane first.
+          const to = ev.allDay ? Math.min(cols - 1, i + (ev.end - day)) : i
+          items.push({ from: i, to, id: ev.id, cat: ev.category })
         }
       })
       const layer = document.createElement('div')
@@ -155,7 +167,14 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
       const head = document.createElement('div')
       head.className = 'yrp-day'
       if (d === day) head.dataset['focus'] = ''
-      head.textContent = `${WDAY[offsetOf(d)] ?? ''} ${c.d}/${c.m}`
+      // Locale order, not a hardcoded one: `${c.d}/${c.m}` read as 30/8, which a
+      // US reader parses as a nonexistent 30th month. This is a DISPLAY boundary,
+      // so a Date is allowed here (CONVENTIONS), and timeZone UTC is required —
+      // DayNumber is a UTC civil date, the same pattern day.ts's header and the
+      // month badge above already use. en-US gives 8/30, en-GB 30/08.
+      const md = new Date(Date.UTC(c.y, c.m - 1, c.d))
+        .toLocaleDateString(undefined, { month: 'numeric', day: 'numeric', timeZone: 'UTC' })
+      head.textContent = `${WDAY[offsetOf(d)] ?? ''} ${md}`
       frag.append(head)
       const evs = eventsOn(d)
       if (evs.length === 0) {

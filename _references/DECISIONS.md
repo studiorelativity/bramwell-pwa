@@ -90,11 +90,25 @@ why. New rulings made during the rebuild go at the bottom, dated.
 - Header names the range ("Aug – Sep 2026") because at rest it straddles.
 - Bands key on `month % 2`.
 - Row height proportional with clamps.
-- Timed events are chips only; bars are all-day/multi-day only.
+- Timed events are chips only; bars are all-day/multi-day only — **in a
+  calendar week row**. Scoped 2026-08-30: the rule was written unscoped and
+  `year.ts` applied it there too, so a day whose only events were timed drew
+  nothing and the year read as empty (reported by the human on the deployed
+  app). The exclusion is sound where a chip carries the event instead; the year
+  grid has no chips, so it just lost the event. `SPEC.md` "Year view" already
+  said bars are for "that day's events" — the spec wins the conflict
+  (`CLAUDE.md`). In the year grid a timed event is a single-cell bar on its
+  start day; all-day events still run to `ev.end`, and `assignLanes` is
+  longest-first so multi-day runs still take their lane first.
 - Year view: up to 3 per-cell bars longest-first (reads as a run across
   the row); no virtualization; opening a year fetches its months; the
   hover panel survives repaints and `onCacheChange` filters by year.
 - Clicking a year-view day returns to the calendar on that day.
+- The year panel's date is formatted by **locale**, never a hardcoded order.
+  It was `d/m`, which a US reader parses as a nonexistent 30th month
+  (2026-08-30). `toLocaleDateString(undefined, ...)` matches what `day.ts`'s
+  header and the month badge already do, and needs `timeZone: 'UTC'` because
+  `DayNumber` is a UTC civil date.
 - Day number top-right, month badge top-left, "+N" bottom-left.
 - `render.ts` collects per-day markers during lane packing, not with a
   per-cell lookup (~98 redundant scans per repaint otherwise).

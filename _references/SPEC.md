@@ -63,7 +63,13 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   the month band and weekend shade, and up to **3 thin category-coloured
   bars** for that day's events, longest-first so a multi-day event holds
   one lane across the row. More than 3 are dropped in the grid; the panel
-  lists them all.
+  lists them all. **"Events" includes timed ones**, unlike a calendar week
+  row where a timed event is excluded from the bars because it has a chip
+  instead: this grid has no chips, so excluding them made a day of timed
+  events read as empty. A timed event is a single-cell bar on its start day.
+- The panel's date is formatted by **locale**, never a hardcoded `d/m` — that
+  reads as a 30th month to a US reader. `timeZone: 'UTC'`, since `DayNumber`
+  is a UTC civil date.
 - **Hover raises a panel** showing previous / hovered / next day with every
   event in full (title, meridiem start time for timed events). Panel is
   `pointer-events: none`, flips above the cell when there is no room
