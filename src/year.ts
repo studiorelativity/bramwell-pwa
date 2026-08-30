@@ -1,5 +1,5 @@
 // STAGE 03 — year view. 365/366 cells in one pass; no virtualization.
-import type { DayNumber, MonthKey } from './types.ts'
+import type { CalendarEvent, DayNumber, MonthKey } from './types.ts'
 import { asDay, civilToDay, dayToCivil, monthKey, offsetOf } from './dates.ts'
 import { assignLanes } from './render.ts'
 import { ensureMonthsFor, eventsForMonth, today, weekOf } from './state.ts'
@@ -7,7 +7,7 @@ import { ensureMonthsFor, eventsForMonth, today, weekOf } from './state.ts'
 export type YearHost = { onPickDay(day: DayNumber): void }
 export type YearController = {
   setYear(y: number): void
-  /** Repaint for a cache change. `months` lets the caller skip years not on screen. */
+  /** Repaint for a cache change; the caller filters by year first (SPEC). */
   invalidate(): void
   destroy(): void
 }
@@ -15,6 +15,8 @@ export type YearController = {
 const WDAY = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 /** Bars beyond this lane are dropped in the grid; the panel lists them all (SPEC). */
 const MAX_LANES = 3
+/** Gap between a cell and its panel. */
+const PANEL_GAP = 6
 
 /** 28 columns (four weeks) on desktop; 14 on tablets AND phones. Phones
  *  default to 14, not 7 — OPEN.md flags 7 as "a long scroll" and this
@@ -23,17 +25,30 @@ export function columnsFor(width: number): number {
   return width >= 1100 ? 28 : width >= 360 ? 14 : 7
 }
 
-function monthsOfYear(y: number): MonthKey[] {
-  return Array.from({ length: 12 }, (_, i) => monthKey(civilToDay(y, i + 1, 1)))
+/** "9:05am" — meridiem start time for the panel (SPEC "Year view"). */
+export function meridiem(min: number): string {
+  const h = Math.floor(min / 60), m = min % 60
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')}${h < 12 ? 'am' : 'pm'}`
+}
+
+function eventsOn(day: DayNumber): CalendarEvent[] {
+  return eventsForMonth(monthKey(day))
+    .filter(e => e.start <= day && e.end >= day)
+    .sort((a, b) => Number(!a.allDay) - Number(!b.allDay) || (a.startMin ?? 0) - (b.startMin ?? 0) || (a.id < b.id ? -1 : 1))
 }
 
 export function mount(root: HTMLElement, host: YearHost): YearController {
   let year = dayToCivil(today()).y
-  // The grid is rebuilt as a whole, but only THIS child is replaced, so a
-  // sibling (the hover panel, Task 10) survives a repaint (SPEC "Year view").
+  // The grid is rebuilt as a whole, but only THIS child is replaced, so the
+  // panel beside it survives a repaint (SPEC "Year view").
   const gridHost = document.createElement('div')
   gridHost.className = 'yrgrid'
-  root.append(gridHost)
+  const panel = document.createElement('div')
+  panel.className = 'yrpanel'
+  panel.hidden = true
+  root.append(gridHost, panel)
+  /** Day the panel currently shows; null when hidden. */
+  let shown: DayNumber | null = null
 
   function build(): void {
     const cols = columnsFor(root.clientWidth)
@@ -110,25 +125,113 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
       grid.append(row)
     }
     gridHost.replaceChildren(grid)
+    // A background repaint rebuilds the panel IN PLACE — never hides it — so
+    // it cannot flicker under the pointer (SPEC "Year view").
+    if (shown !== null) {
+      const cell = cellFor(shown)
+      if (cell !== null) showPanel(cell, shown)
+    }
     // Opening a year fetches its months (SPEC). ensureMonthsFor takes weeks;
     // the week holding each 1st covers that month's key.
-    ensureMonthsFor(monthsOfYear(year).map((_, i) => weekOf(civilToDay(year, i + 1, 1))))
+    ensureMonthsFor(Array.from({ length: 12 }, (_, i) => weekOf(civilToDay(year, i + 1, 1))))
   }
 
-  function onClick(e: Event): void {
-    const cell = (e.target as HTMLElement).closest('.yrcell') as HTMLElement | null
-    const d = cell?.dataset['day']
-    if (d !== undefined) host.onPickDay(asDay(Number(d)))
+  function cellFor(day: DayNumber): HTMLElement | null {
+    return gridHost.querySelector<HTMLElement>(`.yrcell[data-day="${day}"]`)
   }
+
+  // ---- hover panel: previous / hovered / next day, every event in full ----
+
+  function fillPanel(day: DayNumber): void {
+    const frag = document.createDocumentFragment()
+    for (const d of [asDay(day - 1), day, asDay(day + 1)]) {
+      const c = dayToCivil(d)
+      const head = document.createElement('div')
+      head.className = 'yrp-day'
+      if (d === day) head.dataset['focus'] = ''
+      head.textContent = `${WDAY[offsetOf(d)] ?? ''} ${c.d}/${c.m}`
+      frag.append(head)
+      const evs = eventsOn(d)
+      if (evs.length === 0) {
+        const none = document.createElement('div'); none.className = 'yrp-none'; none.textContent = '—'
+        frag.append(none)
+      }
+      for (const e of evs) {
+        const row = document.createElement('div')
+        row.className = 'yrp-ev'
+        row.dataset['cat'] = e.category
+        const dot = document.createElement('span'); dot.className = 'dot'
+        const at = document.createElement('span'); at.className = 'at'
+        at.textContent = e.allDay ? '' : meridiem(e.startMin)
+        const ttl = document.createElement('span'); ttl.className = 'ttl'; ttl.textContent = e.title
+        row.append(dot, at, ttl)
+        frag.append(row)
+      }
+    }
+    panel.replaceChildren(frag)
+  }
+
+  /** Below the cell; flips above when there is no room. Coordinates are in
+   *  root's scrolled content space, since the panel is absolute inside it. */
+  function showPanel(cell: HTMLElement, day: DayNumber): void {
+    fillPanel(day)
+    panel.hidden = false
+    const r = cell.getBoundingClientRect()
+    const rr = root.getBoundingClientRect()
+    const pw = panel.offsetWidth, ph = panel.offsetHeight
+    const fitsBelow = r.bottom + PANEL_GAP + ph <= rr.bottom
+    const top = fitsBelow ? r.bottom + PANEL_GAP : r.top - PANEL_GAP - ph
+    const left = Math.max(rr.left + PANEL_GAP, Math.min(r.left, rr.right - pw - PANEL_GAP))
+    panel.style.left = `${left - rr.left + root.scrollLeft}px`
+    panel.style.top = `${top - rr.top + root.scrollTop}px`
+    panel.dataset['flip'] = fitsBelow ? 'below' : 'above'
+    shown = day
+  }
+  function hidePanel(): void { panel.hidden = true; shown = null }
+
+  function cellOf(e: Event): { cell: HTMLElement; day: DayNumber } | null {
+    const cell = (e.target as HTMLElement).closest<HTMLElement>('.yrcell[data-day]')
+    const d = cell?.dataset['day']
+    return cell && d !== undefined ? { cell, day: asDay(Number(d)) } : null
+  }
+
+  function onOver(e: PointerEvent): void {
+    // Touch raises the panel from the click flow below, not from the
+    // pointerover that precedes a tap — otherwise the first tap would count
+    // as the second.
+    if (e.pointerType === 'touch') return
+    const hit = cellOf(e)
+    if (hit !== null && hit.day !== shown) showPanel(hit.cell, hit.day)
+  }
+  function onLeave(): void { hidePanel() }
+
+  /** Touch: first tap raises the panel, a second tap on the SAME day opens
+   *  it, a tap elsewhere dismisses. Pointer: a click opens. (SPEC) */
+  function onClick(e: Event): void {
+    const hit = cellOf(e)
+    if (hit === null) { hidePanel(); return }
+    const coarse = window.matchMedia('(hover: none)').matches
+    if (coarse && shown !== hit.day) { showPanel(hit.cell, hit.day); return }
+    host.onPickDay(hit.day)
+  }
+
   root.addEventListener('click', onClick)
+  root.addEventListener('pointerover', onOver)
+  root.addEventListener('pointerleave', onLeave)
   window.addEventListener('resize', build)
   build()
 
   return {
-    setYear(y) { year = y; build() },
+    setYear(y) {
+      if (y !== year) hidePanel()          // the one case the panel is dropped (SPEC)
+      year = y
+      build()
+    },
     invalidate() { build() },
     destroy() {
       root.removeEventListener('click', onClick)
+      root.removeEventListener('pointerover', onOver)
+      root.removeEventListener('pointerleave', onLeave)
       window.removeEventListener('resize', build)
       root.replaceChildren()
     },

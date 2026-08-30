@@ -163,3 +163,20 @@ html, body {
 }
 /* Up to 3 thin bars per cell, stacked from the bottom so they fit a phone-sized cell. */
 .yrbar { grid-row: 1; align-self: end; height: 3px; border-radius: 2px; background: var(--cat); margin-bottom: calc(3px + var(--lane) * 5px); min-width: 0; }
+
+/* The hover panel: previous / hovered / next day. Never intercepts the
+   pointer (SPEC); rebuilt in place on repaint, so no enter/exit motion. */
+.yrpanel {
+  position: absolute; z-index: 4; pointer-events: none;
+  background: var(--band-b); color: var(--ink);
+  border-radius: 8px; box-shadow: var(--el-open);
+  padding: 6px 10px; font-size: 12px; line-height: 1.4;
+  min-width: 140px; max-width: 280px;
+}
+.yrp-day { color: var(--ink-dim); font-size: 11px; margin-top: 4px; }
+.yrp-day[data-focus] { color: var(--ink); font-weight: 620; }
+.yrp-none { color: var(--ink-dim); }
+.yrp-ev { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.yrp-ev .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cat); flex: none; }
+.yrp-ev .at { color: var(--ink-dim); font-variant-numeric: tabular-nums; flex: none; }
+.yrp-ev .ttl { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
