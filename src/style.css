@@ -113,7 +113,7 @@ html, body {
    as one object rather than reading as separate stubs (DECISIONS). */
 .bars {
   position: absolute; inset: 0; padding: 0 var(--gap);
-  display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--gap);
+  display: grid; grid-template-columns: inherit; gap: var(--gap);
   pointer-events: none;
 }
 .bar {

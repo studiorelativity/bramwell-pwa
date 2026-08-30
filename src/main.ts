@@ -93,18 +93,23 @@ if (new URLSearchParams(location.search).has('selftest')) {
   function clearColumns(node: HTMLElement): void {
     node.style.removeProperty('grid-template-columns')
     node.removeAttribute('data-full')
-    node.querySelector<HTMLElement>('.bars')?.style.removeProperty('grid-template-columns')
+    // .bars is NOT written here: its CSS is `grid-template-columns: inherit`
+    // (style.css), so it already reads back to 7-equal the instant .week's
+    // own property is removed — nothing to clear (round 2 review).
   }
 
   function applyColumns(node: HTMLElement, week: WeekIndex): void {
     if (openDay === null || !expandReady || state.weekOf(openDay) !== week) { clearColumns(node); return }
     const full = window.innerWidth <= render.PHONE_MAX_W
     const cols = render.columnsFor(asOffset(openDay - state.dayAt(week, MON)), full)
-    // Set on the row AND its bar overlay so the two interpolate in lockstep
-    // rather than relying on an inherited value mid-transition.
+    // Written ONLY on .week. .bars inherits it (style.css) rather than
+    // getting its own copy: inheritance resolves from .week's COMPUTED
+    // value every frame, so a freshly-created .bars (renderWeek makes a new
+    // one on every fill) tracks .week's in-flight transition immediately,
+    // with nothing of its own to snap — writing the same value directly to
+    // a brand-new node has no before-change style to interpolate FROM
+    // (round 2 review).
     node.style.gridTemplateColumns = cols
-    const bars = node.querySelector<HTMLElement>('.bars')
-    if (bars !== null) bars.style.gridTemplateColumns = cols
     if (full) { node.dataset['full'] = '' } else { node.removeAttribute('data-full') }
   }
 
@@ -131,6 +136,15 @@ if (new URLSearchParams(location.search).has('selftest')) {
    *  fresh render.renderWeek on every keystroke a form will someday cause. */
   let pendingFill = false
 
+  /** Set by openDayAt only on a cross-week switch: the OLD week's row still
+   *  needs its columns cleared. Consumed by the SAME remeasure() call that
+   *  does the new week's fill, ahead of it, so the old row's clear and the
+   *  new row's write both land in the task that raises data-anim (round 2
+   *  review: this used to run synchronously in openDayAt, a task before
+   *  data-anim existed, so the old row's columns snapped back to equal a
+   *  frame before its height animated down). */
+  let pendingDetachWeek: WeekIndex | null = null
+
   /** The delta comes from scroll's own rowHeight, never from a DOM read — mid
    *  animation a measured row height is an interpolated one. Columns and height
    *  are written in ONE task, under the data-anim gate setExpanded raises, so
@@ -141,6 +155,15 @@ if (new URLSearchParams(location.search).has('selftest')) {
     expandReady = true
     if (pendingFill) {
       pendingFill = false
+      if (pendingDetachWeek !== null) {
+        // The panel leaves the old cell through day.ts's own teardown path
+        // BEFORE that row's DOM is torn down by renderWeek's
+        // replaceChildren(), rather than being implicitly orphaned as a
+        // side effect of its ancestor's removal.
+        day.detach()
+        ctl.invalidate([pendingDetachWeek])   // fillRow -> applyExpansion clears its columns
+        pendingDetachWeek = null
+      }
       // fillRow -> applyExpansion -> day.expand: attaches the panel to
       // openDay's cell and writes its column template, in this same task.
       ctl.invalidate([week])
@@ -184,7 +207,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     openDay = d
     delta = 0
     pendingFill = true
-    if (prev !== null && prev !== week) { day.detach(); ctl.invalidate([prev]) }  // one day open at a time
+    pendingDetachWeek = prev !== null && prev !== week ? prev : null   // one day open at a time
     scheduleRemeasure(true)
   }
 

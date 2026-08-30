@@ -55,19 +55,21 @@
 
 /* The one permitted layout animation (SPEC "Motion"), contained to the scroller.
    scroll.ts writes each row's FINAL geometry once and CSS interpolates: there is
-   no per-frame JavaScript in an expand. The columns are set on the row and its
-   bar overlay together so the two interpolate in lockstep. */
-.scroller[data-anim] .week,
-.scroller[data-anim] .bars {
+   no per-frame JavaScript in an expand. Only .week is written and transitioned;
+   .bars has NO transition of its own (round 2 review) — a fresh .bars node
+   created mid-task has no before-change value to interpolate FROM, so writing
+   its template directly always snapped. Its grid-template-columns is `inherit`
+   (style.css), which resolves from .week's COMPUTED value every frame, so it
+   tracks .week's interpolation exactly instead of racing a second transition
+   against it. */
+.scroller[data-anim] .week {
   transition-property: transform, height, grid-template-columns, column-gap;
 }
-.scroller[data-anim="expand"] .week,
-.scroller[data-anim="expand"] .bars {
+.scroller[data-anim="expand"] .week {
   transition-duration: var(--t-open);
   transition-timing-function: var(--ease-spring);
 }
-.scroller[data-anim="collapse"] .week,
-.scroller[data-anim="collapse"] .bars {
+.scroller[data-anim="collapse"] .week {
   transition-duration: var(--t-base);
   transition-timing-function: var(--ease-out);
   transition-delay: var(--t-fast);        /* content fades first (SPEC "Motion") */
@@ -75,8 +77,7 @@
 /* A pool node recycled INTO view mid-animation would otherwise slide in from its
    previous position, 14 rows away. Stamped by scroll.ts only while data-anim is
    set, so steady-state recycling pays nothing. */
-.scroller[data-anim] .week[data-jump],
-.scroller[data-anim] .week[data-jump] .bars { transition-property: none; }
+.scroller[data-anim] .week[data-jump] { transition-property: none; }
 
 /* A toast's whole life is one animation, so its timing has a single home. */
 @keyframes toast-life {
