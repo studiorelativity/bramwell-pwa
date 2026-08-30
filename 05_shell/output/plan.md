@@ -1766,7 +1766,16 @@ curl -sI https://bramwell.no.fail/sw.js | head -20
 curl -sI https://bramwell.no.fail/manifest.webmanifest | head -5
 ```
 
-Expected: `sw.js` returns 200 with `content-type: text/javascript` and `cache-control: no-cache`; the manifest returns 200. Note that `curl` against an SPA returns 200 for *unknown* paths too (CONVENTIONS) — so also confirm the body of `/sw.js` starts with `(()=>{`, which a fallback `index.html` would not.
+Expected: `sw.js` returns 200 with `content-type: text/javascript` and `cache-control: no-cache`; the manifest returns 200. Note that `curl` against an SPA returns 200 for *unknown* paths too (CONVENTIONS) — so a 200 is not evidence the file exists. Check the body instead:
+
+```bash
+curl -s https://bramwell.no.fail/sw.js | head -c 40
+curl -s https://bramwell.no.fail/sw.js | grep -cE '^(import|export)[ {]'
+```
+
+Expected: the body opens `"use strict";(()=>{` — esbuild's `iife` format emits the
+`"use strict";` prologue ahead of the IIFE, so do NOT check for a literal `(()=>{`
+prefix. The ESM grep prints `0`. A fallback `index.html` would satisfy neither.
 
 - [ ] **Step 4: Run the gate**
 
