@@ -354,7 +354,8 @@ Entry: "Try the demo" on first-run, or `?demo`.
 
 ```
 scroll.mount(root: HTMLElement, host: ScrollHost): ScrollController
-ScrollHost      = { fillRow(node, week, rowH), onDock(week, day), onRangeChange(weeks) }
+ScrollHost      = { fillRow(node, week, rowH), mondayOf(week), weekOf(day),
+                    onDock(week), onRangeChange(firstWeek, lastWeek) }
 ScrollController= { goToDay(day, animate), setSnapStep(15|30|45),
                     invalidate(weeks?), destroy() }
 render.renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[], rowH: number): void
@@ -366,7 +367,10 @@ year.mount(root: HTMLElement, host: YearHost): YearController
 - **`scroll.ts` knows nothing about calendars.** It imports `types.ts` and
   `dates.ts` only; `main.ts` injects `fillRow`, which is what calls
   `render.renderWeek`. This is the seam stage 04 wraps to substitute an
-  expanded row, without either module knowing about the other.
+  expanded row, without either module knowing about the other. `scroll.ts`
+  never imports `state.ts`. Week↔day conversion is anchored maths and
+  arrives through the host, which is what keeps the virtualizer
+  calendar-agnostic.
 - `renderWeek` FILLS a recycled node; it does not create one. (Supersedes the
   stage-01 stub's `renderWeek(week, spans): HTMLElement`.)
 - **The position math is pure and takes `expanded` as a parameter**, so the

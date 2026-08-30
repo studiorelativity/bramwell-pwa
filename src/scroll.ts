@@ -114,4 +114,161 @@ export function easeOutCubic(t: number): number {
   return 1 - u * u * u
 }
 
-export function mount(_root: HTMLElement): void { throw new Error('STAGE 03: not implemented') }
+// ---------- Mount ----------
+
+export type ScrollHost = {
+  fillRow(node: HTMLElement, week: WeekIndex, rowH: number): void
+  mondayOf(week: WeekIndex): DayNumber
+  weekOf(day: DayNumber): WeekIndex
+  onDock(week: WeekIndex): void
+  onRangeChange(firstWeek: WeekIndex, lastWeek: WeekIndex): void
+}
+export type ScrollController = {
+  goToWeek(week: WeekIndex, animate: boolean): void
+  setSnapStep(step: 15 | 30 | 45): void
+  invalidate(weeks?: WeekIndex[]): void
+  destroy(): void
+}
+
+export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
+  const pool: HTMLElement[] = []
+  const assigned: (number | null)[] = []
+  const expanded: Expanded = null          // stage 04 sets this; the maths already handle it
+  let y = 0
+  let rowH = MIN_ROW_H
+  let viewportH = 0
+  let modulus = 2                          // 30 is the default (DECISIONS)
+  let raf = 0
+  let dragging = false
+  let lastPointerY = 0
+  let lastT = 0
+  let velocity = 0                         // px/ms, smoothed 0.7/0.3
+  let anim: { from: number; to: number; t0: number; ms: number } | null = null
+  let wheelTimer: ReturnType<typeof setTimeout> | null = null
+
+  for (let i = 0; i < POOL_SIZE; i++) {
+    const n = document.createElement('div')
+    n.className = 'week'
+    pool.push(n)
+    assigned.push(null)
+    root.append(n)
+  }
+
+  function measure(): void {
+    viewportH = root.clientHeight
+    const header = root.previousElementSibling as HTMLElement | null
+    rowH = rowHeightFor(viewportH + (header?.offsetHeight ?? 0), header?.offsetHeight ?? 0)
+    for (const s of assigned.keys()) assigned[s] = null   // force a refill at the new height
+    place()
+  }
+
+  /** Two style writes per row. No layout READS here — that is the thrash SPEC forbids. */
+  function place(): void {
+    const first = weekAtY(y, rowH, expanded)
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const w = asWeek(first + i)
+      const slot = ((w % POOL_SIZE) + POOL_SIZE) % POOL_SIZE
+      const node = pool[slot]!
+      if (assigned[slot] !== w) {
+        assigned[slot] = w
+        host.fillRow(node, w, rowH)
+      }
+      node.style.transform = `translateY(${posOf(w, rowH, expanded) - y}px)`
+      node.style.height = `${heightOf(w, rowH, expanded)}px`
+    }
+    host.onRangeChange(first, asWeek(first + POOL_SIZE - 1))
+  }
+
+  function dockedWeek(): WeekIndex {
+    return weekAtY(y + viewportH * SNAP_ALIGN, rowH, expanded)
+  }
+
+  function frame(now: number): void {
+    raf = 0
+    if (anim !== null) {
+      const t = Math.min(1, (now - anim.t0) / anim.ms)
+      y = anim.from + (anim.to - anim.from) * easeOutCubic(t)
+      place()
+      if (t < 1) { raf = requestAnimationFrame(frame) } else { anim = null; host.onDock(dockedWeek()) }
+    }
+  }
+
+  function kick(): void { if (raf === 0) raf = requestAnimationFrame(frame) }
+
+  function animateTo(target: number): void {
+    anim = { from: y, to: target, t0: performance.now(), ms: settleMs(target - y, rowH) }
+    kick()
+  }
+
+  /** Project momentum forward, find the nearest ENABLED anchor to where it would
+   *  land, and ease into it. It settles softly; it does not hard-stop. */
+  function settle(): void {
+    const projected = projectY(y, velocity)
+    const week = weekAtY(projected + viewportH * SNAP_ALIGN, rowH, expanded)
+    const anchorDay = nearestAnchor(host.mondayOf(week), modulus, 0)
+    animateTo(snapTargetY(host.weekOf(anchorDay), rowH, expanded, viewportH))
+  }
+
+  function onPointerDown(e: PointerEvent): void {
+    dragging = true; anim = null
+    lastPointerY = e.clientY; lastT = performance.now(); velocity = 0
+    root.setPointerCapture(e.pointerId)
+  }
+  function onPointerMove(e: PointerEvent): void {
+    if (!dragging) return
+    const now = performance.now()
+    const dy = e.clientY - lastPointerY
+    const dt = Math.max(1, now - lastT)
+    velocity = 0.7 * velocity + 0.3 * (-dy / dt)     // smoothed 0.7/0.3
+    y -= dy                                           // drag is 1:1
+    lastPointerY = e.clientY; lastT = now
+    place()
+  }
+  function onPointerUp(e: PointerEvent): void {
+    if (!dragging) return
+    dragging = false
+    root.releasePointerCapture(e.pointerId)
+    settle()
+  }
+  function onWheel(e: WheelEvent): void {
+    e.preventDefault()
+    anim = null
+    y += e.deltaY * WHEEL_GAIN
+    velocity = 0
+    place()
+    if (wheelTimer !== null) clearTimeout(wheelTimer)
+    wheelTimer = setTimeout(() => { wheelTimer = null; settle() }, WHEEL_IDLE_MS)
+  }
+  // user-scalable=no does nothing on iOS; this is the working fix (DECISIONS).
+  const stop = (e: Event) => e.preventDefault()
+
+  root.addEventListener('pointerdown', onPointerDown)
+  root.addEventListener('pointermove', onPointerMove)
+  root.addEventListener('pointerup', onPointerUp)
+  root.addEventListener('pointercancel', onPointerUp)
+  root.addEventListener('wheel', onWheel, { passive: false })
+  root.addEventListener('dblclick', stop)
+  for (const g of ['gesturestart', 'gesturechange', 'gestureend']) root.addEventListener(g, stop)
+  window.addEventListener('resize', measure)
+
+  measure()
+
+  return {
+    goToWeek(week, animate) {
+      const target = snapTargetY(week, rowH, expanded, viewportH)
+      if (animate) { animateTo(target) } else { y = target; place(); host.onDock(dockedWeek()) }
+    },
+    setSnapStep(step) { modulus = step === 15 ? 1 : step === 30 ? 2 : 3 },
+    invalidate(weeks) {
+      if (weeks === undefined) { for (const s of assigned.keys()) assigned[s] = null }
+      else for (const w of weeks) assigned[((w % POOL_SIZE) + POOL_SIZE) % POOL_SIZE] = null
+      place()
+    },
+    destroy() {
+      if (raf !== 0) cancelAnimationFrame(raf)
+      if (wheelTimer !== null) clearTimeout(wheelTimer)
+      window.removeEventListener('resize', measure)
+      root.replaceChildren()
+    },
+  }
+}
