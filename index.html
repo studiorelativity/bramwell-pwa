@@ -8,25 +8,10 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon-192.png" />
     <style>
-      /* Seed paint only. Runtime colours come from categories.themeCss() (stage 02). */
-      :root {
-        --cat-work: #3056D3;
-        --cat-personal: #17925A;
-        --cat-financial: #D97706;
-        --cat-other: #64748B;
-        --surface: #f7f6f3;
-        --ink: #1a1a1a;
-        color-scheme: light dark;
-      }
+      /* Pre-paint only: themeCss() replaces every one of these at boot. */
+      :root { --surface: #F2EFEA; --ink: #1A1A1A; color-scheme: light dark; }
       @media (prefers-color-scheme: dark) {
-        :root {
-          --cat-work: #7B96FF;
-          --cat-personal: #4FC48D;
-          --cat-financial: #F0A13C;
-          --cat-other: #94A3B8;
-          --surface: #0f1115;
-          --ink: #e8e6e1;
-        }
+        :root { --surface: #141210; --ink: #E8E6E1; }
       }
       html, body { margin: 0; background: var(--surface); color: var(--ink); }
     </style>

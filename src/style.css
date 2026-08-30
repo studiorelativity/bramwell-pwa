@@ -1,1 +1,126 @@
-/* Token consumption only. Populated from stage 03. */
+/* Token consumption only. Colour values live in categories.themeCss();
+   motion values live in motion.css. */
+:root {
+  --ink: #1A1A1A;
+  --ink-dim: #6B6B6B;
+  --rule: rgba(0, 0, 0, .08);
+  --today: #0D9488;
+  --tile-r: 12px;
+  --bar-r: 5px;
+  --gap: 3px;
+  --hdr-h: 56px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #E8E6E1;
+    --ink-dim: #9A978F;
+    --rule: rgba(255, 255, 255, .09);
+    --today: #2DD4BF;
+  }
+}
+
+html, body {
+  margin: 0; height: 100%;
+  background: var(--surface); color: var(--ink);
+  font: 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+  touch-action: manipulation;              /* SPEC: not user-scalable=no */
+  overscroll-behavior: none;
+}
+
+/* ---------- shell ---------- */
+#app { height: 100%; display: flex; flex-direction: column; }
+
+.hdr {
+  height: var(--hdr-h); flex: none;
+  display: flex; align-items: center; gap: 12px; padding: 0 12px;
+  position: sticky; top: 0; z-index: 3;
+  background: var(--surface);
+}
+.hdr-range { font-weight: 620; font-size: 15px; }
+.hdr-spacer { flex: 1; }
+.hdr button { font: inherit; color: var(--ink); background: none; border: 0; padding: 6px 10px; border-radius: 8px; }
+.hdr button[aria-pressed="true"] { background: var(--band-b); }
+/* Stage 05 fills this; reserved so the header is not restructured later. */
+.hdr-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--band-b); }
+
+.scroller { position: relative; flex: 1; overflow: hidden; touch-action: none; }
+
+/* ---------- week rows ---------- */
+.week {
+  position: absolute; left: 0; right: 0; top: 0;
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--gap);
+  padding: 0 var(--gap);
+  will-change: transform;
+  touch-action: none;
+}
+
+.day {
+  position: relative; border-radius: var(--tile-r);
+  background: var(--band-a); box-shadow: var(--el-rest);
+  padding: 4px 6px; min-width: 0; overflow: hidden;
+}
+.day[data-band="b"] { background: var(--band-b); }
+.day[data-weekend][data-band="a"] { background: var(--band-a-end); }
+.day[data-weekend][data-band="b"] { background: var(--band-b-end); }
+
+/* Hover: compositor properties only. Never scale a row (DECISIONS "Rejected"). */
+@media (hover: hover) {
+  .day:hover {
+    transform: translateY(-2px); box-shadow: var(--el-hover);
+    transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
+  }
+  .day:not(:hover) { transition: transform var(--t-base) var(--ease-out), box-shadow var(--t-base) var(--ease-out); }
+  .day:hover::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    box-shadow: inset 0 0 0 1px var(--today); opacity: .35; pointer-events: none;
+  }
+}
+
+/* Today is distinguished by FORM: an inset ring plus an accent number. */
+.day[data-today]::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--today); pointer-events: none;
+}
+.day[data-today] .daynum { color: var(--today); font-weight: 700; }
+
+.daynum { position: absolute; top: 3px; right: 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.badge { position: absolute; top: 3px; left: 6px; font-size: 11px; color: var(--ink-dim); letter-spacing: .02em; }
+.more { position: absolute; bottom: 3px; left: 6px; font-size: 11px; color: var(--ink-dim); }
+
+/* The month boundary: a thin rule from the 1st to the end of that row. */
+.week .rule {
+  position: absolute; top: 0; height: 1px; background: var(--rule);
+  pointer-events: none;
+}
+
+/* ---------- bars ---------- */
+/* A bar layer over the 7 columns, so a multi-day run crosses the tile gaps
+   as one object rather than reading as separate stubs (DECISIONS). */
+.bars {
+  position: absolute; inset: 0; padding: 0 var(--gap);
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--gap);
+  pointer-events: none;
+}
+.bar {
+  grid-row: 1; align-self: start; min-width: 0;
+  margin-top: calc(20px + var(--lane) * 20px);
+  height: 18px; border-radius: var(--bar-r);
+  background: color-mix(in srgb, var(--cat) 16%, transparent);
+  border-left: 3px solid var(--cat);
+  color: var(--cat);
+  font-size: 12px; line-height: 18px; padding: 0 6px;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+/* Continuations keep a flat edge on the broken side and drop the spine. */
+.bar[data-cont-before] { border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.bar[data-cont-after] { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+
+/* ---------- timed chips ---------- */
+.chip { display: flex; align-items: center; gap: 4px; font-size: 12px; min-width: 0; }
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cat); flex: none; }
+.chip .at { color: var(--ink-dim); font-variant-numeric: tabular-nums; flex: none; }
+.chip .ttl { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chips { position: absolute; left: 6px; right: 6px; bottom: 16px; display: flex; flex-direction: column; gap: 2px; }
+
+/* Any selector that sets display must re-assert [hidden] (CONVENTIONS). */
+[hidden] { display: none !important; }

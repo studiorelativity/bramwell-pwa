@@ -1,1 +1,38 @@
-/* Motion tokens, elevation scale, enter/exit utility, reduced-motion. Populated in stage 04. */
+/* Motion tokens, elevation scale, enter/exit utility, reduced-motion.
+   No transition or animation value may appear outside this file — except the
+   scroll engine's per-frame physics constants, which live at the top of
+   scroll.ts because they drive rAF arithmetic, not CSS (SPEC "Motion"). */
+:root {
+  --t-fast: 140ms;
+  --t-base: 240ms;
+  --t-open: 380ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Exactly three elevation levels. Nothing else casts a shadow. */
+  --el-rest: 0 1px 2px rgba(0, 0, 0, .06);
+  --el-hover: 0 4px 12px rgba(0, 0, 0, .12);
+  --el-open: 0 12px 32px rgba(0, 0, 0, .20);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --el-rest: 0 1px 2px rgba(0, 0, 0, .40);
+    --el-hover: 0 4px 14px rgba(0, 0, 0, .55);
+    --el-open: 0 14px 36px rgba(0, 0, 0, .65);
+  }
+}
+
+/* One shared enter/exit utility, so components never write their own. */
+.enter { opacity: 0; transform: translateY(6px); }
+.enter[data-in] {
+  opacity: 1; transform: none;
+  transition: opacity var(--t-base) var(--ease-out), transform var(--t-base) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 80ms !important;
+    transition-property: opacity !important;
+    animation-duration: 80ms !important;
+  }
+}
