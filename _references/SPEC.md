@@ -459,6 +459,7 @@ Expanded = { week: WeekIndex; delta: number } | null
 /src/chrome.ts            — first-run, settings sheet, FAB, toasts
 /src/sw.ts                — service worker
 /src/types.ts
+/scripts/                 — node-only tooling, never bundled: selftest runner, headless evidence harness
 /src/style.css            — token consumption only
 /src/motion.css           — motion tokens, elevation scale, enter/exit utility, reduced-motion
 /.env.local               — VITE_GOOGLE_CLIENT_ID, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (gitignored)

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "selftest": "node --experimental-strip-types --no-warnings scripts/selftest.ts"
+    "selftest": "node --experimental-strip-types --no-warnings scripts/selftest.ts",
+    "shot": "node scripts/shot.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
