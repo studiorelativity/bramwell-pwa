@@ -1,6 +1,10 @@
 # Stage 05 — Chrome, PWA, deploy
 
-**Status: OPEN.** Stage 04's gate closed 2026-08-30.
+**Status: BUILT, GATE NOT RUN (2026-08-30).** All code and automated evidence
+are in; `output/verification.md` is written. The stage is NOT verified and NOT
+closed: the gate needs the deployed origin, and deploying needs two human-only
+steps (the Cloudflare Pages project, and registering `https://bramwell.no.fail`
+as an OAuth origin). See `output/verification.md` §5.
 
 ## What this stage is
 `chrome.ts` (first-run, settings sheet incl. the Colors section and Mood,
