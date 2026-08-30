@@ -45,7 +45,11 @@ function build(): HTMLElement {
   // fixes it without scroll.ts learning what a day panel is.
   p.addEventListener('pointerdown', e => e.stopPropagation())
   p.append(staggered(el('div', 'dp-head'), 0))
-  p.append(staggered(el('div', 'dp-list'), 1))
+  // The panel's identity never changes after this point (a single node moved
+  // between cells, not rebuilt), so `list` is captured once, here, rather
+  // than re-queried on every expand().
+  list = staggered(el('div', 'dp-list'), 1)
+  p.append(list)
   const habits = el('div', 'dp-slot')          // stage 07 fills this
   habits.dataset['slot'] = 'habits'
   habits.hidden = true
@@ -115,7 +119,6 @@ export function expand(d: DayNumber, into: HTMLElement): void {
   if (panel === null) panel = build()
   const dayChanged = shown !== d
   shown = d
-  list = panel.querySelector('.dp-list')
   if (panel.parentElement !== into) into.append(panel)
   if (dayChanged) dropForm()
   const { y, m, d: dd } = dayToCivil(d)

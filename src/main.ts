@@ -78,10 +78,10 @@ if (new URLSearchParams(location.search).has('selftest')) {
   let delta = 0
   let heldRepaint = false
   let heightRaf = 0
-  /** False for the one frame between attaching the panel and the first measure.
-   *  A CSS transition interpolates from the style at the LAST recalc, so the
-   *  column template has to change in the same task as the height — write it a
-   *  frame early and the columns snap while the height animates. */
+  /** False from the tap until remeasure's deferred frame. A CSS transition
+   *  interpolates from the style at the LAST recalc, so the column template
+   *  has to change in the SAME task as the height (see remeasure/pendingFill)
+   *  — write it a task early and the columns snap while the height animates. */
   let expandReady = false
   /** A pointer that travels further than this was a drag, not a tap. */
   const TAP_SLOP = 6
@@ -119,6 +119,18 @@ if (new URLSearchParams(location.search).has('selftest')) {
     day.expand(openDay, cell)
   }
 
+  /** True for exactly the remeasure that follows an open/switch: that frame's
+   *  fillRow (which attaches the panel — possibly to a NEW cell, on a
+   *  same-week switch — and writes the column template) must land in the
+   *  SAME task as setExpanded below it, or the template has nothing left to
+   *  interpolate when data-anim appears a task later (round 1 review: a
+   *  same-week switch used to write the template synchronously in
+   *  openDayAt, a whole frame before data-anim existed, so it snapped).
+   *  Consumed once so the resize/onHeightChange callers below — which also
+   *  route through this same function — get the cheap path instead of a
+   *  fresh render.renderWeek on every keystroke a form will someday cause. */
+  let pendingFill = false
+
   /** The delta comes from scroll's own rowHeight, never from a DOM read — mid
    *  animation a measured row height is an interpolated one. Columns and height
    *  are written in ONE task, under the data-anim gate setExpanded raises, so
@@ -126,10 +138,20 @@ if (new URLSearchParams(location.search).has('selftest')) {
   function remeasure(animate: boolean): void {
     const week = weekOfOpen()
     if (week === null) return
-    delta = Math.max(0, day.contentHeight() - ctl.rowHeight())
     expandReady = true
-    const row = openRow()
-    if (row !== null) applyColumns(row, week)
+    if (pendingFill) {
+      pendingFill = false
+      // fillRow -> applyExpansion -> day.expand: attaches the panel to
+      // openDay's cell and writes its column template, in this same task.
+      ctl.invalidate([week])
+    } else {
+      // A plain remeasure (resize, or a height change from the panel
+      // itself): the row is already showing the right day, so just
+      // refresh the template's `full`/offset instead of rebuilding it.
+      const row = openRow()
+      if (row !== null) applyColumns(row, week)
+    }
+    delta = Math.max(0, day.contentHeight() - ctl.rowHeight())
     ctl.setExpanded({ week, delta }, animate)
   }
 
@@ -138,7 +160,14 @@ if (new URLSearchParams(location.search).has('selftest')) {
    *  -> day.expand -> refresh), and `setExpanded` calls `place()`. Measuring
    *  synchronously would re-enter `place()` from inside its own row loop. The
    *  frame breaks that chain and coalesces a burst of height changes into one
-   *  expansion — the same pattern the cache-change repaint already uses. */
+   *  expansion — the same pattern the cache-change repaint already uses.
+   *
+   *  Note this chain still recurses ONCE, harmlessly: the pendingFill branch's
+   *  own `ctl.invalidate` above runs day.expand -> refresh -> onHeightChange,
+   *  which calls back in here while heightRaf is already 0 (cleared just
+   *  before `remeasure` was invoked), so it schedules one more frame. That
+   *  next call finds `pendingFill` already false and takes the cheap branch,
+   *  so the recursion is exactly one extra, idle frame — not a loop. */
   function scheduleRemeasure(animate: boolean): void {
     if (heightRaf !== 0) return
     heightRaf = requestAnimationFrame(() => { heightRaf = 0; remeasure(animate) })
@@ -148,13 +177,14 @@ if (new URLSearchParams(location.search).has('selftest')) {
     if (openDay === d) return
     const prev = weekOfOpen()
     const week = state.weekOf(d)
-    // Moving within one week keeps the row expanded, so the columns animate from
-    // the old pick to the new one instead of collapsing and rebuilding.
-    expandReady = prev !== null && prev === week
+    // expandReady starts false and is set true inside remeasure's pendingFill
+    // branch, in the SAME task as the invalidate that writes the template —
+    // never here, which is what the round-1 fix is about (see remeasure).
+    expandReady = false
     openDay = d
     delta = 0
+    pendingFill = true
     if (prev !== null && prev !== week) { day.detach(); ctl.invalidate([prev]) }  // one day open at a time
-    ctl.invalidate([week])              // fillRow -> applyExpansion -> day.expand
     scheduleRemeasure(true)
   }
 
@@ -226,6 +256,10 @@ if (new URLSearchParams(location.search).has('selftest')) {
   scroller.addEventListener('pointerdown', e => {
     tapX = e.clientX; tapY = e.clientY
     const hit = document.elementFromPoint(e.clientX, e.clientY)
+    // Backstop, not the mechanism: day.ts's own pointerdown stopPropagation
+    // is what actually keeps a panel press from ever reaching this listener.
+    // Kept anyway as defence in depth against a future panel control that
+    // forgets to stop it.
     tapCell = hit?.closest('.dp') != null ? null : hit?.closest<HTMLElement>('.day') ?? null
   })
   scroller.addEventListener('pointerup', e => {

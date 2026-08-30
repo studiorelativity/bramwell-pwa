@@ -1396,9 +1396,9 @@ cd /Users/admin/_git/want/bramwell && npm run selftest 2>&1 | tail -3
 ```
 Expected: PASS.
 
-- [ ] **Step 5: Replace the three Task 6 placeholders with the real form**
+- [ ] **Step 5: Replace the Task 6 placeholders with the real form**
 
-Delete the `// --- replaced in Task 7 ---` block and append this to `day.ts`:
+Delete the ENTIRE `// --- replaced in Task 7 ---` block — note it holds FOUR placeholders, not three: `isFormOpen`, `openForm`, `dropForm` and `closeForm` (the fourth was added in Task 6 because the Escape handler calls it). Leaving any of them behind is a duplicate-export build error and append this to `day.ts`:
 
 ```ts
 // ---------- the form ----------
