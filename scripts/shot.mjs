@@ -316,7 +316,20 @@ const PROBE = `(async () => {
   const typedTextSurvives = survivor !== null && survivor.value === typed
   const notesSurvive = document.querySelector('.dp-notes')?.value === 'and some notes'
 
-  // ---- Escape collapses ----
+  // ---- Escape unwinds one layer at a time: form first, then the day ----
+  // The block above leaves the form open (formOpenSeen asserted it). Per
+  // main.ts's own documented design ("Escape unwinds one layer at a time:
+  // the form first, then the expansion"), a SINGLE Escape here closes only
+  // the form — testing "Escape collapses the day" with one dispatch would be
+  // asserting a claim the app was never asked to honour yet (round 4 review:
+  // this is why collapsedByEscape/panelDetached/rowBackToRest/colsBackToRest
+  // read false in every earlier run, independent of any animation-timing fix
+  // — the day was correctly still open). Test both layers explicitly instead.
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  await sleep(animDurMs + 400)
+  const formClosedByFirstEscape = document.querySelector('.dp-form') === null
+  const dayStillOpenAfterFirstEscape = document.querySelector('.day[data-open]') !== null
+
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
   await sleep(animDurMs + 400)
   const collapsedByEscape = document.querySelector('.day[data-open]') === null
@@ -348,6 +361,7 @@ const PROBE = `(async () => {
     sameWeekSwitchAnimated, sameWeekSwitchWidths, switchStillSameRow,
     addHit, chipCount, chipHit, chipsAreLabels, repeatEnabledOnAdd, controlHits,
     emptyTitleBlocked, formOpenSeen, typedTextSurvives, notesSurvive,
+    formClosedByFirstEscape, dayStillOpenAfterFirstEscape,
     collapsedByEscape, panelDetached, rowBackToRest, colsBackToRest,
   }
 })()`
