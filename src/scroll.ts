@@ -145,6 +145,10 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   let velocity = 0                         // px/ms, smoothed 0.7/0.3
   let anim: { from: number; to: number; t0: number; ms: number } | null = null
   let wheelTimer: ReturnType<typeof setTimeout> | null = null
+  // One AbortController for every listener bound below: destroy() calls
+  // abort() once instead of pairing ten removeEventListener calls by hand,
+  // which is how this class of leak comes back.
+  const ac = new AbortController()
 
   for (let i = 0; i < POOL_SIZE; i++) {
     const n = document.createElement('div')
@@ -206,7 +210,11 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     const projected = projectY(y, velocity)
     const week = weekAtY(projected + viewportH * SNAP_ALIGN, rowH, expanded)
     const anchorDay = nearestAnchor(host.mondayOf(week), modulus, 0)
-    animateTo(snapTargetY(host.weekOf(anchorDay), rowH, expanded, viewportH))
+    const target = snapTargetY(host.weekOf(anchorDay), rowH, expanded, viewportH)
+    // Already docked: skip the no-op animation instead of running a full
+    // SETTLE_BASE_MS easing that lands back where it started.
+    if (Math.abs(target - y) < 1) { host.onDock(dockedWeek()); return }
+    animateTo(target)
   }
 
   function onPointerDown(e: PointerEvent): void {
@@ -242,14 +250,16 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   // user-scalable=no does nothing on iOS; this is the working fix (DECISIONS).
   const stop = (e: Event) => e.preventDefault()
 
-  root.addEventListener('pointerdown', onPointerDown)
-  root.addEventListener('pointermove', onPointerMove)
-  root.addEventListener('pointerup', onPointerUp)
-  root.addEventListener('pointercancel', onPointerUp)
-  root.addEventListener('wheel', onWheel, { passive: false })
-  root.addEventListener('dblclick', stop)
-  for (const g of ['gesturestart', 'gesturechange', 'gestureend']) root.addEventListener(g, stop)
-  window.addEventListener('resize', measure)
+  root.addEventListener('pointerdown', onPointerDown, { signal: ac.signal })
+  root.addEventListener('pointermove', onPointerMove, { signal: ac.signal })
+  root.addEventListener('pointerup', onPointerUp, { signal: ac.signal })
+  root.addEventListener('pointercancel', onPointerUp, { signal: ac.signal })
+  root.addEventListener('wheel', onWheel, { passive: false, signal: ac.signal })
+  root.addEventListener('dblclick', stop, { signal: ac.signal })
+  for (const g of ['gesturestart', 'gesturechange', 'gestureend']) {
+    root.addEventListener(g, stop, { signal: ac.signal })
+  }
+  window.addEventListener('resize', measure, { signal: ac.signal })
 
   measure()
 
@@ -267,7 +277,7 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     destroy() {
       if (raf !== 0) cancelAnimationFrame(raf)
       if (wheelTimer !== null) clearTimeout(wheelTimer)
-      window.removeEventListener('resize', measure)
+      ac.abort()
       root.replaceChildren()
     },
   }

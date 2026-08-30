@@ -356,7 +356,7 @@ Entry: "Try the demo" on first-run, or `?demo`.
 scroll.mount(root: HTMLElement, host: ScrollHost): ScrollController
 ScrollHost      = { fillRow(node, week, rowH), mondayOf(week), weekOf(day),
                     onDock(week), onRangeChange(firstWeek, lastWeek) }
-ScrollController= { goToDay(day, animate), setSnapStep(15|30|45),
+ScrollController= { goToWeek(week, animate), setSnapStep(15|30|45),
                     invalidate(weeks?), destroy() }
 render.renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[], rowH: number): void
 render.packLanes(spans: EventSpan[]): PackedSpan[]
