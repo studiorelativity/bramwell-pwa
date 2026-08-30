@@ -136,8 +136,10 @@ why. New rulings made during the rebuild go at the bottom, dated.
 - Motion tokens, three elevation levels, one enter/exit utility,
   reduced-motion collapse, inline expansion with one variable-height row.
 - Open at plan time: phone (≤560px) inline-full-width vs bottom sheet —
-  leaning inline. Year-view hover panel restyled in the same tokens in a
-  later pass.
+  leaning inline. **CLOSED at the stage-04 plan (2026-08-29): inline full
+  width. Ruling in "Stage 04 rulings" below; the `0fr`/`minmax(0, ...)`
+  amendment is in `04_day/output/verification.md`.** Year-view hover panel
+  restyled in the same tokens in a later pass.
 
 ## Rebuild rulings (2026-08-29)
 

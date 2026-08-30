@@ -1,6 +1,6 @@
 # Stage 04 — Inline day, motion system, event form
 
-**Status: OPEN.** Gate 3 closed 2026-08-29.
+**Status: AWAITING GATE.** Verification in `output/verification.md`.
 
 ## What this stage is
 The primitive first, then its consumer: `motion.css` (tokens, three

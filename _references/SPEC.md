@@ -460,8 +460,19 @@ Expanded = { week: WeekIndex; delta: number } | null
   is `max(0, panel height − rowHeight())`; reading it off a DOM node would read
   a mid-animation height.
 - **KNOWN LIMITATION: `grid-template-columns` does not visibly interpolate
-  in the running app.** `transform` and `height` animate correctly — this is
-  the one confirmed, unresolved gap in an otherwise fully-verified stage.
+  on every path at every viewport.** `transform` and `height` animate
+  correctly everywhere, and the column END STATE is always correct. What is
+  inconsistent is the easing, and it is path-dependent, not simply
+  size-dependent (Chrome, measured): the FIRST expand interpolates at
+  390×844 and snaps at 1440×900 and 1920×1200, while the in-row day SWITCH
+  does the exact reverse — snapping at 390×844 and interpolating at both
+  desktop widths. Whatever the cause is, it discriminates between two paths
+  that write the same property through the same gate, and it is not
+  established. This is the one confirmed, unresolved gap in the stage's
+  animation work — but not the only thing stage 04 leaves unproven: its
+  row-height-interpolation and positive `data-jump` claims rest on hand and
+  isolated-repro evidence rather than on the suite. See
+  `04_day/output/verification.md` for the raw widths.
   Every constraint below is independently confirmed by an isolated repro,
   including one that reconstructs this app's actual architecture (pool
   nodes pre-existing before the mutation, the split gate below, `--expand-
