@@ -886,6 +886,19 @@ Supabase: see `HABITS.md`.
   `VITE_SUPABASE_ANON_KEY` set in the dashboard (Vite inlines them;
   `.env.local` is gitignored). Client IDs and the anon key are public by
   design; the origin allowlist and RLS are the security boundaries.
+- **A proxied Cloudflare zone overrides `_headers` for anything whose TTL is
+  lower than the zone's Browser Cache TTL.** Observed on the first deploy
+  (2026-08-30): `_headers` set `/sw.js` to `no-cache` and `bramwell-pwa.pages.dev`
+  served exactly that, while the proxied `bramwell.no.fail` served
+  `max-age=14400` — the zone default of 4 hours. `/assets/*` came through
+  untouched because its `max-age=31536000` is *higher* than the zone's, which is
+  what makes this asymmetric and easy to miss: the rule that matters most is the
+  only one silently rewritten. The `_headers` file itself is fine and the other
+  rules apply. Fix at the zone, not in the repo: a Cache Rule scoped to
+  `bramwell.no.fail/sw.js` with Browser TTL "Respect origin", in preference to
+  flipping the whole zone to "Respect Existing Headers" — the apex is an
+  unrelated site. **Verify the deployed header, never the file**: `_headers`
+  being correct proves nothing about what the browser receives.
 - Preview deployments cannot sign in (Google rejects wildcard origins).
   Anything touching auth or the API is tested on `bramwell.no.fail`.
 - Deploying is a prerequisite for PWA/offline gate items, not a step after

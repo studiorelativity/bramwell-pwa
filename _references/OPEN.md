@@ -196,3 +196,15 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   to a row boundary is what decides whether it fires at all). Either the
   fixture becomes its own single-purpose run, or the assertion is dropped
   from the harness and the isolated repro is kept as the record.
+
+## Opened at the first deploy (2026-08-30)
+- **`/sw.js` is served `max-age=14400` through the proxied zone, not the
+  `no-cache` `_headers` sets.** Diagnosed, not yet fixed: it needs a Cloudflare
+  Cache Rule, which is human-only. `SPEC.md` DEPLOY carries the full finding.
+  Probably not breaking today — browsers default `updateViaCache: 'imports'`, so
+  the worker script itself bypasses the HTTP cache on an update check, and they
+  cap SW script caching at 24h regardless. But the gate row is "a deploy reaches
+  an installed client on the **next online open**", and a 4-hour browser cache
+  on the worker is exactly the thing that would make that intermittently false
+  on the one engine this app cares most about. Fix, then re-run the two-deploy
+  gate row rather than reasoning about it.
