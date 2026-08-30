@@ -304,6 +304,12 @@ if (new URLSearchParams(location.search).has('selftest')) {
     expandReady = false
     openDay = d
     delta = 0
+    // Any change of the open day disarms a pending add: the day it was armed
+    // for is no longer the day that will be shown. Without this, a FAB tap
+    // interrupted by a plain tap on another day leaves pendingOpenAdd armed
+    // for the FAB's day, and a LATER ordinary tap back onto that day pops the
+    // add form uninvited (review finding, task 6).
+    pendingOpenAdd = null
     pendingFill = true
     pendingDetachWeek = prev !== null && prev !== week ? prev : null   // one day open at a time
     scheduleRemeasure(true)
@@ -339,9 +345,13 @@ if (new URLSearchParams(location.search).has('selftest')) {
     ctl.setExpanded(null, true)         // onExpandEnd detaches and repaints the row
   }
 
-  /** Set by addHere when the day has to be expanded first; consumed by the very
-   *  next remeasure, in the SAME task as the invalidate that attaches the panel.
-   *  day.openAdd is documented to do nothing unless its day is already shown. */
+  /** Armed only by addHere, for the one day it just opened. Disarmed by
+   *  openDayAt on any OTHER change of the open day (including one that
+   *  interrupts the very open this armed), so it cannot survive to fire on a
+   *  later, unrelated tap. Consumed by the first remeasure that finds it
+   *  matching openDay, in the SAME task as the invalidate that attaches the
+   *  panel. day.openAdd is documented to do nothing unless its day is already
+   *  shown. */
   let pendingOpenAdd: DayNumber | null = null
 
   /** DECISIONS "FAB date": calendar → mid-week day of the docked week; year → today. */
@@ -359,8 +369,8 @@ if (new URLSearchParams(location.search).has('selftest')) {
       ctl.goToWeek(state.weekOf(d), false)   // the year's anchor is off-screen here
     }
     if (openDay === d) { day.openAdd(d); return }
-    pendingOpenAdd = d
-    openDayAt(d)
+    openDayAt(d)        // clears pendingOpenAdd as its first act, so...
+    pendingOpenAdd = d  // ...only THIS call arms it, and only for this day
   }
 
   const ctl = scroll.mount(scroller, {
@@ -473,6 +483,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     const t = e.target
     if (t instanceof HTMLElement && (t.isContentEditable || /^(?:INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
     if (openDay !== null) return
+    if (chromeCtl.isSheetOpen()) return   // the sheet is transient UI; n must not fire behind it
     e.preventDefault()
     addHere()
   })
