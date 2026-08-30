@@ -458,16 +458,36 @@ Expanded = { week: WeekIndex; delta: number } | null
 - **`rowHeight()` exists so no consumer measures the row.** The expanded delta
   is `max(0, panel height − rowHeight())`; reading it off a DOM node would read
   a mid-animation height.
-- **`data-anim` on the scroller gates the transition**, carrying `expand` or
-  `collapse`. Any pointerdown, wheel or `goToWeek` clears it first, so a drag is
-  never transitioned. A node recycled INTO view mid-animation, from a
-  DIFFERENT week than it last held, is stamped `data-jump` — without it the
-  node would fly in from its position 14 rows away. A refill that keeps the
-  SAME week (a full `invalidate()` resets every slot's bookkeeping, not just
-  the ones that actually moved) does not stamp it — that row isn't recycling,
-  it's the one genuinely animating, and stamping it would disable its own
-  transition. The stamp is written only while `data-anim` is set, so
-  steady-state recycling keeps its two style writes per row per frame.
+- **`data-anim` gates the transition, carried on EACH ROW, not the
+  scroller.** `setAnim`/`armAnim` stamp (or clear) `expand`/`collapse` on
+  every pooled node in the same loop that already clears jump stamps —
+  written once per expand across the 14 pool nodes, never per frame, so
+  `place()`'s steady-state cost is unaffected. This moved off the scroller
+  in round 6 because of a browser constraint, not a design change — see the
+  next bullet — and what the gate MEANS is unchanged: any pointerdown, wheel
+  or `goToWeek` still clears it first, so a drag is never transitioned. A
+  node recycled INTO view mid-animation, from a DIFFERENT week than it last
+  held, is still stamped `data-jump` — without it the node would fly in
+  from its position 14 rows away. A refill that keeps the SAME week (a full
+  `invalidate()` resets every slot's bookkeeping, not just the ones that
+  actually moved) does not stamp it — that row isn't recycling, it's the
+  one genuinely animating, and stamping it would disable its own
+  transition. The recycling guard is now a same-element pairing,
+  `.week[data-anim] .week[data-jump]` → `.week[data-anim][data-jump]`
+  (motion.css): both attributes live on the row being tested, not one on
+  an ancestor and one on the row.
+- **This engine will not start a `grid-template-columns` transition through
+  an ancestor-attribute selector, only a same-element one.** Repro: a
+  `.scroller[data-anim] .week { transition-property: … }` rule (the
+  original design — one flag on the ancestor, gating every row through a
+  descendant combinator) never transitions `.week`'s columns, REGARDLESS of
+  whether the ancestor's attribute is set before or after the row's own
+  property value changes; the identical rule written as `.week[data-anim]
+  { transition-property: … }` (same element) transitions correctly, same
+  ordering. This is why `data-anim` is carried per row (previous bullet)
+  rather than kept on the scroller with a corrected write order — a round-5
+  fix that only reordered the writes, without also moving the attribute,
+  was verified NOT to fix it.
 - **`armAnim(kind)` raises `data-anim` on its own — no timer, no geometry, no
   `place()` — so the gate can open BEFORE the column write, not merely in the
   same task as it.** This engine will not start a `grid-template-columns`
@@ -484,6 +504,8 @@ Expanded = { week: WeekIndex; delta: number } | null
   measures `contentHeight()` and writes the final transform and height. One
   task, gate-then-geometry. `setExpanded` still calls `setAnim` itself on
   every call, so arming twice in the same task is simply idempotent.
+  `closeDay()` arms `'collapse'` before `clearColumns` for the identical
+  reason — verified to matter there too, not just for the expand direction.
 - **The expanded column template is written to a CSS custom property,
   `--expand-cols`, never to `grid-template-columns` directly.** This engine
   does not transition `grid-template-columns` when JS sets it via inline
@@ -492,11 +514,13 @@ Expanded = { week: WeekIndex; delta: number } | null
   matching track-sizing function on both sides, still snaps; the identical
   value change made through a custom property that a static CSS rule reads
   with `var()` eases normally. `.week`'s rule is `grid-template-columns:
-  var(--expand-cols, repeat(7, minmax(0, 1fr)))`. Both this and the
-  `armAnim` ordering above are load-bearing browser constraints on THIS
-  engine, not incidental style choices — reintroducing a direct
-  `grid-template-columns` write, or writing the column template before
-  arming the gate, silently reintroduces a snap with no error to catch it.
+  var(--expand-cols, repeat(7, minmax(0, 1fr)))`. This, the ordering
+  constraint above, and the same-element requirement two bullets up are
+  three SEPARATE, independently-necessary, load-bearing browser constraints
+  on THIS engine, not incidental style choices — reintroducing a direct
+  `grid-template-columns` write, writing the column template before arming
+  the gate, or gating the transition from an ancestor's attribute again,
+  each silently reintroduces a snap with no error to catch it.
 - **`onExpandEnd()` fires when the animation is over.** `scroll.ts` reads the
   duration from the row's own computed `transition-duration` plus
   `transition-delay`, so `motion.css` keeps the single home for the value and

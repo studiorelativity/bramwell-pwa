@@ -207,6 +207,16 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   /** The transition gate. `null` clears it, and every path that moves `y` clears
    *  it first so a drag is never transitioned.
    *
+   *  Stamped on EVERY POOLED ROW, not the scroller (round 6 review): this
+   *  engine will not start a `grid-template-columns` transition through an
+   *  ancestor-attribute selector (`.scroller[data-anim] .week`) — confirmed
+   *  by repro, independent of write order — only a same-element one
+   *  (`.week[data-anim]`). Mechanical, not architectural: the gate still
+   *  means exactly what it did, it is still written once per expand, just
+   *  across the 14 pool nodes in this one loop instead of once on `root` —
+   *  never inside `place()`'s per-frame path, so the steady-state cost is
+   *  unaffected.
+   *
    *  A pending `animTimer` being cancelled here means the timeout that would
    *  have fired `onExpandEnd()` never runs — so this function fires it in that
    *  timer's place, before touching any dataset. Safe to call synchronously:
@@ -229,9 +239,10 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
    *  'none' for the collapse too (motion.css). */
   function setAnim(kind: 'expand' | 'collapse' | null): void {
     if (animTimer !== null) { clearTimeout(animTimer); animTimer = null; host.onExpandEnd() }
-    for (const n of pool) delete n.dataset['jump']
-    if (kind !== null) { root.dataset['anim'] = kind; return }
-    if (root.dataset['anim'] !== undefined) delete root.dataset['anim']
+    for (const n of pool) {
+      delete n.dataset['jump']
+      if (kind !== null) { n.dataset['anim'] = kind } else { delete n.dataset['anim'] }
+    }
   }
 
   /** The effective duration motion.css just applied, read back off the element.
@@ -247,7 +258,10 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   function place(): void {
     // One property read, no layout read: the stamp is only meaningful while an
     // animation is running, so steady-state rows keep exactly two style writes.
-    const animating = root.dataset['anim'] !== undefined
+    // Read off a pool node, not root (round 6 review): data-anim is now
+    // carried per row, written identically to all 14 by setAnim, so any one
+    // of them reflects the current gate state.
+    const animating = pool[0]!.dataset['anim'] !== undefined
     const first = weekAtY(y, rowH, expanded)
     for (let i = 0; i < POOL_SIZE; i++) {
       const w = asWeek(first + i)

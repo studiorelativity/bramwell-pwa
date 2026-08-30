@@ -61,23 +61,30 @@
    its template directly always snapped. Its grid-template-columns is `inherit`
    (style.css), which resolves from .week's COMPUTED value every frame, so it
    tracks .week's interpolation exactly instead of racing a second transition
-   against it. */
-.scroller[data-anim] .week {
+   against it.
+   Same-element selectors, not `.scroller[data-anim] .week` (round 6 review):
+   this engine will not start a grid-template-columns transition through an
+   ancestor's attribute, confirmed by repro, independent of write order — only
+   a rule matching .week directly does. scroll.ts stamps data-anim on every
+   pooled row instead of on the scroller for exactly this reason. */
+.week[data-anim] {
   transition-property: transform, height, grid-template-columns, column-gap;
 }
-.scroller[data-anim="expand"] .week {
+.week[data-anim="expand"] {
   transition-duration: var(--t-open);
   transition-timing-function: var(--ease-spring);
 }
-.scroller[data-anim="collapse"] .week {
+.week[data-anim="collapse"] {
   transition-duration: var(--t-base);
   transition-timing-function: var(--ease-out);
   transition-delay: var(--t-fast);        /* content fades first (SPEC "Motion") */
 }
 /* A pool node recycled INTO view mid-animation would otherwise slide in from its
    previous position, 14 rows away. Stamped by scroll.ts only while data-anim is
-   set, so steady-state recycling pays nothing. */
-.scroller[data-anim] .week[data-jump] { transition-property: none; }
+   set, so steady-state recycling pays nothing. Same-element pairing, both
+   attributes on the row being tested — not one on the scroller and one on the
+   row (round 6 review). */
+.week[data-anim][data-jump] { transition-property: none; }
 
 /* A toast's whole life is one animation, so its timing has a single home. */
 @keyframes toast-life {
