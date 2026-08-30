@@ -188,14 +188,28 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
   }
 
   /** The transition gate. `null` clears it, and every path that moves `y` clears
-   *  it first so a drag is never transitioned. Clearing also drops the jump
-   *  stamps, which only mean anything while an animation is running. */
+   *  it first so a drag is never transitioned.
+   *
+   *  A pending `animTimer` being cancelled here means the timeout that would
+   *  have fired `onExpandEnd()` never runs — so this function fires it in that
+   *  timer's place, before touching any dataset. Safe to call synchronously:
+   *  `setAnim` is always the FIRST statement of `frame`/`onPointerDown`/
+   *  `onWheel`/`goToWeek`/`setExpanded`, so this runs before any of them reach
+   *  their own `place()` — never nested inside one. It fires at most once per
+   *  cancelled timer (`animTimer` is nulled immediately, so a timer that goes
+   *  on to fire normally finds nothing left to cancel here).
+   *
+   *  The jump stamps are cleared on EVERY call, not only when clearing to
+   *  null: `setExpanded(ex, true)` immediately followed by `setExpanded(null,
+   *  true)` (a double-tap toggle) switches `kind` directly from 'expand' to
+   *  'collapse' without ever passing through null, and a stamp left over from
+   *  the interrupted expand would freeze that row's transition-property at
+   *  'none' for the collapse too (motion.css). */
   function setAnim(kind: 'expand' | 'collapse' | null): void {
-    if (animTimer !== null) { clearTimeout(animTimer); animTimer = null }
-    if (kind !== null) { root.dataset['anim'] = kind; return }
-    if (root.dataset['anim'] === undefined) return
-    delete root.dataset['anim']
+    if (animTimer !== null) { clearTimeout(animTimer); animTimer = null; host.onExpandEnd() }
     for (const n of pool) delete n.dataset['jump']
+    if (kind !== null) { root.dataset['anim'] = kind; return }
+    if (root.dataset['anim'] !== undefined) delete root.dataset['anim']
   }
 
   /** The effective duration motion.css just applied, read back off the element.
