@@ -1,8 +1,8 @@
 // STAGE 04 — inline day expansion content: event list, form, habits, journal.
 // NEVER imports gcal.ts: writes go UI -> state.ts -> gcal.ts (SPEC "Write orchestration").
 // No DOM at module scope — this module is in the selftest graph, which runs under bare node.
-import type { CalendarEvent, DayNumber } from './types.ts'
-import { dayToCivil, monthKey } from './dates.ts'
+import type { CalendarEvent, DayNumber, EventDraft, RepeatRule, WriteScope } from './types.ts'
+import { civilToDay, dayToCivil, monthKey } from './dates.ts'
 import * as state from './state.ts'
 import { all as allCategories } from './categories.ts'
 
@@ -157,15 +157,286 @@ export function contentHeight(): number {
   return panel.offsetTop + panel.offsetHeight
 }
 
-// --- replaced in Task 7 ---
-export function isFormOpen(): boolean { return false }
-function openForm(_d: DayNumber, _ev: CalendarEvent | null): void {}
-function dropForm(): void {}
-// BRIEF DEFECT (found, worked around): Step 4's Escape handler in main.ts calls
-// day.closeForm(), but the brief's placeholder list for this task omits it —
-// only isFormOpen/openForm/dropForm are listed. Since main.ts does `import *
-// as day`, an unexported member is a TS2339 build error, not a runtime one,
-// even though isFormOpen() always returning false makes the call dead code
-// this task. Added here under the same "keep the build green" rationale as
-// the other three; Task 7 replaces this too.
-export function closeForm(): void {}
+/** Pure, and exported so the selftest pins the exact rules the form runs rather
+ *  than a copy of them (CONVENTIONS). Returns the message to show, or null. */
+export function validate(d: EventDraft): string | null {
+  if (d.title.trim() === '') return 'A title is required.'
+  if (d.end < d.start) return 'The end date is before the start date.'
+  if (d.allDay) return null
+  const s = d.startMin ?? 0
+  const e = d.endMin ?? 0
+  if (s < 0 || s > 1439 || e < 0 || e > 1439) return 'Times must be between 00:00 and 23:59.'
+  // Only a same-day event constrains the clock: crossing midnight legitimately runs backwards.
+  if (d.end === d.start && e <= s) return 'The end time is not after the start time.'
+  return null
+}
+
+// ---------- the form ----------
+
+let form: HTMLFormElement | null = null
+/** The event being edited; null means a new event. */
+let editing: CalendarEvent | null = null
+let picked = ''
+
+export function isFormOpen(): boolean { return form !== null && form.isConnected }
+
+const ymd = (d: DayNumber): string => {
+  const { y, m, d: dd } = dayToCivil(d)
+  return `${y}-${String(m).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
+}
+const parseYmd = (v: string): DayNumber | null => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v)
+  return m === null ? null : civilToDay(Number(m[1]), Number(m[2]), Number(m[3]))
+}
+const parseHm = (v: string): number | null => {
+  const m = /^(\d{2}):(\d{2})$/.exec(v)
+  return m === null ? null : Number(m[1]) * 60 + Number(m[2])
+}
+
+function field<T extends HTMLElement>(sel: string): T | null {
+  return form?.querySelector<T>(sel) ?? null
+}
+
+function buildForm(d: DayNumber, ev: CalendarEvent | null): HTMLFormElement {
+  const f = document.createElement('form')
+  f.className = 'dp-form'
+  f.addEventListener('submit', e => { e.preventDefault(); void save() })
+
+  const title = document.createElement('input')
+  title.className = 'dp-title'
+  title.placeholder = 'Title'
+  title.value = ev?.title ?? ''
+  f.append(title)
+
+  // Category chips carry the user's LABELS, never the stable names (SPEC "Event form").
+  const cats = el('div', 'dp-cats')
+  picked = ev?.category ?? (allCategories()[0]?.name ?? '')
+  for (const c of allCategories()) {
+    const chip = el('button', 'dp-chip', c.label) as HTMLButtonElement
+    chip.type = 'button'
+    chip.dataset['cat'] = c.name
+    chip.setAttribute('aria-pressed', String(c.name === picked))
+    chip.addEventListener('click', () => {
+      picked = c.name
+      for (const other of cats.querySelectorAll('.dp-chip')) {
+        other.setAttribute('aria-pressed', String(other === chip))
+      }
+    })
+    cats.append(chip)
+  }
+  f.append(cats)
+
+  const allDayLine = el('label', 'dp-line')
+  const allDay = document.createElement('input')
+  allDay.type = 'checkbox'
+  allDay.className = 'dp-allday'
+  allDay.checked = ev?.allDay ?? false
+  allDayLine.append(allDay, document.createTextNode('All day'))
+  f.append(allDayLine)
+
+  const when = el('div', 'dp-when')
+  const start = document.createElement('input'); start.type = 'date'; start.className = 'dp-start'
+  const startT = document.createElement('input'); startT.type = 'time'; startT.className = 'dp-startt'
+  const end = document.createElement('input'); end.type = 'date'; end.className = 'dp-end'
+  const endT = document.createElement('input'); endT.type = 'time'; endT.className = 'dp-endt'
+  start.value = ymd(ev?.start ?? d)
+  end.value = ymd(ev?.end ?? d)
+  startT.value = hhmm(ev !== null && !ev.allDay ? ev.startMin : 9 * 60)
+  endT.value = hhmm(ev !== null && !ev.allDay ? ev.endMin : 10 * 60)
+  when.append(start, startT, end, endT)
+  f.append(when)
+  // All-day keeps the times in the DOM so toggling back does not lose them
+  // (types.ts: EventDraft is deliberately flat for exactly this).
+  const syncAllDay = (): void => { startT.hidden = allDay.checked; endT.hidden = allDay.checked }
+  allDay.addEventListener('change', syncAllDay)
+  syncAllDay()
+
+  const repeat = document.createElement('select')
+  repeat.className = 'dp-repeat'
+  for (const [value, text] of [['none', 'Does not repeat'], ['daily', 'Daily'], ['weekly', 'Weekly'],
+    ['monthly', 'Monthly'], ['yearly', 'Yearly']]) {
+    const o = document.createElement('option')
+    o.value = value!; o.textContent = text!
+    repeat.append(o)
+  }
+  // Disabled when editing: Google rejects an RRULE PATCHed against an instance id
+  // (DECISIONS "In force — auth and wire").
+  repeat.disabled = ev !== null
+  f.append(repeat)
+
+  const notes = document.createElement('textarea')
+  notes.className = 'dp-notes'
+  notes.placeholder = 'Notes'
+  notes.value = ev?.notes ?? ''
+  f.append(notes)
+
+  // Scope picker ONLY for a recurring event; default "this occurrence" (SPEC).
+  if (ev?.recurringEventId !== undefined) {
+    const scope = el('div', 'dp-scope')
+    for (const [value, text] of [['instance', 'This occurrence'], ['series', 'Whole series']]) {
+      const line = el('label', 'dp-line')
+      const radio = document.createElement('input')
+      radio.type = 'radio'; radio.name = 'dp-scope'; radio.value = value!
+      radio.checked = value === 'instance'
+      radio.addEventListener('change', resetDeleteConfirm)
+      line.append(radio, document.createTextNode(text!))
+      scope.append(line)
+    }
+    f.append(scope)
+  }
+
+  const err = el('p', 'dp-err')
+  err.hidden = true
+  f.append(err)
+
+  const actions = el('div', 'dp-actions')
+  const save_ = el('button', 'dp-save', 'Save') as HTMLButtonElement
+  save_.type = 'submit'
+  const cancel = el('button', 'dp-cancel', 'Cancel') as HTMLButtonElement
+  cancel.type = 'button'
+  cancel.addEventListener('click', () => closeForm())
+  actions.append(save_, cancel)
+  if (ev !== null) {
+    const del = el('button', 'dp-del', 'Delete') as HTMLButtonElement
+    del.type = 'button'
+    del.addEventListener('click', () => { void remove() })
+    actions.append(del)
+  }
+  f.append(actions)
+  return f
+}
+
+function scopeValue(): WriteScope {
+  return field<HTMLInputElement>('input[name="dp-scope"][value="series"]')?.checked === true
+    ? 'series' : 'instance'
+}
+
+function resetDeleteConfirm(): void {
+  const del = field<HTMLButtonElement>('.dp-del')
+  if (del === null) return
+  del.removeAttribute('data-confirm')
+  del.textContent = 'Delete'
+}
+
+function readDraft(): EventDraft {
+  const allDay = field<HTMLInputElement>('.dp-allday')?.checked ?? false
+  // `shown` is never null while a form is open; today() is a fallback that keeps
+  // the function total rather than a case that happens.
+  const start = parseYmd(field<HTMLInputElement>('.dp-start')?.value ?? '') ?? shown ?? state.today()
+  const end = parseYmd(field<HTMLInputElement>('.dp-end')?.value ?? '') ?? start
+  const draft: EventDraft = {
+    title: field<HTMLInputElement>('.dp-title')?.value ?? '',
+    category: picked,
+    allDay,
+    start,
+    end,
+    repeat: (field<HTMLSelectElement>('.dp-repeat')?.value ?? 'none') as RepeatRule,
+  }
+  const notes = field<HTMLTextAreaElement>('.dp-notes')?.value ?? ''
+  if (notes !== '') draft.notes = notes
+  if (!allDay) {
+    draft.startMin = parseHm(field<HTMLInputElement>('.dp-startt')?.value ?? '') ?? 0
+    draft.endMin = parseHm(field<HTMLInputElement>('.dp-endt')?.value ?? '') ?? 0
+  }
+  return draft
+}
+
+function showError(message: string | null): void {
+  const err = field<HTMLElement>('.dp-err')
+  if (err === null) return
+  err.textContent = message ?? ''
+  err.hidden = message === null
+}
+
+function busy(on: boolean): void {
+  if (form === null) return
+  if (on) { form.dataset['busy'] = '' } else { form.removeAttribute('data-busy') }
+}
+
+/** day.ts never imports gcal.ts, so an error is read as an Error, not as a GcalError. */
+function messageFor(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e)
+  return raw.startsWith('Google Calendar API 401') ? 'Google rejected the session. Reconnect and try again.'
+    : raw.startsWith('Google Calendar API') ? `${raw} — the change was not saved.`
+    : raw
+}
+
+async function save(): Promise<void> {
+  const draft = readDraft()
+  const bad = validate(draft)
+  if (bad !== null) { showError(bad); return }
+  showError(null)
+  busy(true)
+  try {
+    if (editing === null) { await state.createEvent(draft) }
+    else { await state.updateEvent(editing.id, draft, scopeValue()) }
+    closeForm()
+  } catch (e) {
+    // Both surfaces, every time (SPEC "Event form").
+    const msg = messageFor(e)
+    showError(msg)
+    host.toast(msg)
+  } finally { busy(false) }
+}
+
+async function remove(): Promise<void> {
+  if (editing === null) return
+  const scope = scopeValue()
+  const del = field<HTMLButtonElement>('.dp-del')
+  // A series delete confirms first (SPEC). Two-step inline, never confirm() —
+  // a modal for this was rejected at stage 08 of v3 (DECISIONS "Rejected").
+  if (scope === 'series' && del !== null && del.dataset['confirm'] === undefined) {
+    del.dataset['confirm'] = ''
+    del.textContent = 'Delete every occurrence?'
+    host.onHeightChange()
+    return
+  }
+  busy(true)
+  try {
+    await state.deleteEvent(editing.id, scope)
+    closeForm()
+  } catch (e) {
+    const msg = messageFor(e)
+    showError(msg)
+    host.toast(msg)
+  } finally { busy(false) }
+}
+
+function openForm(d: DayNumber, ev: CalendarEvent | null): void {
+  if (panel === null) return
+  dropForm()
+  editing = ev
+  form = buildForm(d, ev)
+  form.classList.add('enter')
+  form.style.setProperty('--i', '0')
+  panel.append(form)
+  void form.offsetWidth                     // commit the hidden state before entering
+  form.dataset['in'] = ''
+  host.onHeightChange()
+  field<HTMLInputElement>('.dp-title')?.focus()
+}
+
+/** Silent teardown, used when the form is being replaced or the panel is going away. */
+function dropForm(): void {
+  form?.remove()
+  form = null
+  editing = null
+}
+
+/** The public close: the DAY stays open and the list repaints, because after
+ *  saving an event the thing you want to see is the day you just changed.
+ *  Releasing the held background repaint is the last step, not the first —
+ *  the form is already gone by then, so nothing it repaints can be wiped. */
+export function closeForm(): void {
+  if (!isFormOpen()) return
+  dropForm()
+  renderList()
+  host.onHeightChange()
+  host.onFormClosed()
+}
+
+/** The FAB entry point (stage 05 calls it): expand the day and open a blank form. */
+export function openAdd(d: DayNumber): void {
+  if (shown !== d || panel === null) return
+  openForm(d, null)
+}

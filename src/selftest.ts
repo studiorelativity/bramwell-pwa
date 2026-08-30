@@ -24,6 +24,7 @@ import {
 import type { Expanded } from './scroll.ts'
 import { packLanes, visibilityFor, rangeLabel, columnsFor, PHONE_MAX_W } from './render.ts'
 import type { PackedSpan } from './render.ts'
+import { validate } from './day.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -1410,6 +1411,34 @@ const cases: Case[] = [
 
       return null
     } finally { _setAnchorForTest(savedAnchor) }
+  }],
+
+  ['day: form validation rules', () => {
+    const base: EventDraft = {
+      title: 'Standup', category: 'work', allDay: false,
+      start: civilToDay(2026, 9, 2), end: civilToDay(2026, 9, 2),
+      startMin: 9 * 60, endMin: 10 * 60, repeat: 'none',
+    }
+    if (validate(base) !== null) return `a good draft was rejected: ${validate(base)}`
+    if (validate({ ...base, title: '' }) === null) return 'an empty title was accepted'
+    if (validate({ ...base, title: '   ' }) === null) return 'a whitespace title was accepted'
+    // End before start, both forms.
+    const backwards = { ...base, end: civilToDay(2026, 9, 1) }
+    if (validate(backwards) === null) return 'an end BEFORE the start was accepted'
+    // Same day, end time not after start.
+    if (validate({ ...base, endMin: 9 * 60 }) === null) return 'a zero-length timed event was accepted'
+    if (validate({ ...base, endMin: 8 * 60 }) === null) return 'a backwards timed event was accepted'
+    // Crossing midnight is legal: the end DAY is later, so the clock may go backwards.
+    const overnight = { ...base, end: civilToDay(2026, 9, 3), startMin: 23 * 60, endMin: 60 }
+    if (validate(overnight) !== null) return `an overnight event was rejected: ${validate(overnight)}`
+    // All-day ignores the clock entirely; the end day is INCLUSIVE in the form.
+    const allDay: EventDraft = { ...base, allDay: true, startMin: 0, endMin: 0 }
+    if (validate(allDay) !== null) return `a one-day all-day event was rejected: ${validate(allDay)}`
+    if (validate({ ...allDay, end: civilToDay(2026, 9, 5) }) !== null) return 'a multi-day all-day event was rejected'
+    // Out-of-range minutes cannot reach the wire.
+    if (validate({ ...base, startMin: -1 }) === null) return 'a negative start minute was accepted'
+    if (validate({ ...base, endMin: 1440 }) === null) return 'minute 1440 was accepted'
+    return null
   }],
 ]
 
