@@ -345,3 +345,72 @@ real account. That file is now a record, not an input.
   rounded tiles, so a multi-day commitment either reads as one run crossing
   the gaps or as separate stubs; SPEC's "title once on the true start,
   continuations drop the spine" only means anything as one run.
+
+## Stage 03 gate close (2026-08-29)
+
+Promoted from `03_engine/output/verification.md` after the gate passed on
+device. That file is now a record, not an input. All tuned constants stayed
+at their SPEC values; the human approved the palette and the phone's
+14-column year view as shipped.
+
+### Colour
+- **The palette is code, not canvas**: fifty values in `categories.ts`
+  `MOODS`, one fixed lightness ladder (`--band-a-end` +2.5, `--band-a` +4,
+  `--band-b-end` +4.5, `--band-b` +6 relative to the ground) over five
+  hues. Warm's light ground is `#F2EFEA`, not the seed `#f7f6f3` — 96.1%
+  lightness left no headroom for four raised steps. The seed near-black
+  `#0f1115` is hue 220 and is Cool's dark ground. Dark grounds are
+  near-identical by design; the mood reads through the bands. Asserted in
+  both schemes by `categories: the mood ladder holds in both schemes`.
+- Four non-mood tokens (`--ink`, `--ink-dim`, `--rule`, `--ring`) live in
+  `style.css` `:root` with a dark override and do not vary by mood.
+- `--today` is teal (`#0D9488` light / `#2DD4BF` dark) on exactly two marks:
+  today's inset ring and today's day number. The hover ring is `--ring`.
+- Hover is compositor-only: `translateY(-2px)` plus an `::after` layer
+  carrying `--el-hover` and the ring, cross-faded by opacity. Rejected:
+  transitioning `box-shadow`; any `scale()`.
+
+### Engine and render
+- `render.renderWeek(node, week, spans, rowH)` takes `rowH` so bar capacity
+  is derived, never measured. `visibilityFor` is exported so the selftest
+  pins the "+N" arithmetic the renderer actually runs.
+- `ScrollHost` carries `mondayOf(week)` and `weekOf(day)`; `scroll.ts`
+  never imports `state.ts`.
+- The header window is centred on the dock: `renderRange(week − 3, week + 3)`.
+  `onDock` reports the week at the viewport centre with ~6.5 visible.
+- Header order: range, year steppers (year view only), Cal/Year toggle,
+  Today, avatar slot.
+- `assignLanes` is shared by week rows and the year grid and packs by true
+  interval intersection per lane. Rejected: the "rightmost occupied column"
+  heuristic — longest-first does not deliver items left-to-right and it
+  wastes a lane on a later, earlier-starting item.
+- `main.ts` calls `ensureMonthsFor` only when the visible range moves, and
+  cache-change repaints coalesce to one `requestAnimationFrame`. Without
+  the guard a signed-out session loops `error → notify → invalidate → place
+  → onRangeChange → refetch → error` as one microtask chain and freezes the
+  renderer.
+- The variable-height row is proven, not promised: breaking `posOf`'s
+  `w > ex.week` fails `scroll: posOf/heightOf/weekAtY round-trip, uniform
+  and expanded` at the expanded row only. The synthetic scroller makes the
+  row one conditional offset, O(1). **No overlay.** Closes the `OPEN.md`
+  stop-and-revise clause; stage 04 sets `expanded` and animates `delta`.
+
+### Year view
+- Phone default is 14 columns (`columnsFor`: ≥1100 → 28, ≥360 → 14, else
+  7). At 390px the grid is 27 rows and scrolls about one row; accepted.
+- Bars are a per-row overlay grid of the same shape as `.bars`, capped at 3
+  lanes, stacked from the cell's bottom edge (3px, 5px pitch) so three fit
+  a 28px phone cell.
+- The hover panel is a sibling of the grid; `build()` replaces only the
+  grid, refills and repositions the panel in place, and drops it only on
+  `pointerleave`, a tap elsewhere, or a year change. `meridiem()` in
+  `year.ts` is the one 12-hour formatter; week chips stay 24-hour.
+- Touch: a `pointerover` of type `touch` is ignored so the tap that
+  follows it counts as the first tap, not the second.
+
+### Tooling
+- `scripts/` is node-only tooling, never bundled: the selftest runner and
+  `shot.mjs`, a dependency-free CDP harness (Node's global `WebSocket`)
+  that seeds `localStorage` and drives colour scheme with
+  `Emulation.setEmulatedMedia`. `hover`/`pointer` are not emulatable media
+  features; touch flow is driven with `Emulation.setTouchEmulationEnabled`.

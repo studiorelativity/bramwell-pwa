@@ -56,7 +56,9 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
 
 - A continuous **week-aligned grid, 28 day columns per row** (four weeks),
   first row indented by the weekday of 1 January so every column is the
-  same weekday all year. Narrow viewports fall back to 14 or 7 columns.
+  same weekday all year. Tablets AND phones fall back to 14 columns (a
+  390px phone scrolls about one row — accepted at the stage-03 gate); 7
+  only below 360px.
 - Each cell: weekday abbreviation, day number, a month badge on the 1st,
   the month band and weekend shade, and up to **3 thin category-coloured
   bars** for that day's events, longest-first so a multi-day event holds
@@ -82,8 +84,8 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   `month % 2`, so Dec/Jan differ). A week straddling a boundary shows both.
 - Sticky header, left to right: the month(s) or year in view (heavier
   weight; "Aug – Sep 2026" when the view straddles, which at rest it does;
-  cross-fades on change), year steppers (year view only), the Cal/Year
-  toggle, a Today button, the account avatar.
+  cross-fades on change; the window is the docked week ±3), year steppers
+  (year view only), the Cal/Year toggle, a Today button, the account avatar.
 - **Today button** goes to today without changing the view: calendar
   scrolls and re-snaps; year view pages back to the current year. The
   Cal/Year toggle is the only control that switches views.
@@ -107,7 +109,9 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
 ## Visual direction — Night Depth
 
 Approved 2026-08-29 (reference: the "Bramwell Calendar" design canvas,
-week-view + motion-primitives artboards; the canvas fixes token values).
+week-view + motion-primitives artboards). **Token values live in
+`categories.ts` `MOODS` since the stage-03 gate** (DECISIONS "Stage 03 gate
+close"); the canvas is history, not the source.
 Where v3's "warm neutral, hairlines, no elevation" direction conflicts,
 this section wins; v3 clauses it does not address still govern (type,
 bar treatment, restraint).

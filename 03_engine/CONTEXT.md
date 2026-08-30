@@ -1,6 +1,6 @@
 # Stage 03 — Scroll engine, rendering, year view
 
-**Status: AWAITING GATE, 2026-08-29.** See output/verification.md; the human runs the gate on device.
+**Status: CLOSED 2026-08-29.** Gate 3 passed on device; rulings promoted. See output/verification.md.
 
 ## What this stage is
 `scroll.ts`, `render.ts`, `year.ts`, the calendar and year styles in

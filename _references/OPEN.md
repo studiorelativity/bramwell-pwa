@@ -39,7 +39,19 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   `<option>` colouring, hence the colour *names*).
 - Arm's-length legibility of a pale user-chosen hue in light mode. No
   guard was added by decision.
-- Year view on a phone: 7 columns is a long scroll; 14 may be better.
+- **2026-08-29 — Year view on a phone: CLOSED at the stage-03 gate.** 14
+  columns shipped as the phone default (27 rows at 390px, scrolls about one
+  row); approved on device. Ruling in `DECISIONS.md` "Stage 03 gate close".
+
+## Opened at the stage-03 gate close
+- **Signed-out refetch pressure.** Stage 02's rule refetches an `error`
+  month on every `ensureMonthsFor` call; stage 03 limits that to once per
+  range move, but a long signed-out scroll still makes a token attempt per
+  month per move. Stage 05 owns connection state and decides whether
+  `error` becomes sticky while signed out.
+- **The 15/45 snap steps in a browser.** `nearestAnchor` is unit-tested for
+  all three moduli, but only 30 is wired; the step control is stage 05's
+  Settings, and the device check happens at that gate.
 
 ## Never verified on the real wire (opened at the stage-02 gate close)
 - **GIS response ordering.** `auth.ts` pairs concurrent token requests with
@@ -58,8 +70,11 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
 
 ## Rebuild questions
 - Phone expansion: inline full-width or bottom sheet (leaning inline).
-- Whether the virtualizer's one variable-height row can be done without
-  an overlay. The stage-09 contract says stop and revise if not.
+- **2026-08-29 — Variable-height row without an overlay: CLOSED with
+  evidence at the stage-03 gate.** The pure maths take `expanded` and the
+  round-trip test fails at exactly the expanded row when `posOf` is broken;
+  the synthetic scroller makes it one O(1) conditional offset. Stage 04 sets
+  `expanded` and animates `delta`. `DECISIONS.md` "Stage 03 gate close".
 - Whether v3's cached `daynote` events (in the user's Google Calendar
   from stage 07) should be migrated into the vault by a one-off script or
   left as ordinary all-day events. See `JOURNAL.md`.

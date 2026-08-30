@@ -1,6 +1,9 @@
 # Stage 03 — verification
 
-**Status: AWAITING GATE, 2026-08-29.** Every automated criterion below passed.
+**Status: GATE PASSED and CLOSED, 2026-08-29.** Every automated criterion below passed;
+the human approved on device with every tuned constant at its SPEC value. All 14
+rulings are promoted to `DECISIONS.md` (and `SPEC.md` where they change the
+contract); this file is now a record, not an input.
 Everything under "Gate" is the human's to run on a device; those rows are
 unfilled by design, as is the "after the gate" column of the tuned-by-feel
 table. At gate close the rulings below are promoted to `DECISIONS.md` (and
