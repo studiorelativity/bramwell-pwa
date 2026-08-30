@@ -1266,10 +1266,12 @@ const cases: Case[] = [
       event: ev(id, allDay), week: asWeek(0),
       from: asOffset(from), to: asOffset(to), continuesBefore: false, continuesAfter: false,
     })
-    // A long span must take lane 0 even though a short one starts earlier.
+    // A long span must take lane 0 even though a short one starts earlier —
+    // but the short span does not overlap it (day 0 vs days 1-6), so true
+    // interval packing gives it lane 0 too, sharing rather than wasting a lane.
     const a = packLanes([span('short', 0, 0), span('long', 1, 6)])
     if (a.find(s => s.event.id === 'long')?.lane !== 0) return `longest-first violated: long got lane ${a.find(s => s.event.id === 'long')?.lane}`
-    if (a.find(s => s.event.id === 'short')?.lane !== 1) return `short got lane ${a.find(s => s.event.id === 'short')?.lane}`
+    if (a.find(s => s.event.id === 'short')?.lane !== 0) return `short got lane ${a.find(s => s.event.id === 'short')?.lane}, expected 0 (it does not overlap long)`
     // Non-overlapping spans of equal length share a lane.
     const b = packLanes([span('x', 0, 1), span('y', 3, 4)])
     if (b[0]?.lane !== 0 || b[1]?.lane !== 0) return `disjoint spans did not share a lane: ${b.map(s => s.lane).join(',')}`
@@ -1285,6 +1287,44 @@ const cases: Case[] = [
     const once = packLanes(input).map(s => `${s.event.id}:${s.lane}`).sort().join(' ')
     const again = packLanes([...input].reverse()).map(s => `${s.event.id}:${s.lane}`).sort().join(' ')
     if (once !== again) return `not deterministic:\n  ${once}\n  ${again}`
+    return null
+  }],
+
+  ['render: a bar hidden past capacity still lands in "+N" (Critical regression)', () => {
+    const ev = (id: string) => ({
+      id, title: id, category: 'work', allDay: true, start: asDay(0), end: asDay(0),
+    } as unknown as CalendarEvent)   // why: only id/allDay/category are read by packLanes
+    const span = (id: string, from: number, to: number): EventSpan => ({
+      event: ev(id), week: asWeek(0),
+      from: asOffset(from), to: asOffset(to), continuesBefore: false, continuesAfter: false,
+    })
+    // L (days 0-3) and M (days 2-5) overlap on days 2-3, so true interval
+    // packing forces them into different lanes: L takes lane 0 (same length,
+    // earlier start wins the tie-break), M takes lane 1. On day 4, M alone
+    // covers the day — L's span has already ended.
+    const packed = packLanes([span('L', 0, 3), span('M', 2, 5)])
+    const l = packed.find(p => p.event.id === 'L')
+    const m = packed.find(p => p.event.id === 'M')
+    if (l?.lane !== 0 || m?.lane !== 1) return `expected L:0 M:1, got L:${l?.lane} M:${m?.lane}`
+
+    // Mirror renderWeek's visibility arithmetic at cap = 1 (reachable at
+    // MIN_ROW_H on a landscape phone): only lane 0 is visible, so M is
+    // hidden everywhere it appears, including day 4 where it is the ONLY
+    // bar present. The old total-based formula (used[o] + chips - cap)
+    // computed used[4] = 1 (just M) and 1 + 0 - 1 = 0 — no "+N" at all,
+    // silently dropping M. The invariant under test: a hidden bar is
+    // counted directly, never inferred from a day's total occupancy.
+    const cap = 1
+    const visibleBars: number[] = [0, 0, 0, 0, 0, 0, 0]
+    const hiddenBars: number[] = [0, 0, 0, 0, 0, 0, 0]
+    for (const p of packed) {
+      const bucket = p.lane < cap ? visibleBars : hiddenBars
+      for (let o = p.from; o <= p.to; o++) bucket[o] = (bucket[o] ?? 0) + 1
+    }
+    if ((visibleBars[4] ?? 0) !== 0) return `expected day 4 to have no visible bar, got ${visibleBars[4]}`
+    const overflow = (hiddenBars[4] ?? 0) + 0   // no chips compete for room here
+    if (overflow <= 0) return `M vanished from day 4 with no "+N": overflow=${overflow}`
+    if (overflow !== 1) return `expected +1 on day 4, got +${overflow}`
     return null
   }],
 ]

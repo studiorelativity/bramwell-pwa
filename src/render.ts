@@ -14,12 +14,20 @@ export function packLanes(spans: EventSpan[]): PackedSpan[] {
     (b.to - b.from) - (a.to - a.from) ||
     a.from - b.from ||
     (a.event.id < b.event.id ? -1 : a.event.id > b.event.id ? 1 : 0))
-  const lastUsed: number[] = []   // lastUsed[lane] = rightmost offset occupied
+  // Per-lane interval lists: a span goes in the lowest lane whose existing
+  // intervals it genuinely does not overlap. Longest-first only orders
+  // placement; overlap is decided by true interval intersection, not by
+  // tracking each lane's rightmost occupied offset — that heuristic assumes
+  // spans arrive left to right, which longest-first does not guarantee (a
+  // later, earlier-starting, non-overlapping span could get shoved into a
+  // wasted lane).
+  const lanes: { from: number; to: number }[][] = []
   const out: PackedSpan[] = []
   for (const s of bars) {
     let lane = 0
-    while (lane < lastUsed.length && (lastUsed[lane] ?? -1) >= s.from) lane++
-    lastUsed[lane] = s.to
+    while (lane < lanes.length && lanes[lane]!.some(iv => s.from <= iv.to && s.to >= iv.from)) lane++
+    if (lane === lanes.length) lanes.push([])
+    lanes[lane]!.push({ from: s.from, to: s.to })
     out.push({ ...s, lane })
   }
   return out
@@ -37,15 +45,20 @@ function capacityFor(rowH: number): number {
 /** Fills a RECYCLED node; never creates one. Sets data-cat and nothing else
  *  per frame — all colour comes from categories.themeCss(). */
 export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[], rowH: number): void {
-  const mon = dayAt(week, asOffset(0))
   const t = today()
   const cap = capacityFor(rowH)
   const packed = packLanes(spans)
 
-  // Per-day counters collected DURING packing, not by a per-cell lookup
-  // afterwards (~98 redundant scans per repaint otherwise — DECISIONS).
-  const used: number[] = [0, 0, 0, 0, 0, 0, 0]
-  for (const p of packed) for (let o = p.from; o <= p.to; o++) used[o] = (used[o] ?? 0) + 1
+  // Per-day visible/hidden bar counts collected DURING packing, not by a
+  // per-cell lookup afterwards (~98 redundant scans per repaint otherwise —
+  // DECISIONS). A bar at or beyond capacity is HIDDEN, not skipped silently
+  // — it still has to land in a count so "+N" can report it.
+  const visibleBars: number[] = [0, 0, 0, 0, 0, 0, 0]
+  const hiddenBars: number[] = [0, 0, 0, 0, 0, 0, 0]
+  for (const p of packed) {
+    const bucket = p.lane < cap ? visibleBars : hiddenBars
+    for (let o = p.from; o <= p.to; o++) bucket[o] = (bucket[o] ?? 0) + 1
+  }
   const chips: EventSpan[][] = [[], [], [], [], [], [], []]
   for (const s of spans) if (!s.event.allDay) chips[s.from]!.push(s)
   for (const list of chips) list.sort((a, b) => (a.event.startMin ?? 0) - (b.event.startMin ?? 0))
@@ -77,18 +90,19 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
     }
 
     const chipList = chips[o] ?? []
-    const room = cap - (used[o] ?? 0)
-    if (room > 0 && chipList.length > 0) {
+    const room = Math.max(0, cap - (visibleBars[o] ?? 0))
+    const shown = Math.min(chipList.length, room)
+    if (shown > 0) {
       const box = document.createElement('div')
       box.className = 'chips'
-      for (const s of chipList.slice(0, room)) {
+      for (const s of chipList.slice(0, shown)) {
         const chip = document.createElement('div')
         chip.className = 'chip'
         chip.dataset['cat'] = s.event.category
         const dot = document.createElement('span'); dot.className = 'dot'
         const at = document.createElement('span'); at.className = 'at'
         const min = s.event.startMin ?? 0
-        at.textContent = `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`
+        at.textContent = `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
         const ttl = document.createElement('span'); ttl.className = 'ttl'
         ttl.textContent = s.event.title            // text nodes are not flex items (DECISIONS)
         chip.append(dot, at, ttl)
@@ -97,7 +111,9 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
       cell.append(box)
     }
 
-    const overflow = (used[o] ?? 0) + chipList.length - cap
+    // Nothing is suppressed without being counted: every bar hidden above
+    // and every chip cut off by room here lands in this total.
+    const overflow = (hiddenBars[o] ?? 0) + (chipList.length - shown)
     if (overflow > 0) {
       const more = document.createElement('span')
       more.className = 'more'
