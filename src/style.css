@@ -11,6 +11,7 @@
   --bar-r: 5px;
   --gap: 3px;
   --hdr-h: 56px;
+  --fab-inset: calc(64px + env(safe-area-inset-bottom));
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -32,7 +33,15 @@ html, body {
 }
 
 /* ---------- shell ---------- */
-#app { height: 100%; display: flex; flex-direction: column; }
+#app {
+  box-sizing: border-box;                /* the padding below must not add height */
+  height: 100%; display: flex; flex-direction: column;
+  /* The FAB is fixed, so it cannot push content: the scroller (flex: 1) is shrunk
+     by exactly its footprint instead, and scroll.ts re-derives rowHeight from the
+     smaller clientHeight with no engine change. Costs a strip on desktop too —
+     the deterministic alternative to floating it and hoping. */
+  padding-bottom: var(--fab-inset);
+}
 
 .hdr {
   height: var(--hdr-h); flex: none;
@@ -231,6 +240,66 @@ html, body {
 
 /* Any selector that sets display must re-assert [hidden] (CONVENTIONS). */
 [hidden] { display: none !important; }
+
+/* ---------- shell chrome (stage 05) ---------- */
+/* `place-items: safe center` + overflow-y so Connect stays reachable on the
+   shortest phone: plain `center` clips the top of an over-tall card (SPEC). */
+#firstrun {
+  position: fixed; inset: 0; z-index: 20;
+  background: var(--surface); color: var(--ink);
+  display: grid; place-items: safe center; overflow-y: auto;
+  padding:
+    calc(24px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right))
+    calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
+}
+.set-fr-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; max-width: 340px; }
+.set-fr-mark {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: var(--band-b); box-shadow: var(--el-rest);
+  display: grid; place-items: center; font-size: 22px; font-weight: 700;
+}
+.set-fr-name { margin: 4px 0 0; font-size: 22px; font-weight: 620; }
+.set-fr-desc { margin: 0; color: var(--ink-dim); }
+.set-fr-lines { margin: 6px 0 10px; padding-left: 18px; color: var(--ink-dim); display: flex; flex-direction: column; gap: 4px; }
+.set-fr-connect {
+  font: inherit; font-weight: 620; color: var(--surface); background: var(--ink);
+  border: 0; border-radius: 10px; padding: 11px 18px; width: 100%;
+}
+.set-fr-demo {
+  font: inherit; color: var(--ink); background: var(--band-b-end);
+  border: 0; border-radius: 10px; padding: 11px 18px; width: 100%;
+}
+.set-fr-demo:disabled { opacity: .45; }
+.set-fr-note { margin: 0; font-size: 12px; color: var(--ink-dim); }
+.set-fr-support { margin-top: 8px; font-size: 12px; color: var(--ink-dim); }
+
+.set-avatar {
+  position: relative; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--band-b); border: 0; padding: 0; box-shadow: var(--el-rest);
+}
+.set-avatar-dot {
+  position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px;
+  border-radius: 50%; background: var(--today);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.set-pill {
+  font: inherit; font-size: 12px; font-weight: 620;
+  color: var(--surface); background: var(--cat-err);
+  border: 0; border-radius: 999px; padding: 5px 10px;
+}
+
+/* Reserved by #app's padding-bottom (below) so it can never sit on the last
+   row's Sunday events (SPEC "Layout details"; gate row). */
+.set-fab {
+  position: fixed; z-index: 12;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  width: 48px; height: 48px; border-radius: 50%;
+  font: inherit; font-size: 24px; line-height: 1;
+  color: var(--surface); background: var(--ink);
+  border: 0; box-shadow: var(--el-hover);
+}
+.set-fab:disabled { opacity: .35; }
 
 /* ---------- year view ---------- */
 .yearview { flex: 1; overflow: auto; position: relative; }
