@@ -272,12 +272,27 @@ async function withToken<T>(fn: (t: string) => Promise<T>): Promise<T> {
     authGate = true
     throw e
   }
+  // Any successful token acquisition is a successful renewal, whatever path asked for
+  // it — a background load or a write's gesture — so background loading must resume
+  // (SPEC "State API": the gate clears "on a successful signIn() or renewal").
+  authGate = false
   try {
     return await fn(t)
   } catch (e) {
     if (!(e instanceof GcalError) || e.status !== 401) throw e
+    let t2: string
     try {
-      return await fn(await getToken(true))
+      t2 = await getToken(true)
+    } catch (renewalError) {
+      // The forced renewal itself failed: symmetric with the opening getToken() above,
+      // this IS an identity failure (may be an AuthError, not a GcalError) and must
+      // arm the gate the same way, not just fall through unnoticed.
+      authGate = true
+      throw renewalError
+    }
+    authGate = false   // a successful forced renewal is a successful renewal too.
+    try {
+      return await fn(t2)
     } catch (retryError) {
       // A freshly minted token was rejected too, so the grant is gone rather than stale.
       // Clear locally — never revoke — so isSignedIn() goes false and stage 05's reconnect

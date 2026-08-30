@@ -432,6 +432,10 @@ if (new URLSearchParams(location.search).has('selftest')) {
       ctl.invalidate()
       yearCtl?.invalidate()
     },
+    // Symmetric with day.ts's onFormClosed below: releaseHeldRepaint is a safe
+    // no-op when nothing is held, and re-runs syncConnection so auth checked
+    // behind a closed sheet is not lost.
+    onSheetClosed: () => releaseHeldRepaint(),
   })
 
   day.configure({
@@ -484,6 +488,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     if (t instanceof HTMLElement && (t.isContentEditable || /^(?:INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
     if (openDay !== null) return
     if (chromeCtl.isSheetOpen()) return   // the sheet is transient UI; n must not fire behind it
+    if (!chromeCtl.isConnected()) return  // n is the FAB's keyboard twin; gate on the same fact
     e.preventDefault()
     addHere()
   })

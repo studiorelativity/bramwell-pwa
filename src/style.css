@@ -55,8 +55,10 @@ html, body {
 .hdr-spacer { flex: 1; }
 .hdr button { font: inherit; color: var(--ink); background: none; border: 0; padding: 6px 10px; border-radius: 8px; }
 .hdr button[aria-pressed="true"] { background: var(--band-b); }
-/* Stage 05 fills this; reserved so the header is not restructured later. */
-.hdr-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--band-b); }
+/* A slot, not a control: chrome.ts paints .set-avatar or .set-pill inside it
+   (SPEC "First-run and connection state"). A fixed width here clipped the
+   Reconnect pill off-screen and made its centre unhittable. */
+.hdr-avatar { display: flex; align-items: center; min-width: 28px; height: 28px; }
 
 .scroller { position: relative; flex: 1; overflow: hidden; touch-action: none; }
 

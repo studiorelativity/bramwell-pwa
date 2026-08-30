@@ -36,6 +36,11 @@ export type ChromeHost = {
   onConnected(): void
   /** Prefs were written: main.ts re-runs applyTheme and repaints. */
   onPrefsChanged(): void
+  /** The sheet closed. Symmetric with day.ts's onFormClosed: main.ts holds a
+   *  background repaint while the sheet is open (CONVENTIONS transient-UI rule)
+   *  and needs a moment to release it. Without this the held repaint never
+   *  runs and syncConnection never re-checks auth. */
+  onSheetClosed(): void
 }
 
 export type ChromeController = {
@@ -49,6 +54,9 @@ export type ChromeController = {
    *  while signed in, which headless Chrome cannot be — so the sheet's probes
    *  would otherwise be unreachable (scripts/shot.mjs). */
   openSheet(): void
+  /** True only in the connected state. The FAB disables itself on this; `n` is
+   *  the FAB's keyboard twin and must gate on the same fact. */
+  isConnected(): boolean
 }
 
 /** Created on first use, so this module stays free of DOM at module scope. */
@@ -346,7 +354,10 @@ function buildSheet(): HTMLElement {
   out.id = 'signout'
   out.type = 'button'
   out.addEventListener('click', () => {
-    void auth.signOut().finally(() => { closeSheet(); syncRef?.() })
+    // Mark BEFORE the resync: syncRef -> syncConnection reads leftDeliberately to
+    // land on first-run rather than stale (SPEC "Settings": "sign-out returns to
+    // first-run" — the cache is still warm the instant signOut() resolves).
+    void auth.signOut().finally(() => { markLeftRef?.(); closeSheet(); syncRef?.() })
   })
   acct.append(out)
   body.append(acct)
@@ -408,10 +419,17 @@ function buildSheet(): HTMLElement {
 /** Set by mount; the sheet's sign-out row needs to re-sync the connection. */
 let syncRef: (() => void) | null = null
 
+/** Set by mount; the sheet's sign-out row needs to mark the departure as
+ *  deliberate BEFORE syncRef's resync runs (see `leftDeliberately` in mount). */
+let markLeftRef: (() => void) | null = null
+
 function closeSheet(): void {
-  if (sheet === null) return
+  // Guard on already-hidden too, not just null: a no-op close (e.g. a second
+  // Escape, or signing out from an already-closing sheet) must not notify.
+  if (sheet === null || sheet.hidden) return
   sheet.hidden = true
   if (scrim !== null) scrim.hidden = true
+  hostRef?.onSheetClosed()
 }
 
 function toggleSheet(): void {
@@ -437,15 +455,25 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
   /** True once the grace has elapsed for the CURRENT stale spell. Reset whenever
    *  the connection state changes, so a reconnect-then-drop waits again. */
   let graced = false
+  /** Set when the user signs out from the sheet; outranks `warmCache()` so
+   *  sign-out returns to first-run as SPEC "Settings" requires, even though the
+   *  cache is still warm the instant `signOut()` resolves. NOT persisted — a
+   *  later reload with a warm cache legitimately returns to `stale` plus the
+   *  pill, because the cache really is warm and the grant really was revoked. */
+  let leftDeliberately = false
 
   hostRef = host
   syncRef = () => { api.syncConnection() }
+  markLeftRef = () => { leftDeliberately = true }
 
   let firstRun: HTMLElement | null = null
 
   function connect(): void {
     void auth.signIn().then(
-      () => { state.clearAuthGate(); host.onConnected(); api.syncConnection() },
+      () => {
+        leftDeliberately = false   // a session began; outrank nothing now.
+        state.clearAuthGate(); host.onConnected(); api.syncConnection()
+      },
       (e: Error) => { toast(e.message); api.syncConnection() },
     )
   }
@@ -476,7 +504,12 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
 
   const api: ChromeController = {
     syncConnection(): void {
-      const next: Conn = auth.isSignedIn() ? 'connected' : host.warmCache() ? 'stale' : 'first-run'
+      // leftDeliberately outranks warmCache(): SPEC "Settings" — sign-out returns
+      // to first-run, even though the cache the user leaves behind is still warm.
+      const next: Conn = auth.isSignedIn() ? 'connected'
+        : leftDeliberately ? 'first-run'
+        : host.warmCache() ? 'stale'
+        : 'first-run'
       if (next !== conn) {
         conn = next
         graced = false
@@ -498,6 +531,7 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
     },
     isSheetOpen(): boolean { return sheet !== null && !sheet.hidden },
     openSheet(): void { if (!api.isSheetOpen()) toggleSheet() },
+    isConnected(): boolean { return conn === 'connected' },
   }
 
   const fab = el('button', 'set-fab', '+')

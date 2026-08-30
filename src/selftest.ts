@@ -1524,6 +1524,51 @@ const cases: Case[] = [
     } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
+
+  ['state: a successful write-path renewal clears the auth gate on its own', async () => {
+    const savedAnchor = today()
+    // Reply 0 fails (arms the gate on a background load); reply 1+ succeeds (a write's
+    // gesture, then anything after it — stubGis repeats the last reply).
+    const s = stubStorage(), g = stubGis([{ error: 'popup_failed' }, { access_token: 'tok-good', expires_in: 3600 }])
+    const f = stubFetch([
+      { body: { id: 'real-9', summary: 'T', colorId: '9', start: { date: '2026-03-05' }, end: { date: '2026-03-05' } } },
+      { body: { items: [{ id: 'real-9', summary: 'T', colorId: '9', start: { date: '2026-03-05' }, end: { date: '2026-03-05' } }] } },
+      { body: { items: [] } },
+    ])
+    try {
+      _resetForTest(); configure({})
+      _setAnchorForTest(civilToDay(2026, 2, 11))
+      // Arm the gate the same way as the case above: a background load whose opening
+      // getToken() rejects.
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (monthState('2026-02') !== 'error') return `state after a failed token: ${monthState('2026-02')}`
+      const cold = g.prompts.length
+      // A write in a DIFFERENT month (March), so its own refetch never touches the
+      // still-`error` February month — isolating what the gate, not the refetch,
+      // does for February.
+      const draft: EventDraft = {
+        title: 'T', category: 'work', allDay: true,
+        start: civilToDay(2026, 3, 5), end: civilToDay(2026, 3, 5), repeat: 'none',
+      }
+      const saved = await createEvent(draft).then(v => v, (e: Error) => { throw e })
+      if (saved.id !== 'real-9') return `create did not resolve: ${JSON.stringify(saved)}`
+      if (g.prompts.length <= cold) return 'the write never asked for a token'
+      // THE BUG: withToken's opening getToken() succeeded for the write, but never
+      // cleared authGate. February is still `error`; a background load over it must
+      // now actually go fetch, because a successful token acquisition on ANY path —
+      // not just clearAuthGate() — is a successful renewal (SPEC "State API").
+      // getToken() caches the token the write just acquired, so this second
+      // acquisition resolves from cache with no NEW GIS prompt — the wire call is
+      // the observable signal here, not the prompt count.
+      const beforeCalls = f.calls.length
+      ensureMonthsFor([asWeek(0)])
+      await _settleForTest()
+      if (f.calls.length === beforeCalls) return 'the gate never cleared: no wire request for February after a successful write'
+      if (monthState('2026-02') === 'error') return 'February is still `error` after the gate should have cleared'
+    } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
+    return null
+  }],
 ]
 
 export async function selfTest(): Promise<SelfTestResult[]> {
