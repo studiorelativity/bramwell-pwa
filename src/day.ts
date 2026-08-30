@@ -461,7 +461,11 @@ export function closeForm(): void {
   host.onFormClosed()
 }
 
-/** The FAB entry point (stage 05 calls it): expand the day and open a blank form. */
+/** The FAB entry point (stage 05 calls it): open a blank form for `d`, PROVIDED
+ *  `d` is already the day showing in the panel. It does not expand anything
+ *  itself — stage 05's FAB is expected to expand the day first (main.ts's
+ *  openDayAt) and call this once that has happened; called against a day that
+ *  is not yet shown, or before `panel` exists, it silently does nothing. */
 export function openAdd(d: DayNumber): void {
   if (shown !== d || panel === null) return
   openForm(d, null)
