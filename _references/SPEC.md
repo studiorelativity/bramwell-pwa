@@ -117,8 +117,10 @@ bar treatment, restraint).
   through tile surface value (in-month vs out-month, weekend shade).
 - Exactly three elevation levels: resting cell, hovered cell, open day.
   Nothing else casts a shadow.
-- Hover: cell lifts `translateY(-2px)`, shadow deepens, a 1px accent ring
-  fades in (compositor properties only).
+- Hover: cell lifts `translateY(-2px)`, shadow deepens, a 1px neutral ring
+  (`--ring`, never `--today` — that hue is reserved for today's own mark and
+  used for nothing else) fades in (compositor properties only: opacity and
+  transform, never box-shadow, which repaints every frame).
 - Today: accent inset ring on the cell plus accent day number. `--today`
   is the one reserved hue outside the categories and is used for nothing
   else. Today is distinguished by **form** so a red category can never
