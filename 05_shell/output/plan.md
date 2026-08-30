@@ -1638,7 +1638,7 @@ Add these rows, following the file's existing probe structure:
 2. **no first-run over a warm cache** — with the existing `SEED` in place, assert `#firstrun` is absent or `[hidden]` (SPEC: it never covers a warm cache).
 3. **the reconnect pill** — with `SEED` and signed out, **report** whether `#reconnect` is present and, if so, `HIT('#reconnect')`. Do **not** assert on its absence: the run advances under `--virtual-time-budget`, so 2.5s of virtual time may well have elapsed before the DOM is dumped, and an absence assertion here would be flaky rather than informative. The grace's *timing* is a gate row a human judges on device; this probe only proves the pill is reachable when it is up.
 4. **the avatar opens the sheet** — force `connected` by stubbing `window.bramwell` is not possible (auth is real); instead assert that when `#avatar` exists, `HIT('#avatar')` is `hits: true`. Record the signed-out case as "pill path exercised, avatar path is a gate item".
-5. **the FAB clears the last row's Sunday** — this is the gate row. Find the bottom-most `.week`'s Sunday cell, take its `.chips` (or the cell itself when there are no chips), and assert `HIT` on it does **not** resolve into `#fab`:
+5. **the FAB clears the last row's Sunday** — this is the gate row. **It MUST run on its own fresh navigation**, the way `probeFirstRunCold` isolates itself. Run it inside the main viewport loop and an earlier probe's input focus drifts `innerHeight` (844 -> 951 under headless mobile emulation), corrupting both the row selection and the hit-test coordinates. Assert `fabTop === innerHeight - 64` and print both: `#fab`'s CSS is static, so any other value means the viewport is lying to you. Find the bottom-most `.week`'s Sunday cell, take its `.chips` (or the cell itself when there are no chips), and assert `HIT` on it does **not** resolve into `#fab`:
 
 ```js
 const FAB_CLEARS = `() => {
@@ -1692,10 +1692,13 @@ prefs. A non-empty `bad` names the exact row and option that broke the invariant
 ```js
 const PENDING_ADD_LEAK = `() => {
   const b = window.bramwell
-  // Arm via the FAB, then switch days before the queued rAF runs. The second
-  // openDayAt must DISARM the pending add; if it does not, the later tap back
-  // onto the first day opens a form nobody asked for.
-  document.getElementById('fab').dispatchEvent(new PointerEvent('click', {bubbles: true}))
+  // Driven through the seam, NOT by clicking #fab: the FAB is disabled in every
+  // state this harness can reach (it seeds a warm cache while signed out, so the
+  // app sits in `stale`), and a real pointer press on a disabled button
+  // dispatches no click at all — only a script can. Clicking it synthetically
+  // would exercise a path no user has. main.ts's DEV-only seam exposes addHere
+  // for exactly this reason.
+  b.addHere()
   const cells = [...document.querySelectorAll('.day[data-day]')]
   const other = cells.find(c => !c.hasAttribute('data-open'))
   if (other === undefined) return { ok: false, why: 'no second day cell' }
@@ -1706,7 +1709,7 @@ const PENDING_ADD_LEAK = `() => {
     other.dispatchEvent(new PointerEvent(t, {bubbles: true, clientX: x, clientY: y}))
   }
   return { armedThenSwitched: true, openedDay: d2, formOpen: b.day.isFormOpen() }
-}\`
+}`
 ```
 
 Run it, then let a frame pass, then tap back onto the ORIGINAL FAB day and report `b.day.isFormOpen()`. Expected: **false** — the form must not reopen. A `true` there is the leak.
