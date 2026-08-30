@@ -26,6 +26,17 @@ const MOTION = ['no-preference', 'reduce']
 // 30 Aug, exactly three rows) for the wrap test; a month boundary inside the
 // week of 31 Aug for the band-split test; five overlapping all-day events on
 // one day so the year grid's 3-bar cap and the panel's "lists them all" differ.
+// jumpstack (Sep 13, 150 events, its own day, untouched by any other check)
+// is for probeJumpStamp below: expanding a day is the only way to move `y`
+// without clearing the animation gate first, but fitY caps the shift at
+// `top` — the row's OWN distance from the viewport's top edge (scroll.ts:
+// "keeps the expanded row on screen without pushing its top off") — so a
+// bigger delta alone does not help once bottom - viewportH exceeds top;
+// only the row's POSITION does, and it must still be ON SCREEN for a tap
+// to land at all (elementFromPoint sees nothing below the viewport). Two
+// weeks after "Today" (which docks near vertical centre) is far enough
+// down for a large top, close enough to stay visible at all three tested
+// viewports — confirmed directly (6 rows stamped, every time, at each).
 const SEED = (() => {
   const day = (y, m, d) => Date.UTC(y, m - 1, d) / 86400000
   const ev = (id, s, e, colorId) => ({ id, title: id, allDay: true, colorId, start: s, end: e })
@@ -37,10 +48,14 @@ const SEED = (() => {
     timed('nine-fifteen', day(2026, 8, 12), 9 * 60 + 15, '3'),
     ...[1, 2, 3, 4, 5].map(i => ev(`stack-${i}`, day(2026, 8, 20), day(2026, 8, 20), String(i))),
   ]
-  const sep = [ev('sept', day(2026, 9, 2), day(2026, 9, 3), '5')]
+  const sep = [
+    ev('sept', day(2026, 9, 2), day(2026, 9, 3), '5'),
+    ...Array.from({ length: 150 }, (_, i) => ev(`jumpstack-${i}`, day(2026, 9, 13), day(2026, 9, 13), String(i % 10))),
+  ]
   for (const [key, list] of [['2026-08', aug], ['2026-09', sep]]) months[key] = { state: 'ready', fetchedAt: Date.now(), events: list }
   return JSON.stringify({ v: 1, months })
 })()
+const JUMPSTACK_DAY = Date.UTC(2026, 8, 13) / 86400000
 
 // ---- driver ----
 const port = 9300 + Math.floor(Math.random() * 500)
@@ -72,6 +87,64 @@ async function evalJs(expression) {
 }
 await send('Page.enable'); await send('Runtime.enable')
 await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('bramwell.cache.v1', ${JSON.stringify(SEED)})` })
+
+// The positive jump-stamp case (Important 4): jumpDuringSteadyState/
+// jumpAfterSettle only prove the guard never leaks, never that data-jump
+// can fire at all — every user-facing path that moves the scroll position
+// (pointerdown, wheel, goToWeek) clears the gate as its OWN first
+// statement, so none of them can ever exercise the stamp while data-anim
+// is set. A window resize looked like the one remaining path (it
+// recomputes rowH without touching the gate), but measure() resets EVERY
+// slot's own bookkeeping before refilling — the same full-reset shape
+// invalidate() uses, which the guard is already, correctly, exempt from
+// (a slot whose `prev` was just cleared to null can never look "recycled
+// from a different week"). Confirmed by direct instrumentation: a real
+// CDP viewport change during an expand reassigns pool slots but never
+// stamps any of them.
+// The one path that DOES leave `prev` intact while moving what a slot
+// resolves to: setExpanded's own `y = fitY(...)` repositioning, right
+// after the open row's height changes — invalidate() only reset ONE slot
+// (the day being opened), so every other slot's assigned[] is untouched
+// when fitY's shift lands. An ordinary day's content is far too small to
+// move it; jumpstack (SEED above) is sized and positioned specifically to
+// reassign multiple slots — see the SEED comment for why both matter.
+async function probeJumpStamp() {
+  // A fresh navigation, not reusing PROBE's page state: whether fitY's
+  // shift crosses a row boundary is sensitive to the exact sub-pixel
+  // scroll position, and PROBE leaves the page well-scrolled-through
+  // (settle, year-back, two Todays, wheel drags, an escape sequence) —
+  // confirmed directly that reusing that state, vs. a clean reload, is the
+  // difference between this reliably reassigning a pool slot and not.
+  loaded = false
+  await send('Page.navigate', { url: URL_ })
+  for (let i = 0; i < 100 && !loaded; i++) await sleep(100)
+  await sleep(1200)
+  await evalJs("document.getElementById('btn-today').click()")
+  await sleep(1500)
+  const tapped = await evalJs(`(() => {
+    const centre = el => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] }
+    const target = document.querySelector('.day[data-day="${JUMPSTACK_DAY}"]')
+    if (target === null) return false
+    const [x, y] = centre(target)
+    const opts = { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'mouse', isPrimary: true }
+    target.dispatchEvent(new PointerEvent('pointerdown', opts))
+    target.dispatchEvent(new PointerEvent('pointerup', opts))
+    return true
+  })()`)
+  if (!tapped) return null
+  // Polled across several animation frames, not a flat sleep: the
+  // reassignment happens inside setExpanded's own fitY-then-place() call,
+  // one frame after the tap, and the stamp is cleared again the moment
+  // anything next calls setAnim.
+  return await evalJs(`(async () => {
+    const waitFrame = () => new Promise(r => requestAnimationFrame(r))
+    for (let i = 0; i < 30; i++) {
+      await waitFrame()
+      if (document.querySelectorAll('.week[data-anim][data-jump]').length > 0) return true
+    }
+    return false
+  })()`)
+}
 
 // ---- the claims ----
 const PROBE = `(async () => {
@@ -209,17 +282,33 @@ const PROBE = `(async () => {
   const animAttr = await waitForAnim(targetRow)
   const animDurMs = Math.round((parseFloat(getComputedStyle(targetRow).transitionDuration) +
                                 parseFloat(getComputedStyle(targetRow).transitionDelay)) * 1000)
-  // Mid-flight: the column width must be strictly between its start and end, which
-  // is what distinguishes interpolation from a snap.
-  await sleep(Math.max(20, Math.round(animDurMs / 2)))
+  // Mid-flight, sampled at ~20% of the duration, not 50%: the expand's
+  // easing is --ease-spring (cubic-bezier(0.34, 1.56, 0.64, 1)), which
+  // OVERSHOOTS — progress exceeds 1 from roughly 35% to 85% of the
+  // duration. A sample at the temporal midpoint lands inside that window,
+  // so a perfectly interpolating expand reads PAST the end value there and
+  // a naive "strictly between start and end" check reports false
+  // regardless of whether the app actually animates (it did, on prior
+  // rounds; the instrument, not the app, was what always failed). 20% is
+  // safely before the overshoot starts. The assertions below also compare
+  // against BOTH endpoints independently rather than "strictly between",
+  // which stays correct even if the overshoot window's edges shift.
+  const midDelayMs = Math.max(20, Math.round(animDurMs * 0.2))
+  await sleep(midDelayMs)
   const openCellNow = document.querySelector('.day[data-open]')
   const midW = openCellNow === null ? 0 : openCellNow.getBoundingClientRect().width
-  // (c) .bars is a brand-new node every fill (render.renderWeek), tracking .week only
+  const midRow = openCellNow === null ? null : openCellNow.closest('.week')
+  // The spring overshoots height too, so this is sampled at the same
+  // corrected point as midW — the probe that would have caught the open
+  // row losing its OWN transform/height/column-gap eligibility when a
+  // same-specificity, later-source-order rule for grid-template-columns
+  // alone quietly won for the row carrying both gate attributes.
+  const midRowH = midRow === null ? 0 : midRow.getBoundingClientRect().height
+  // .bars is a brand-new node every fill (render.renderWeek), tracking .week only
   // via grid-template-columns: inherit (style.css). At rest the two strings agreeing
   // is easy; mid-transition is the real test, because inherit must re-resolve every
   // frame against .week's currently-interpolating computed value, not a value copied
   // once at creation. Sampled at the same instant as midW above.
-  const midRow = openCellNow === null ? null : openCellNow.closest('.week')
   const midWeekCols = midRow === null ? null : cols(midRow)
   const midBarsCols = midRow === null ? null : cols(midRow.querySelector('.bars'))
   const barsTrackDuringAnim = midRow !== null && midBarsCols !== null && colsClose(midBarsCols, midWeekCols)
@@ -232,9 +321,20 @@ const PROBE = `(async () => {
   // "panel" to .yrpanel in this same PROBE scope, and the brief's snippet reused it.
   const dpPanel = document.querySelector('.dp')
   const endW = openCell === null ? 0 : openCell.getBoundingClientRect().width
-  // Strictly between the resting width and the open width is what separates
-  // interpolation from a snap — measured, not assumed from the browser version.
-  const columnsInterpolated = midW > Math.min(restCellW, endW) + 1 && midW < Math.max(restCellW, endW) - 1
+  // Differs from BOTH endpoints by more than 1px — not "strictly between",
+  // which the spring's overshoot can violate even for a genuinely
+  // interpolating value (see the sampling comment above). Differing from
+  // both is what a snap (stuck at rest, or already at the end) can never
+  // produce, regardless of which side of "between" an overshoot lands on.
+  const columnsInterpolated = Math.abs(midW - restCellW) > 1 && Math.abs(midW - endW) > 1
+  // The probe that would have caught the split-gate rule collision: with
+  // both gate attributes on the open row, transition-property is NOT
+  // additive between same-specificity rules, so the row that grows can
+  // lose transform/height/column-gap eligibility to whichever rule has
+  // later source order, even while grid-template-columns itself still
+  // eases correctly. Strictly between is safe HERE because 20% is before
+  // the spring's overshoot window starts (see the sampling comment above).
+  const rowHeightInterpolated = midRowH > Math.min(restRowH, openRowH) + 1 && midRowH < Math.max(restRowH, openRowH) - 1
   const barsTrackColumns = openRow !== null && colsClose(cols(openRow.querySelector('.bars')), cols(openRow))
   const neighbours = openRow === null ? [] : [...openRow.querySelectorAll('.day')]
     .filter(d => d !== openCell).map(d => Math.round(d.getBoundingClientRect().width))
@@ -257,16 +357,19 @@ const PROBE = `(async () => {
   const switchRestNarrowW = switchTarget === null ? 0 : switchTarget.getBoundingClientRect().width
   const switchRestWideW = endW                                   // the currently-open (wide) resting width
   if (switchTarget !== null) tap(switchTarget)
-  await sleep(Math.max(20, Math.round(animDurMs / 2)))
+  // Same corrected sampling point as the initial expand above — the spring
+  // overshoot window applies here too, it is the same transition.
+  await sleep(midDelayMs)
   const switchMidCell = document.querySelector('.day[data-open]')
   const switchMidW = switchMidCell === null ? 0 : switchMidCell.getBoundingClientRect().width
   await sleep(animDurMs + 200)
   const switchEndCell = document.querySelector('.day[data-open]')
   const switchEndW = switchEndCell === null ? 0 : switchEndCell.getBoundingClientRect().width
   const switchStillSameRow = switchEndCell !== null && switchEndCell.closest('.week') === targetRow
+  // Differs from BOTH endpoints by more than 1px — same correction as
+  // columnsInterpolated above, same reason (the spring overshoot).
   const sameWeekSwitchAnimated = switchTarget !== null &&
-    switchMidW > Math.min(switchRestNarrowW, switchRestWideW) + 1 &&
-    switchMidW < Math.max(switchRestNarrowW, switchRestWideW) - 1
+    Math.abs(switchMidW - switchRestNarrowW) > 1 && Math.abs(switchMidW - switchRestWideW) > 1
   const sameWeekSwitchWidths = {
     restNarrowW: Math.round(switchRestNarrowW), restWideW: Math.round(switchRestWideW),
     midW: Math.round(switchMidW), endW: Math.round(switchEndW),
@@ -336,12 +439,20 @@ const PROBE = `(async () => {
   const formClosedByFirstEscape = document.querySelector('.dp-form') === null
   const dayStillOpenAfterFirstEscape = document.querySelector('.day[data-open]') !== null
 
+  // Re-find the row that actually carries the open day right before THIS
+  // Escape, not targetRow: targetRow's pool slot has almost certainly been
+  // recycled to an unrelated week by the six wheel events and the settle
+  // above (Important 7 review) — asserting against a stale reference
+  // either tests a row that was never expanded (trivially "at rest") or
+  // an unrelated row entirely, not the one this Escape actually collapses.
+  const rowBeforeCollapse = document.querySelector('.day[data-open]')?.closest('.week') ?? null
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
   await sleep(animDurMs + 400)
   const collapsedByEscape = document.querySelector('.day[data-open]') === null
   const panelDetached = document.querySelector('.dp') === null
-  const rowBackToRest = Math.abs(Math.round(targetRow.getBoundingClientRect().height) - restRowH) <= 1
-  const colsBackToRest = cols(targetRow) === restCols
+  const rowBackToRest = rowBeforeCollapse !== null &&
+    Math.abs(Math.round(rowBeforeCollapse.getBoundingClientRect().height) - restRowH) <= 1
+  const colsBackToRest = rowBeforeCollapse !== null && cols(rowBeforeCollapse) === restCols
 
   return {
     weekNodes: rows().length, rowH, gaps: [...new Set(gaps)],
@@ -360,7 +471,7 @@ const PROBE = `(async () => {
 
     dayHitBeforeOpen, animAttr, animDurMs, restRowH, openRowH, restCellW: Math.round(restCellW),
     expandedGrew: openRowH > restRowH, panelPresent: dpPanel !== null,
-    columnsInterpolated, barsMatchAtRest, barsTrackColumns, barsTrackDuringAnim, midWeekCols, midBarsCols,
+    columnsInterpolated, rowHeightInterpolated, barsMatchAtRest, barsTrackColumns, barsTrackDuringAnim, midWeekCols, midBarsCols,
     neighbourWidths: [...new Set(neighbours)], gapBelowEqualsOpenRow: gapBelow === openRowH,
     expandedRowFitsViewport, stillOpenAfterScroll, animAttrAfterScroll,
     jumpDuringSteadyState, jumpAfterSettle,
@@ -386,7 +497,11 @@ for (const [w, h] of VIEWPORTS) {
       await send('Page.navigate', { url: URL_ })
       for (let i = 0; i < 100 && !loaded; i++) await sleep(100)
       await sleep(800)
-      try { results.push({ viewport: `${w}x${h}`, scheme, motion, ...(await evalJs(PROBE)) }) }
+      try {
+        const row = { viewport: `${w}x${h}`, scheme, motion, ...(await evalJs(PROBE)) }
+        row.jumpStampedOnRecycle = await probeJumpStamp()
+        results.push(row)
+      }
       catch (e) {
         const body = await evalJs("document.body.innerHTML.replace(/<div class=\"week\"[\\s\\S]*?<\\/div><\\/div>/g, '[week]').slice(0, 400)").catch(String)
         const ls = await evalJs("(() => { try { return Object.keys(localStorage).join() } catch (e) { return String(e) } })()").catch(String)
