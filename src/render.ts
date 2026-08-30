@@ -42,6 +42,33 @@ function capacityFor(rowH: number): number {
   return Math.max(0, Math.floor((rowH - HEAD_H - FOOT_H) / BAR_H))
 }
 
+export type DayVisibility = { visibleBars: number; hiddenBars: number; chipsShown: number; overflow: number }
+
+/** Pure per-day accounting of what a row can actually show, given the bars
+ *  `packLanes` already placed and how many timed chips start on each day.
+ *  Exported so the selftest pins this exact arithmetic under bare node
+ *  rather than a copy of it — `renderWeek` calls this same function, it
+ *  does not re-derive the numbers. Always returns exactly seven entries,
+ *  one per day offset 0..6.
+ *
+ *  A bar is HIDDEN, not skipped silently, when its lane is at or beyond
+ *  `cap` — it still has to land in `overflow` so "+N" can report it.
+ *  Nothing is suppressed without being counted. */
+export function visibilityFor(packed: PackedSpan[], chipCounts: number[], cap: number): DayVisibility[] {
+  const visibleBars: number[] = [0, 0, 0, 0, 0, 0, 0]
+  const hiddenBars: number[] = [0, 0, 0, 0, 0, 0, 0]
+  for (const p of packed) {
+    const bucket = p.lane < cap ? visibleBars : hiddenBars
+    for (let o = p.from; o <= p.to; o++) bucket[o] = (bucket[o] ?? 0) + 1
+  }
+  return visibleBars.map((v, o) => {
+    const h = hiddenBars[o] ?? 0
+    const chips = chipCounts[o] ?? 0
+    const chipsShown = Math.min(chips, Math.max(0, cap - v))
+    return { visibleBars: v, hiddenBars: h, chipsShown, overflow: h + (chips - chipsShown) }
+  })
+}
+
 /** Fills a RECYCLED node; never creates one. Sets data-cat and nothing else
  *  per frame — all colour comes from categories.themeCss(). */
 export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[], rowH: number): void {
@@ -49,19 +76,10 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
   const cap = capacityFor(rowH)
   const packed = packLanes(spans)
 
-  // Per-day visible/hidden bar counts collected DURING packing, not by a
-  // per-cell lookup afterwards (~98 redundant scans per repaint otherwise —
-  // DECISIONS). A bar at or beyond capacity is HIDDEN, not skipped silently
-  // — it still has to land in a count so "+N" can report it.
-  const visibleBars: number[] = [0, 0, 0, 0, 0, 0, 0]
-  const hiddenBars: number[] = [0, 0, 0, 0, 0, 0, 0]
-  for (const p of packed) {
-    const bucket = p.lane < cap ? visibleBars : hiddenBars
-    for (let o = p.from; o <= p.to; o++) bucket[o] = (bucket[o] ?? 0) + 1
-  }
   const chips: EventSpan[][] = [[], [], [], [], [], [], []]
   for (const s of spans) if (!s.event.allDay) chips[s.from]!.push(s)
   for (const list of chips) list.sort((a, b) => (a.event.startMin ?? 0) - (b.event.startMin ?? 0))
+  const visibility = visibilityFor(packed, chips.map(list => list.length), cap)
 
   node.replaceChildren()
   let firstOfMonth = -1
@@ -90,8 +108,7 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
     }
 
     const chipList = chips[o] ?? []
-    const room = Math.max(0, cap - (visibleBars[o] ?? 0))
-    const shown = Math.min(chipList.length, room)
+    const { chipsShown: shown, overflow } = visibility[o] ?? { visibleBars: 0, hiddenBars: 0, chipsShown: 0, overflow: 0 }
     if (shown > 0) {
       const box = document.createElement('div')
       box.className = 'chips'
@@ -111,9 +128,8 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
       cell.append(box)
     }
 
-    // Nothing is suppressed without being counted: every bar hidden above
-    // and every chip cut off by room here lands in this total.
-    const overflow = (hiddenBars[o] ?? 0) + (chipList.length - shown)
+    // overflow comes straight from visibilityFor: nothing is suppressed
+    // without being counted.
     if (overflow > 0) {
       const more = document.createElement('span')
       more.className = 'more'

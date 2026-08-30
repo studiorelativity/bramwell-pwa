@@ -22,7 +22,8 @@ import {
   settleMs, snapTargetY, weekAtY,
 } from './scroll.ts'
 import type { Expanded } from './scroll.ts'
-import { packLanes } from './render.ts'
+import { packLanes, visibilityFor } from './render.ts'
+import type { PackedSpan } from './render.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -1290,41 +1291,46 @@ const cases: Case[] = [
     return null
   }],
 
-  ['render: a bar hidden past capacity still lands in "+N" (Critical regression)', () => {
-    const ev = (id: string) => ({
-      id, title: id, category: 'work', allDay: true, start: asDay(0), end: asDay(0),
-    } as unknown as CalendarEvent)   // why: only id/allDay/category are read by packLanes
-    const span = (id: string, from: number, to: number): EventSpan => ({
-      event: ev(id), week: asWeek(0),
-      from: asOffset(from), to: asOffset(to), continuesBefore: false, continuesAfter: false,
-    })
-    // L (days 0-3) and M (days 2-5) overlap on days 2-3, so true interval
-    // packing forces them into different lanes: L takes lane 0 (same length,
-    // earlier start wins the tie-break), M takes lane 1. On day 4, M alone
-    // covers the day — L's span has already ended.
-    const packed = packLanes([span('L', 0, 3), span('M', 2, 5)])
-    const l = packed.find(p => p.event.id === 'L')
-    const m = packed.find(p => p.event.id === 'M')
-    if (l?.lane !== 0 || m?.lane !== 1) return `expected L:0 M:1, got L:${l?.lane} M:${m?.lane}`
+  ['render: visibilityFor never drops a hidden bar or a spilled chip (Critical regression)', () => {
+    // Hand-built packed spans — visibilityFor only reads from/to/lane, so a
+    // full EventSpan is not needed. This calls the REAL exported arithmetic
+    // renderWeek itself calls; it does not re-derive a copy of it, which is
+    // exactly what made the previous version of this case vacuous.
+    const bar = (from: number, to: number, lane: number): PackedSpan =>
+      ({ from: asOffset(from), to: asOffset(to), lane } as unknown as PackedSpan)
+      // why: visibilityFor's body only touches from/to/lane; event/week/
+      // continuesBefore/continuesAfter are never read.
 
-    // Mirror renderWeek's visibility arithmetic at cap = 1 (reachable at
-    // MIN_ROW_H on a landscape phone): only lane 0 is visible, so M is
-    // hidden everywhere it appears, including day 4 where it is the ONLY
-    // bar present. The old total-based formula (used[o] + chips - cap)
-    // computed used[4] = 1 (just M) and 1 + 0 - 1 = 0 — no "+N" at all,
-    // silently dropping M. The invariant under test: a hidden bar is
-    // counted directly, never inferred from a day's total occupancy.
+    // L: lane 0, days 0-3 (visible at cap 1). M: lane 1, days 2-5 (hidden at
+    // cap 1) — overlapping L on days 2-3, alone on days 4-5.
+    const packed = [bar(0, 3, 0), bar(2, 5, 1)]
     const cap = 1
-    const visibleBars: number[] = [0, 0, 0, 0, 0, 0, 0]
-    const hiddenBars: number[] = [0, 0, 0, 0, 0, 0, 0]
-    for (const p of packed) {
-      const bucket = p.lane < cap ? visibleBars : hiddenBars
-      for (let o = p.from; o <= p.to; o++) bucket[o] = (bucket[o] ?? 0) + 1
+    // Day 0: L alone, room to spare, but 2 chips still can't fit past cap 1
+    // once L holds the only slot — those chips must spill into overflow.
+    // Day 6: no bars at all, exactly 1 chip — fits with room to spare.
+    const chipCounts = [2, 0, 0, 0, 0, 0, 1]
+    const v = visibilityFor(packed, chipCounts, cap)
+    if (v.length !== 7) return `expected 7 entries, got ${v.length}`
+
+    // A bar at or above cap must be counted as hidden, with overflow > 0,
+    // on every single day it covers — days 2-5 for M (days 2-3 also carry
+    // L visible; days 4-5 M is the only bar present at all).
+    for (const o of [2, 3, 4, 5]) {
+      const day = v[o]!
+      if (day.hiddenBars < 1) return `day ${o}: expected hiddenBars >= 1, got ${day.hiddenBars}`
+      if (day.overflow < 1) return `day ${o}: a hidden bar vanished with no "+N" — overflow=${day.overflow}`
     }
-    if ((visibleBars[4] ?? 0) !== 0) return `expected day 4 to have no visible bar, got ${visibleBars[4]}`
-    const overflow = (hiddenBars[4] ?? 0) + 0   // no chips compete for room here
-    if (overflow <= 0) return `M vanished from day 4 with no "+N": overflow=${overflow}`
-    if (overflow !== 1) return `expected +1 on day 4, got +${overflow}`
+    // Day 4 specifically: no visible bar, no chips, exactly the hidden M.
+    if (v[4]!.visibleBars !== 0) return `day 4: expected 0 visible bars, got ${v[4]!.visibleBars}`
+    if (v[4]!.overflow !== 1) return `day 4: expected overflow 1, got ${v[4]!.overflow}`
+
+    // Chips that don't fit in remaining room are counted too, not just bars.
+    if (v[0]!.chipsShown !== 0) return `day 0: expected 0 chips shown (no room), got ${v[0]!.chipsShown}`
+    if (v[0]!.overflow !== 2) return `day 0: expected both spilled chips in overflow, got ${v[0]!.overflow}`
+
+    // A day where everything fits shows no "+N" at all.
+    if (v[6]!.chipsShown !== 1) return `day 6: expected the 1 chip shown, got ${v[6]!.chipsShown}`
+    if (v[6]!.overflow !== 0) return `day 6: expected overflow 0 when everything fits, got ${v[6]!.overflow}`
     return null
   }],
 ]
