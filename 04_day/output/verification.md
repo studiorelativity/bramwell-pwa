@@ -84,7 +84,7 @@ stage of worthless evidence, repeated at every invocation.
 | 10 | No motion literal outside `motion.css` | Two greps, re-run against the final tree, after this fix wave's comment edits. `grep -rnE 'transition\|animation\|@keyframes\|cubic-bezier' src/ --include='*.css' \| grep -v '^src/motion.css'` → **no output, exit 1**. The `.ts` grep returns **34 hits** (this figure moves with comment edits — an earlier draft of this row cited 36 from before the fix wave; the count itself is not the claim, the *shape* of the three exceptions below is), of which 31 are doc comments naming the rule; the three non-comment/non-declaration lines are `chrome.ts`'s `animationend` listener (a DOM event name), `scroll.ts`'s `animMs()` *reading back* `transitionDuration`/`transitionDelay` (a CSS API call, not a declaration — the sanctioned carve-out, at whatever line it currently sits on), and a trailing comment on a `render.ts` `removeAttribute`. No `transition:`/`animation:` declaration and no `Nms` literal at any use site outside `motion.css`. | PASS |
 | 11 | One day open; Escape collapses, scroll does not | `npm run shot`, all 9 rows. The layered behaviour is asserted one layer at a time: `formClosedByFirstEscape: true` **and** `dayStillOpenAfterFirstEscape: true` (first Escape closes the form only), then `collapsedByEscape: true` and `panelDetached: true` (second Escape collapses the day and `onExpandEnd` detaches the panel). Scroll: `stillOpenAfterScroll: true` with `animAttrAfterScroll: null` — the day survives a scroll and the gate is not left armed. | PASS |
 | 12 | Columns animate back on collapse, not just out | `colsBackToRest: true` and `rowBackToRest: true` on all 9 rows — both re-found via `document.querySelector('.day[data-open]')?.closest('.week')` immediately before the second Escape, because the originally captured node is almost certainly a different pool node after six wheel events and a settle. **Read this as end-state only.** These assert the row and its columns return to their resting values; they say nothing about smooth interpolation on the way back. Arming the collapse gate turned out to be *necessary*, not defensive: a direct test showed collapse snapping while `colsBackToRest` still passed. | PASS (end state) |
-| 13 | The recycling guard does not leak | `jumpDuringSteadyState: 0` and `jumpAfterSettle: 0` on **all 9 rows of the final run** — the negative case, that `data-jump` never deadens ordinary recycling, is solid. **`jumpStampedOnRecycle: true` on only 1 of 9 rows does NOT mean the guard barely works** — see the inline note below; the mechanism is proven in an isolated repro, and the 1/9 is the harness's trigger being fragile. | PASS (leak); positive case weak |
+| 13 | The recycling guard does not leak | `jumpDuringSteadyState: 0` and `jumpAfterSettle: 0` on **all 9 rows of the final run** — the negative case, that `data-jump` never deadens ordinary recycling, is solid. **`jumpStampedOnRecycle: false` on all 9 rows of the final run does NOT mean the guard doesn't work** — see the inline note below; the mechanism is proven in an isolated, deterministic repro at every viewport, and this run simply did not reproduce the in-situ trigger at all — the positive case is not observed anywhere in this document's own evidence. | PASS (leak); positive case not observed |
 
 Supporting, green on all 9 rows: `barsMatchAtRest`, `barsTrackColumns`,
 `barsTrackDuringAnim`, `switchStillSameRow` (the day-switch probe genuinely exercised
@@ -131,14 +131,17 @@ is not in the suite.
 regression: with the resting height now correct, the standard test day no longer
 needs to grow.
 
-### Inline caveat — `jumpStampedOnRecycle: true` on 1 of 9 rows
+### Inline caveat — `jumpStampedOnRecycle: false` on all 9 rows of the final run
 
-**This does not mean the recycling guard barely works.** The mechanism is proven in
+**This does not mean the recycling guard doesn't work.** The mechanism is proven in
 an **isolated, single-run, deterministic reproduction**: the `jumpstack` fixture
 (150 events, two weeks after today) stamps 6 rows, every time, at all three
-viewports. Embedded in the full nine-row harness session it fires on exactly one
-row per run — a different row each run, across four consecutive runs, and the final
-run reproduces the same 1/9 (it landed on 390×844 light this time).
+viewports. Embedded in the full nine-row harness session it is far less reliable:
+across the runs tried during this stage it fired on at most one row per run — a
+different row each time it fired at all — and the run that produced every other
+figure in this document (`final-fix-report.md` §4) reproduced **zero of nine**.
+The positive case is not observed anywhere in this document's own automated
+evidence; it rests entirely on the isolated repro above.
 
 The cause is understood well enough to say it is the instrument. Every user-facing
 path that moves the scroll position clears the gate as its own first statement, so
@@ -153,16 +156,19 @@ it unreliable. Two stabilisation attempts were made; one mattered (a fresh
 navigation instead of reusing the well-scrolled page — without it, 0/9 every time),
 one did not.
 
-**Consequence, stated plainly: nothing in the suite reliably exercises the positive
-case for THIS mechanism.** Replace the stamping condition with `if (false)` and
-the suite still passes — but that is true of every probe in the harness, not a
-special weakness of this one (see the "regression printer, not a regression
-detector" note near the top of this document): the harness has no assertions
-anywhere, so it never fails on a wrong boolean regardless of which probe reports
-it. What is specific to `jumpStampedOnRecycle` is narrower and worse in a
-different way — not merely that a wrong value would go unflagged, but that the
-*correct* value is reproduced reliably only 1 run in 9, so even reading the field
-by eye across a single run is weak evidence for this one mechanism in particular.
+**Consequence, stated plainly: the positive case is not observed in the suite at
+all — the run behind every other figure in this document reproduced 0 of 9.**
+Replace the stamping condition with `if (false)` and the suite still passes — but
+that is true of every probe in the harness, not a special weakness of this one
+(see the "regression printer, not a regression detector" note near the top of
+this document): the harness has no assertions anywhere, so it never fails on a
+wrong boolean regardless of which probe reports it. What is specific to
+`jumpStampedOnRecycle` is narrower and worse in a different way — not merely that
+a wrong value would go unflagged, but that even the *correct* value has, across
+the runs tried this stage, an in-situ reproduction rate of at most 1 in 9, and
+the specific run this document cites landed on zero. The positive case for this
+mechanism rests entirely on the isolated repro above, not on anything in this
+document's own automated evidence.
 Half of the `data-jump` fix rests on the isolated repro rather than on the
 harness.
 
@@ -237,12 +243,21 @@ mid-flight):
 | viewport | restNarrow | restWide | mid | end | reading |
 |---|---|---|---|---|---|
 | 390×844 | 12 | 384 | **384** | 384 | `mid === end` exactly — the switch **snaps** |
-| 1440×900 | 157 | 472 | **338**, **341** | 472 | genuinely between — the switch **interpolates** |
-| 1920×1200 | 211 | 632 | **453**, **452** | 632 | genuinely between — the switch **interpolates** |
+| 1440×900 | 157 | 472 | **330**, **331** | 472 | genuinely between — the switch **interpolates** |
+| 1920×1200 | 211 | 632 | **427**, **466** | 632 | genuinely between — the switch **interpolates** |
+
+(Corrected against the run in `final-fix-report.md` §4 — an earlier draft of
+this table cited 338/341 and 453/452 for these two rows. These mid-flight
+pixel samples are read off a `setTimeout` delay, not a frame count, so they
+carry real wall-clock jitter run to run and are not expected to reproduce
+exactly; what does not move is the *reading* — genuinely between both
+endpoints, at both desktop widths, every run tried. The exact figures are
+reported because they are this run's own evidence, not because they are
+expected to be stable.)
 
 And `midWeekCols`, the whole track list sampled at 20% of the expand:
 
-- 390×844: `0px 0px 377.344px 0px 0px 0px 0px` — the open track is at 377.344 while
+- 390×844: `0px 0px 377.531px 0px 0px 0px 0px` — the open track is at 377.531 while
   its end value is 384, i.e. **the first expand is mid-flight and interpolating**.
 - 1440×900: `157.328px 157.328px 472px 157.328px 157.344px 157.328px 157.328px` — the
   open track already sits at exactly 472, its end value, at 20% of the duration.
