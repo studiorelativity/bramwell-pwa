@@ -56,22 +56,34 @@
 /* The one permitted layout animation (SPEC "Motion"), contained to the scroller.
    scroll.ts writes each row's FINAL geometry once and CSS interpolates: there is
    no per-frame JavaScript in an expand. Only .week is written and transitioned;
-   .bars has NO transition of its own (round 2 review) — a fresh .bars node
-   created mid-task has no before-change value to interpolate FROM, so writing
-   its template directly always snapped. Its grid-template-columns is `inherit`
-   (style.css), which resolves from .week's COMPUTED value every frame, so it
-   tracks .week's interpolation exactly instead of racing a second transition
-   against it.
-   TWO gates, both same-element, never `.scroller[data-anim] .week` (round 7):
+   .bars has NO transition of its own — a fresh .bars node created mid-task has
+   no before-change value to interpolate FROM, so writing its template directly
+   always snapped. Its grid-template-columns is `inherit` (style.css), which
+   resolves from .week's COMPUTED value every frame, so it tracks .week's
+   interpolation exactly instead of racing a second transition against it.
+
+   TWO gates, both same-element selectors, never `.scroller[data-anim] .week`:
    this engine will not start a grid-template-columns transition through an
-   ancestor's attribute, and separately will not start one AT ALL when its
-   enabling attribute is written to more than one element in the same batch
-   — confirmed by repro, independent of write order either way. transform/
-   height/column-gap tolerate a pool-wide stamp; grid-template-columns does
-   not, so it gets its OWN attribute, written by scroll.ts to only the row(s)
-   whose columns actually change this task (SPEC "Scroll engine API"). Both
-   gates share the same duration/easing tokens per kind so the columns and
-   the geometry never desync. */
+   ancestor's attribute, confirmed by repro — only a rule matching .week
+   directly does. data-anim (transform/height/column-gap) is written pool-wide,
+   since every row's geometry shifts when one grows; data-cols-anim
+   (grid-template-columns alone) is written only to the row(s) whose columns
+   actually change this task (SPEC "Scroll engine API") — the only row with a
+   value to transition for that property. Both share the same duration/easing
+   tokens per kind so the columns and the geometry never desync.
+
+   The compound rule below matters: on the row carrying BOTH attributes (the
+   one actually animating), the two single-attribute rules above have EQUAL
+   specificity, and transition-property is not additive between them — the
+   one later in source order would otherwise win outright, silently dropping
+   transform/height/column-gap from that row's eligible properties while
+   grid-template-columns kept transitioning. The compound selector's higher
+   specificity is what makes the union win regardless of source order.
+
+   Despite all of the above being independently confirmed by repro, the app's
+   own grid-template-columns still does not visibly interpolate — a
+   known, unexplained gap; see SPEC "Scroll engine API" for what is and
+   is not established. */
 .week[data-anim] {
   transition-property: transform, height, column-gap;
 }
@@ -96,11 +108,17 @@
   transition-timing-function: var(--ease-out);
   transition-delay: var(--t-fast);
 }
+/* Both gates present on the same row (the one actually expanding or
+   collapsing): the union of both property lists, at higher specificity than
+   either single-attribute rule above, so it wins regardless of source order. */
+.week[data-anim][data-cols-anim] {
+  transition-property: transform, height, column-gap, grid-template-columns;
+}
 /* A pool node recycled INTO view mid-animation would otherwise slide in from its
    previous position, 14 rows away. Stamped by scroll.ts only while a gate is
    set, so steady-state recycling pays nothing. Same-element pairing per gate,
    both attributes on the row being tested — not one on the scroller and one
-   on the row (round 6/7). */
+   on the row. */
 .week[data-anim][data-jump],
 .week[data-cols-anim][data-jump] { transition-property: none; }
 

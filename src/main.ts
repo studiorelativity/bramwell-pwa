@@ -91,45 +91,46 @@ if (new URLSearchParams(location.search).has('selftest')) {
     scroller.querySelector<HTMLElement>('.day[data-open]')?.closest<HTMLElement>('.week') ?? null
 
   function clearColumns(node: HTMLElement): void {
-    // Armed on this ONE node only, never the pool (round 7 review): this
-    // engine will not start a grid-template-columns transition when its
-    // gate is written to more than one element in the same batch, which is
-    // exactly what armAnim's pool-wide reach would do for this property.
-    // colsAnimKind is null for an unrelated refill (ordinary recycling also
-    // reaches here), so most calls arm nothing.
+    // Armed on this ONE node — the row whose columns are about to clear —
+    // never the pool: armAnim's pool-wide reach is for data-anim
+    // (transform/height/column-gap), a different gate (SPEC "Scroll engine
+    // API"). colsAnimKind is null for an unrelated refill (ordinary
+    // recycling also reaches here), so most calls arm nothing.
     if (colsAnimKind !== null) ctl.armColsAnim(node, colsAnimKind)
     node.style.removeProperty('--expand-cols')
     node.removeAttribute('data-full')
     // .bars is NOT written here: its CSS is `grid-template-columns: inherit`
     // (style.css), so it already reads back to 7-equal the instant .week's
-    // own property is removed — nothing to clear (round 2 review).
+    // own property is removed — nothing to clear.
   }
 
   function applyColumns(node: HTMLElement, week: WeekIndex): void {
     if (openDay === null || !expandReady || state.weekOf(openDay) !== week) { clearColumns(node); return }
     const full = window.innerWidth <= render.PHONE_MAX_W
     const cols = render.columnsFor(asOffset(openDay - state.dayAt(week, MON)), full)
-    // Written to the --expand-cols CUSTOM property, not grid-template-columns itself
-    // (round 4 review): this Chrome build does not transition
-    // grid-template-columns when it is set directly via inline style — the
-    // computed value jumps straight to the new one, no interpolation, even
-    // with data-anim, the transition-duration, and a matching track-sizing
-    // function all correct (confirmed in isolation: an inline `el.style.
-    // gridTemplateColumns = ...` snaps; toggling a CLASS that changes the
-    // same property, or writing a custom property the CSS rule reads with
-    // var(), both interpolate). style.css's rule is `grid-template-columns:
-    // var(--expand-cols, repeat(7, minmax(0, 1fr)))`, so the property that's
-    // actually declared to transition is never itself touched by JS.
+    // Written to the --expand-cols CUSTOM property, not grid-template-columns
+    // itself: this Chrome build does not transition grid-template-columns
+    // when it is set directly via inline style — the computed value jumps
+    // straight to the new one, no interpolation, even with a correct gate,
+    // transition-duration, and matching track-sizing function (confirmed in
+    // isolation: an inline `el.style.gridTemplateColumns = ...` snaps;
+    // toggling a CLASS that changes the same property, or writing a custom
+    // property the CSS rule reads with var(), both interpolate). style.css's
+    // rule is `grid-template-columns: var(--expand-cols, repeat(7, minmax(0,
+    // 1fr)))`, so the property that's actually declared to transition is
+    // never itself touched by JS.
     // Written ONLY on .week. .bars inherits the RESULT (style.css's `inherit`
-    // reads .week's computed grid-template-columns, not --expand-cols) rather than
-    // getting its own copy: inheritance resolves from .week's COMPUTED value
-    // every frame, so a freshly-created .bars (renderWeek makes a new one on
-    // every fill) tracks .week's in-flight transition immediately, with
-    // nothing of its own to snap — writing the same value directly to a
-    // brand-new node has no before-change style to interpolate FROM
-    // (round 2 review).
+    // reads .week's computed grid-template-columns, not --expand-cols) rather
+    // than getting its own copy: inheritance resolves from .week's COMPUTED
+    // value every frame, so a freshly-created .bars (renderWeek makes a new
+    // one on every fill) tracks .week's in-flight transition immediately,
+    // with nothing of its own to snap — writing the same value directly to a
+    // brand-new node has no before-change style to interpolate FROM.
+    // Despite all of this, the app's own grid-template-columns still does
+    // not visibly interpolate — a known, unexplained gap (SPEC "Scroll
+    // engine API").
     // Armed on this ONE node before the write, same reasoning as
-    // clearColumns above (round 7 review) — never via armAnim's pool loop.
+    // clearColumns above — never via armAnim's pool loop.
     if (colsAnimKind !== null) ctl.armColsAnim(node, colsAnimKind)
     node.style.setProperty('--expand-cols', cols)
     if (full) { node.dataset['full'] = '' } else { node.removeAttribute('data-full') }
@@ -266,18 +267,17 @@ if (new URLSearchParams(location.search).has('selftest')) {
     openDay = null                      // before setExpanded: onExpandEnd reads it
     expandReady = false
     delta = 0
-    // Arm BEFORE clearing the template, not merely in the same task as it —
-    // the same rule as remeasure() above, and verified to matter here too
-    // (round 5 review): being in the same task as setExpanded's own
-    // setAnim call is not enough, because the column value has already
-    // reached its target (the rest state) by the time that call runs.
-    // colsBackToRest only ever checked the FINAL value, which a snap also
-    // reaches — it passed on every prior round even while this genuinely
-    // snapped instead of animating, confirmed by sampling mid-collapse.
-    ctl.armAnim('collapse')
-    // Brackets clearColumns's read of colsAnimKind to exactly this call,
-    // same reasoning as remeasure() (see colsAnimKind's own declaration).
+    // colsAnimKind is set BEFORE armAnim, not after: setAnim's first
+    // statement can cancel a PENDING expand timer synchronously (Escape
+    // pressed mid-expand, before the expand's own animTimer has fired), and
+    // that cancellation fires onExpandEnd() right here, synchronously,
+    // before the next line ever runs — which does a full ctl.invalidate()
+    // -> applyColumns -> clearColumns for every row while openDay is
+    // already null. If colsAnimKind is not already 'collapse' by then, that
+    // cascade clears --expand-cols ungated, and the interrupted expand's
+    // columns cannot animate closed no matter what runs afterward.
     colsAnimKind = 'collapse'
+    ctl.armAnim('collapse')
     if (row !== null) clearColumns(row)
     colsAnimKind = null
     ctl.setExpanded(null, true)         // onExpandEnd detaches and repaints the row

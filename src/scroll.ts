@@ -150,13 +150,16 @@ export type ScrollController = {
    *  all of them when one row grows. `setExpanded` still calls `setAnim`
    *  itself, so arming again inside it is simply idempotent. */
   armAnim(kind: 'expand' | 'collapse'): void
-  /** Raises `data-cols-anim` on ONE node only — never the whole pool (SPEC
-   *  "Scroll engine API"): this engine will not start a `grid-template-
-   *  columns` transition when its enabling attribute is written to more than
-   *  one element in the same batch, confirmed by repro. The caller identifies
-   *  the row(s) actually about to have their columns change — the expanding
-   *  row, or the departing row on a cross-week switch — since `armAnim`'s
-   *  pool-wide reach is exactly what this must NOT do. */
+  /** Raises `data-cols-anim` on the ONE row whose columns actually change
+   *  this task — the expanding row, or the departing row on a cross-week
+   *  switch — never the whole pool: it is the only row with a
+   *  `grid-template-columns` value to transition, so it is the only one
+   *  that needs this gate. Paired with `data-anim` on that SAME row via a
+   *  compound selector (`.week[data-anim][data-cols-anim]`, motion.css) —
+   *  the two single-attribute rules have equal specificity and are not
+   *  additive, so without the compound rule, whichever matched last in
+   *  source order would silently drop the other's properties from
+   *  `transition-property` (SPEC "Scroll engine API"). */
   armColsAnim(node: HTMLElement, kind: 'expand' | 'collapse'): void
   /** The UNEXPANDED row height. Consumers derive the delta from this rather than
    *  measuring a DOM node, which mid-animation would read an interpolated height. */
@@ -313,20 +316,17 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
     return weekAtY(y + viewportH * SNAP_ALIGN, rowH, expanded)
   }
 
-  /** setAnim(null) moved INSIDE the "there is actually a kinetic animation"
-   *  branch (round 4 review): the old unconditional call at the top fired on
-   *  EVERY tick this function was ever invoked for, including a trailing
-   *  tick whose `anim` a concurrent `setExpanded` had just cleared — so it
-   *  clobbered an expand's gate that setExpanded had only just set, one
-   *  frame later, even after setExpanded cancels the pending rAF (belt and
-   *  suspenders: a defensive gate-clear for a callback that fires anyway
-   *  should still be a no-op, not an active clobber). A GENUINE drag/wheel/
-   *  goToWeek still clears the gate before it ever reaches here — see
-   *  setAnim's own doc comment. */
+  /** Advances one kinetic tick. Does NOT touch the transition gate — that
+   *  happens once, in `animateTo`, when the kinetic action STARTS, not on
+   *  every tick while it runs: this function can fire dozens of times over
+   *  a single settle, and each `setAnim` call sweeps three dataset entries
+   *  across all 14 pool nodes, so doing it here as well would be 42
+   *  attribute operations per momentum frame for no further effect (the
+   *  gate is already clear by the time any kinetic tick fires — see
+   *  `animateTo`). */
   function frame(now: number): void {
     raf = 0
     if (anim !== null) {
-      setAnim(null)
       const t = Math.min(1, (now - anim.t0) / anim.ms)
       y = anim.from + (anim.to - anim.from) * easeOutCubic(t)
       place()
@@ -336,7 +336,14 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
 
   function kick(): void { if (raf === 0) raf = requestAnimationFrame(frame) }
 
+  /** The one place a kinetic animation actually starts, so the one place its
+   *  gate-clear belongs: every caller (`settle`, `goToWeek`) already clears
+   *  the gate itself before reaching here, but doing it again HERE too,
+   *  once, is what makes "cleared for a kinetic action" a property of
+   *  starting one rather than of whichever caller happened to trigger it —
+   *  and it is the only clear `frame`'s own per-tick loop no longer does. */
   function animateTo(target: number): void {
+    setAnim(null)
     anim = { from: y, to: target, t0: performance.now(), ms: settleMs(target - y, rowH) }
     kick()
   }
@@ -431,9 +438,8 @@ export function mount(root: HTMLElement, host: ScrollHost): ScrollController {
       animTimer = setTimeout(() => { animTimer = null; setAnim(null); host.onExpandEnd() }, ms)
     },
     armAnim(kind) { setAnim(kind) },
-    // ONE node, never the pool: the multi-element batch constraint (see the
-    // type's own doc comment) is exactly what armAnim's pool-wide reach
-    // would trigger for this property.
+    // ONE node, never the pool (see the type's own doc comment): only the
+    // row(s) the caller names ever have a column value to transition.
     armColsAnim(node, kind) { node.dataset['colsAnim'] = kind },
     rowHeight() { return rowH },
     invalidate(weeks) {

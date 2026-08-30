@@ -51,6 +51,12 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
   let shown: DayNumber | null = null
 
   function build(): void {
+    // A hidden root (main.ts hides the year view under the calendar) reads
+    // clientWidth 0, and columnsFor(0) maps to a real column count (7) —
+    // not an error, so nothing downstream would notice it is wrong. A
+    // component that measures itself refuses to measure while it has no
+    // size, the same guard scroll.ts's measure() uses for the same reason.
+    if (root.clientWidth === 0) return
     const cols = columnsFor(root.clientWidth)
     const jan1 = civilToDay(year, 1, 1)
     const indent = offsetOf(jan1)                 // 0 = Mon, so every column is one weekday
