@@ -54,6 +54,11 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   the fallback is to accept the snap and record it. If it snaps on a path
   where Chrome interpolates (or the reverse), that is new information for the
   same open item above, not a second one.
+  **2026-08-30 — DEFERRED at the stage-04 gate, by the human's decision, not
+  closed.** The Chrome findings above are already recorded as a known,
+  partly-delivered limitation in `SPEC.md` "Scroll engine API" and
+  `04_day/output/verification.md` §3, so the iOS answer refines a disclosed
+  gap rather than gates the stage. Still untested on any Safari engine.
 
 ## Opened at the stage-03 gate close
 - **Signed-out refetch pressure.** Stage 02's rule refetches an `error`
@@ -169,3 +174,25 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   DOM at module scope — and `scripts/shot.mjs` never opens the form far
   enough to exercise a write. Stage 05 should decide whether that means a
   browser-based test layer or accepting these as hand-verified only.
+
+## Opened at the stage-04 gate close (2026-08-30)
+- **60fps on a mid phone: gate row 2, DEFERRED by the human's decision, not
+  measured.** Row 1 measured 60.0fps sustained on the MacBook (~1ms of
+  headroom, no dropped frames); the phone session was set up but blocked by
+  the signed-out-refetch loop above before it produced a result. Not a
+  failure and not verified — stage 05 should re-run it once the refetch loop
+  is contained, ideally with the cache seeded across the visible window so
+  the loop cannot fire mid-measurement.
+- **The harness cannot reliably trigger `data-jump`.** The recycling guard's
+  positive case (the stamp actually firing and disabling a transition) is
+  proven only by an isolated, deterministic repro (`jumpstack` fixture, 150
+  events, two weeks out); embedded in the full nine-row `npm run shot`
+  session it fired on at most one row per run, a different row each time, and
+  the run behind every other figure in `04_day/output/verification.md`
+  reproduced zero of nine. The cause is understood (every user-facing path
+  that moves scroll clears the gate as its own first statement; only
+  `setExpanded`'s `fitY` repositioning can trigger the stamp, and its shift is
+  capped at the row's own distance from the viewport top, so timing relative
+  to a row boundary is what decides whether it fires at all). Either the
+  fixture becomes its own single-purpose run, or the assertion is dropped
+  from the harness and the isolated repro is kept as the record.

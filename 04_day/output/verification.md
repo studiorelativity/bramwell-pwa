@@ -1,10 +1,14 @@
 # Stage 04 — verification
 
-**Status: AWAITING GATE.** Branch `stage-04-day`, 26 commits off `main` @ `f0ce305`
-as of this fix wave (2026-08-30) — the count moves as fix rounds land; treat it as
-informational, not a claim this document depends on.
-Suite grew 51 → 54 cases. Everything under "Gate criteria" that says **human** is
-unfilled by design; the rest carries the command or probe that produced it.
+**Status: GATE CLOSED, 2026-08-30.** Branch `stage-04-day`, 26 commits off `main` @
+`f0ce305` as of this fix wave (2026-08-30) — the count moves as fix rounds land;
+treat it as informational, not a claim this document depends on.
+Suite grew 51 → 54 cases. Rows 5, 6 and 7 (the real-account round trips) are
+**PASS, attested by the human on device, 2026-08-30** — they were always
+designated human-verified, not machine-checked, and remain so. Rows 2 (phone
+60fps) and 9 (iOS Safari column interpolation) are **DEFERRED, 2026-08-30, by
+the human's decision**; see those rows and `OPEN.md` for why. Every other row
+carries the command or probe that produced it.
 
 This stage did not go cleanly. It found and fixed roughly a dozen genuine defects,
 several of them in its own plan, and it ends with one SPEC requirement only partly
@@ -73,14 +77,14 @@ stage of worthless evidence, repeated at every invocation.
 | # | Criterion | Evidence | Result |
 |---|---|---|---|
 | 1 | 60fps expand/collapse on the MacBook | **Human, on device, 2026-08-30.** Production build (`npm run build && npm run preview`) in Chrome 151, `requestAnimationFrame` deltas sampled for 3.00s across one expand and one collapse. **180 frames / 3.00s = 60.0fps sustained.** Median 16.7ms — a 60Hz panel, so 16.7ms is the budget and ProMotion is not in play. p95 17.5ms, worst 17.7ms. **No frame reached two refresh intervals (~33ms), so no frame was dropped.** Corroborated by a Performance trace: the `Animations` track shows a ~385ms transition matching `--t-open` 380ms, with the main thread near-idle across it — the per-frame-JS-free claim of §2, observed rather than argued. Caveat on the raw counters: the sampler also printed `over8_3ms: 180` and `over16_7ms: 88`, and **both are threshold artifacts, not failures** — every frame on a 60Hz panel exceeds 8.3ms by definition, and a strict `>16.7` test flags ordinary jitter against a 16.667ms interval when p95 and worst sit within 1ms of nominal. Same class of defect as the `columnsInterpolated` instrument in §3; recorded so the number is not misread later. | **PASS** |
-| 2 | 60fps expand/collapse on a mid phone | **Human, on device.** Separate row from 1 on purpose: a laptop pass is not a phone pass. The phone is where the `0fr` full-width mechanism and the smallest row heights are. | — |
+| 2 | 60fps expand/collapse on a mid phone | **DEFERRED, 2026-08-30, by the human's decision.** Separate row from 1 on purpose: a laptop pass is not a phone pass, and the phone is where the `0fr` full-width mechanism and the smallest row heights are. Row 1 measured 60.0fps sustained on the MacBook with ~1ms of headroom and no dropped frames; the phone session was set up but blocked by an unrelated signed-out-refetch loop (`OPEN.md`, "Signed-out refetch pressure"). Not a failure — the gate did not run — and not verified either. | DEFERRED |
 | 3 | Reduced-motion path verified | `npm run shot`, the three `motion: reduce` rows: `animDurMs` = **80** on every one (vs 380 on `no-preference`), read off the row's own computed `transitionDuration + transitionDelay`. `columnsInterpolated: false` on those rows is **correct and expected** — the reduced-motion block collapses `transition-property` to `opacity` by design. Toast dwell deliberately survives at `--t-toast` 3200ms (ruling 7). | PASS |
 | 4 | Every form control passes `elementFromPoint()` at its centre | `npm run shot`, final run, **all 9 rows — but only for the controls the harness can build.** The event form has 13 distinct controls; the harness only ever opens the **Add** form (never an edit form, never a recurring event), so `controlHits` names exactly **eight of the thirteen** and every one is `true`: `.dp-title`, `.dp-allday`, `.dp-start`, `.dp-end`, `.dp-repeat`, `.dp-notes`, `.dp-save`, `.dp-cancel`. A ninth, the category chips, is hit-tested separately — `chipHit: true` with `chipCount: 4` and `chipsAreLabels: true` (chips carry the category *label*, per the contract). The remaining four are **not** covered by this row: `.dp-startt` and `.dp-endt` were simply never added to `controlSel`, and the scope picker (`.dp-scope`, recurring-only) and the series-delete confirm (`.dp-del`, edit-only) never exist in any run the harness performs — see gate row 7 and "What was not tested". Plus `addHit: true`, `repeatEnabledOnAdd: true`, `emptyTitleBlocked: true`, and the stage-03 controls still hit-testing through the open panel: `dayHitBeforeOpen`, `todayHit`, `modeHit`, `yrCellHit`. Every one via `document.elementFromPoint()` at the control's geometric centre, per CONVENTIONS. `.click()` appears only as the *action* that opens the form or drives validation, never as a substitute for a hit test. | PASS (8 of 13 controls covered; 1 more separately; 4 not tested) |
-| 5 | Create round trip, real account | **Human, on device.** The harness seeds `localStorage` and makes no network call. | — |
-| 6 | Edit-occurrence round trip, real account | **Human, on device.** | — |
-| 7 | Delete-series round trip, real account | **Human, on device.** Correction to an earlier draft of this row: the scope picker and the series-delete confirm are **not** hit-tested by row 4, or by anything automated — the harness only ever opens the **Add** form, and both controls exist only on an **edit** form for a **recurring** event, which the harness never constructs. This row therefore covers their `elementFromPoint()` reachability as well as the write itself, not just the write. | — |
+| 5 | Create round trip, real account | **PASS, attested by the human on device, 2026-08-30.** The harness seeds `localStorage` and makes no network call; this row was always the human's to run and check. | PASS |
+| 6 | Edit-occurrence round trip, real account | **PASS, attested by the human on device, 2026-08-30.** | PASS |
+| 7 | Delete-series round trip, real account | **PASS, attested by the human on device, 2026-08-30.** Correction to an earlier draft of this row: the scope picker and the series-delete confirm are **not** hit-tested by row 4, or by anything automated — the harness only ever opens the **Add** form, and both controls exist only on an **edit** form for a **recurring** event, which the harness never constructs. This row therefore covers their `elementFromPoint()` reachability as well as the write itself, not just the write. | PASS |
 | 8 | Type in the form, wait past a background refresh, text survives | `npm run shot`, final run: `typedTextSurvives: true` and `notesSurvive: true` on all 9 rows, with `formOpenSeen: true` confirming the form was genuinely open across the refresh. This is the CONVENTIONS transient-UI rule (`refresh()` no-ops while a form is open) exercised, not asserted. | PASS |
-| 9 | `grid-template-columns` interpolates on iOS Safari | **Human, on device** — and read the Chrome result first, because it is worse than the gate row assumes. In Chrome the column template interpolates on *some* paths at *some* viewports and snaps on the others; §3 below has the raw widths. `OPEN.md` names the fallback: if it snaps, the `0fr` template applies with no transition and that is a recorded degradation, not a surprise. | — |
+| 9 | `grid-template-columns` interpolates on iOS Safari | **DEFERRED, 2026-08-30, by the human's decision.** Its subject is already recorded as a known, partly-delivered limitation in `SPEC.md` "Scroll engine API" and §3 below, so the iOS answer would refine a disclosed gap rather than gate the stage. Read the Chrome result first, because it is worse than the gate row assumes: in Chrome the column template interpolates on *some* paths at *some* viewports and snaps on the others; §3 below has the raw widths. `OPEN.md` names the fallback: if it snaps, the `0fr` template applies with no transition and that is a recorded degradation, not a surprise. | DEFERRED |
 | 10 | No motion literal outside `motion.css` | Two greps, re-run against the final tree, after this fix wave's comment edits. `grep -rnE 'transition\|animation\|@keyframes\|cubic-bezier' src/ --include='*.css' \| grep -v '^src/motion.css'` → **no output, exit 1**. The `.ts` grep returns **34 hits** (this figure moves with comment edits — an earlier draft of this row cited 36 from before the fix wave; the count itself is not the claim, the *shape* of the three exceptions below is), of which 31 are doc comments naming the rule; the three non-comment/non-declaration lines are `chrome.ts`'s `animationend` listener (a DOM event name), `scroll.ts`'s `animMs()` *reading back* `transitionDuration`/`transitionDelay` (a CSS API call, not a declaration — the sanctioned carve-out, at whatever line it currently sits on), and a trailing comment on a `render.ts` `removeAttribute`. No `transition:`/`animation:` declaration and no `Nms` literal at any use site outside `motion.css`. | PASS |
 | 11 | One day open; Escape collapses, scroll does not | `npm run shot`, all 9 rows. The layered behaviour is asserted one layer at a time: `formClosedByFirstEscape: true` **and** `dayStillOpenAfterFirstEscape: true` (first Escape closes the form only), then `collapsedByEscape: true` and `panelDetached: true` (second Escape collapses the day and `onExpandEnd` detaches the panel). Scroll: `stillOpenAfterScroll: true` with `animAttrAfterScroll: null` — the day survives a scroll and the gate is not left armed. | PASS |
 | 12 | Columns animate back on collapse, not just out | `colsBackToRest: true` and `rowBackToRest: true` on all 9 rows — both re-found via `document.querySelector('.day[data-open]')?.closest('.week')` immediately before the second Escape, because the originally captured node is almost certainly a different pool node after six wheel events and a settle. **Read this as end-state only.** These assert the row and its columns return to their resting values; they say nothing about smooth interpolation on the way back. Arming the collapse gate turned out to be *necessary*, not defensive: a direct test showed collapse snapping while `colsBackToRest` still passed. | PASS (end state) |
@@ -202,8 +206,11 @@ This tradeoff was taken deliberately at plan time and is already in `DECISIONS.m
 
 ### 2. The 60fps claim is the human's, not the harness's
 
-Rows 1 and 2 are unfilled because a headless Chrome cannot measure frame rate, and
-nothing below changes that.
+Neither row can be filled by the harness because a headless Chrome cannot measure
+frame rate, and nothing below changes that. Row 1 is filled by the human's MacBook
+measurement (60.0fps sustained, §"Gate criteria" above); row 2 is deferred, not
+filled — the phone session was blocked by the signed-out-refetch loop, not run to
+a result.
 
 What the harness **did** establish is an argument for 60fps, not a measurement of
 it: the per-frame JavaScript cost of an expand is **zero**. `place()` runs once per
@@ -492,9 +499,11 @@ Honestly and specifically:
 - **A real touch device.** The two-tap flow inside the panel, `TAP_SLOP`
   drag-vs-tap discrimination, and the phone `0fr` full-width layout in the hand are
   all untested on hardware. Headless emulation is not a phone.
-- **60fps on a phone.** See §2. Row 1 is now filled by an on-device measurement (60.0fps sustained, no dropped frames, 2026-08-30); row 2 remains unfilled and no automated result
-  substitutes for them.
-- **iOS Safari at all.** Gate row 9. Chrome is the only engine this stage ran in,
+- **60fps on a phone.** See §2. Row 1 is filled by an on-device measurement
+  (60.0fps sustained, no dropped frames, 2026-08-30); row 2 was deferred at the
+  gate, 2026-08-30, blocked by the signed-out-refetch loop, and no automated
+  result substitutes for it. Open as an `OPEN.md` item.
+- **iOS Safari at all.** Gate row 9, deferred at the gate, 2026-08-30. Chrome is the only engine this stage ran in,
   and the two engine constraints in rulings 10–11 are Chrome findings.
 - **The FAB path into `openAdd(day)`.** Stage 05 builds the FAB; only the entry
   point exists, and nothing calls it. Its doc comment also overstates what it does —

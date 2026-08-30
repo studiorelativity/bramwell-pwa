@@ -460,3 +460,96 @@ at their SPEC values; the human approved the palette and the phone's
   capture reason, with the target resolved by `document.elementFromPoint` at the
   pointerdown position — which is the hit test CONVENTIONS demands anyway. A
   movement past `TAP_SLOP` is a drag, not a tap.
+
+## Stage 04 gate close (2026-08-30)
+
+Promoted from `04_day/output/verification.md` after the human closed the gate.
+That file is now a record, not an input. Two gate rows were deferred rather
+than passed, by the human's decision: 60fps on a mid phone (blocked by the
+signed-out-refetch loop, not run to a result) and `grid-template-columns`
+interpolation on iOS Safari (its Chrome findings are already a recorded
+limitation below and in `SPEC.md`, so the iOS answer would refine a disclosed
+gap rather than gate the stage). Rulings 1–8 were made at plan time and are
+already recorded above in "Stage 04 rulings (2026-08-29, made at plan time)";
+what follows is rulings 9–14, made during execution, plus the stage's
+substantive discoveries.
+
+### Toast severity
+- **The toast is `role="alert"`, not `role="status"`.** `status` is an ARIA
+  polite live region: a polite announcement may be skipped entirely, so a
+  blind user could never learn that a calendar write failed, and the toast
+  self-removes after 3.2s with no way to recall it. A severity parameter, so
+  stage 05 could raise benign toasts politely, was rejected as speculative
+  generality — the only caller today is the error path. This changes
+  user-visible behaviour, so it is promoted rather than left in the ledger.
+
+### Two undocumented engine constraints
+Both confirmed by an isolated repro before being treated as fact, and both
+are why the transition gate moved off the scroller and onto the 14 pool rows.
+- **`grid-template-columns` will not transition when JS writes it as an
+  inline style.** The value must travel through a CSS custom property
+  (`--expand-cols`) that a static rule reads with `var()`.
+- **`grid-template-columns` will not transition through an ancestor-attribute
+  selector** (`.scroller[data-anim] .week`), regardless of write order. The
+  gate must be a same-element selector (`.week[data-anim]`).
+
+### The gate is armed, and split by property
+- **The gate must be armed before the gated property's value changes, not
+  merely in the same task as it** — hence `armAnim(kind)` and
+  `armColsAnim(node, kind)`, which raise a gate and do nothing else. This
+  corrects a ruling made earlier in the same stage that writing the columns
+  before `setExpanded` in one task would suffice, on the reasoning that a
+  transition is decided from the after-change style; the repro said otherwise
+  for this property in this engine. The lesson to keep: empirical evidence
+  beat the reasoning, here and generally.
+- **The transition gate is split by property, both halves per-row.**
+  `data-anim` (`transform`, `height`, `column-gap`) is stamped pool-wide,
+  because every row's geometry shifts when one grows; `data-cols-anim`
+  (`grid-template-columns`) is stamped only on the row(s) whose columns
+  actually change — the expanding row, plus the departing row on a
+  cross-week switch. On the row carrying both, a compound rule
+  `.week[data-anim][data-cols-anim]` lists all four properties, because
+  `transition-property` is not additive between two equal-specificity rules
+  — without it the later rule in source order silently wins outright and
+  drops the other's properties. The recycling guard (`data-jump`) pairs with
+  *each* gate on the same element.
+- **`.bars` inherits its column template and gap rather than being written.**
+  `renderWeek` creates a fresh `.bars` on every fill, so an inline column
+  write to it has no before-change value and cannot transition — the bar
+  overlay snapped to the final grid while the cells interpolated, misaligning
+  every multi-day bar from its cells for the full 380ms of every expand.
+  `grid-template-columns: inherit` plus `column-gap: inherit` fixes it by
+  construction: a transitioned value is the computed value for inheritance,
+  so `.bars` tracks `.week` per frame and a freshly created node inherits
+  correctly.
+
+### `grid-template-columns` interpolation — live limitation, not solved
+The column template interpolates at some viewports and paths and snaps at
+others, and it is not a viewport split: the first expand interpolates at
+390×844 and snaps at 1440×900 and 1920×1200, while an in-row day switch does
+the exact reverse. Height, `transform` and `column-gap` animate correctly
+everywhere; the column end state is always correct; only the easing is
+inconsistent. The three engine constraints above and the split-gate
+architecture are each confirmed necessary and, together, not sufficient — an
+isolated reconstruction of the app's real architecture (pre-existing pool
+nodes, the split gate, `--expand-cols`, children replaced mid-task) **does**
+ease correctly, so this is not a hard engine wall. **The cause is not
+established.** Recorded in `SPEC.md` "Scroll engine API" (KNOWN LIMITATION)
+and `04_day/output/verification.md` §3 with the raw widths, so nobody
+re-derives five rounds of findings; do not re-litigate the three constraints
+on the theory that one of them is the missing piece. Also in `OPEN.md`.
+
+### A retracted conclusion, and why it matters beyond this bug
+For five fix rounds this stage's own probe sampled `columnsInterpolated` at
+50% of the transition and concluded several paths "confirmed snap." The
+expand's `--ease-spring` is `cubic-bezier(0.34, 1.56, 0.64, 1)`, which
+overshoots — progress exceeds 1.0 from roughly 35% to 85% of the duration,
+spanning that sample point — so a *correct* implementation, sampled there,
+also reads past the end value and reports `false`. The boolean was pinned to
+false by its own instrument, not by the app. It now samples at ~20%, before
+the overshoot window, and only after that fix did any row report `true`. The
+rule to keep, beyond this one probe: **when an instrument's own sampling
+point interacts with the thing it measures (an easing curve, a debounce, a
+retry window), a negative result is not evidence until the instrument is
+checked against a known-good case.** Reasoning about correctness is not a
+substitute for an instrument that cannot lie in this particular way.
