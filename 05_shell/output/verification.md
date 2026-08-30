@@ -1,6 +1,6 @@
 # Stage 05 — verification
 
-**Status: PARTIAL. The automated half is done; the human gate has not run.**
+**Status: DEPLOYED 2026-08-30; on-device gate not yet run.**
 
 Everything below that is marked *pending* requires the deployed origin, which
 requires two human-only steps (Cloudflare Pages, and registering the OAuth
@@ -157,16 +157,55 @@ Carried into `OPEN.md`:
 
 ---
 
-## 5. The human gate — not yet run
+## 5. The human gate
 
-**Two human-only prerequisites:**
+### Deploy — DONE 2026-08-30
 
-1. **Google Cloud Console** — add `https://bramwell.no.fail` as an authorized
-   JavaScript origin on the existing v3 OAuth client. No redirect URIs.
-   Exact-match, port included. Retry in a fresh tab; GIS caches the rejection.
-2. **Cloudflare Pages** — create the project (DNS/zone already exists). Build
-   `npm run build`, output `dist`, Node from `.node-version`, custom domain
-   `bramwell.no.fail`, and the three `VITE_*` env vars set in the dashboard.
+Live at `https://bramwell.no.fail`, git-connected Cloudflare Pages project
+`bramwell-pwa`, built from `9c253ec` on `main`.
+
+| Check | Result |
+|---|---|
+| Pages project git-connected, deploys on push | pass |
+| DNS: `bramwell.no.fail` CNAME -> `bramwell-pwa.pages.dev`, proxied | pass |
+| Build under the pinned Node 26 | pass — the feared unavailability did not occur |
+| `/sw.js` is the real worker, not the SPA fallback | pass — body opens `"use strict";(()=>{`, 0 ESM lines |
+| `/manifest.webmanifest` served as `application/manifest+json` | pass |
+| `_headers` applied: nosniff, referrer-policy, `/assets/*` immutable | pass |
+| `_headers` not itself exposed | pass |
+| `VITE_GOOGLE_CLIENT_ID` inlined into the deployed bundle | pass |
+| Build reproducibility | pass — CF emitted byte-identical asset hashes to the local build |
+| **`/sw.js` uncacheable** | **FAIL — see below** |
+
+**The one failure.** `_headers` sets `/sw.js` to `no-cache`, and
+`bramwell-pwa.pages.dev` serves exactly that. The proxied `bramwell.no.fail`
+serves `max-age=14400` instead: the zone's Browser Cache TTL default of 4 hours
+overrides any origin TTL lower than itself. `/assets/*` survived only because
+its `max-age=31536000` is *higher*. So the rule that matters most is the only
+one silently rewritten, and the `_headers` file is not at fault.
+
+Fix at the zone: a Cache Rule scoped to `bramwell.no.fail/sw.js` with Browser
+TTL "Respect origin" — narrower than flipping the whole zone, since the apex is
+an unrelated site. Recorded in `SPEC.md` DEPLOY and `OPEN.md`.
+
+Gate row 10 ("a second deploy reaches the installed client, no cache bump") must
+be run **after** that fix, not before, and must be observed rather than reasoned
+about: browsers default `updateViaCache: 'imports'` and cap SW script caching at
+24h, so the deploy probably still lands today — but "probably" is not what that
+row asks.
+
+### Still human-only
+
+Sign-in cannot work until this is done:
+
+- **Google Cloud Console** — add `https://bramwell.no.fail` as an authorized
+  JavaScript origin on the existing v3 OAuth client. No redirect URIs.
+  Exact-match, port included. Retry in a fresh tab; GIS caches the rejection.
+- **The `/sw.js` Cache Rule** above.
+
+Note that only `VITE_GOOGLE_CLIENT_ID` was set, not the two Supabase vars: no
+shipping code reads them (`habits.ts` is a stub, and 07 is on hold to
+2026-09-06), so `SPEC.md` DEPLOY over-specifies them for now.
 
 **Then, on the deployed origin, phone + desktop, light + dark:**
 
