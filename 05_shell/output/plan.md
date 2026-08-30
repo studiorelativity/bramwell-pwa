@@ -1687,7 +1687,31 @@ Expected: `ok: true`, `bad: []`, and `rows` equal to the number of categories in
 prefs. A non-empty `bad` names the exact row and option that broke the invariant.
 
 7. **add is dead at 11** — write 11 categories into prefs, reopen the sheet, assert `#cat-add` is `disabled` and its sibling `.set-note` is non-empty.
-8. **the sheet survives a background refresh** —
+8. **a FAB tap interrupted by a day tap does not arm a later spurious form** — the regression probe for Task 6's `pendingOpenAdd` leak. Drive it through the seam, since it is a same-frame race no synthetic pointer sequence reproduces reliably:
+
+```js
+const PENDING_ADD_LEAK = `() => {
+  const b = window.bramwell
+  // Arm via the FAB, then switch days before the queued rAF runs. The second
+  // openDayAt must DISARM the pending add; if it does not, the later tap back
+  // onto the first day opens a form nobody asked for.
+  document.getElementById('fab').dispatchEvent(new PointerEvent('click', {bubbles: true}))
+  const cells = [...document.querySelectorAll('.day[data-day]')]
+  const other = cells.find(c => !c.hasAttribute('data-open'))
+  if (other === undefined) return { ok: false, why: 'no second day cell' }
+  const d2 = Number(other.dataset.day)
+  const r = other.getBoundingClientRect()
+  const x = r.left + r.width / 2, y = r.top + r.height / 2
+  for (const t of ['pointerdown', 'pointerup']) {
+    other.dispatchEvent(new PointerEvent(t, {bubbles: true, clientX: x, clientY: y}))
+  }
+  return { armedThenSwitched: true, openedDay: d2, formOpen: b.day.isFormOpen() }
+}\`
+```
+
+Run it, then let a frame pass, then tap back onto the ORIGINAL FAB day and report `b.day.isFormOpen()`. Expected: **false** — the form must not reopen. A `true` there is the leak.
+
+9. **the sheet survives a background refresh** —
 
 ```js
 const SHEET_SURVIVES = `() => {
