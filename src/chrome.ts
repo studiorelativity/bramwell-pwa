@@ -53,7 +53,7 @@ export type ChromeController = {
 }
 
 /** Created on first use, so this module stays free of DOM at module scope. */
-let host: HTMLElement | null = null
+let toastHost: HTMLElement | null = null
 
 /** One animation is the toast's whole life — appear, dwell, leave — so its timing
  *  lives in motion.css and nothing here counts milliseconds. Under reduced motion
@@ -61,17 +61,17 @@ let host: HTMLElement | null = null
  *  is `alert` not `status`: this is the error surface; a polite region can be skipped,
  *  and the toast self-removes with no way to recall it (SPEC "Event form" + DECISIONS). */
 export function toast(message: string): void {
-  if (host === null || !host.isConnected) {
-    host = document.createElement('div')
-    host.id = 'toasts'
-    document.body.append(host)
+  if (toastHost === null || !toastHost.isConnected) {
+    toastHost = document.createElement('div')
+    toastHost.id = 'toasts'
+    document.body.append(toastHost)
   }
   const el = document.createElement('div')
   el.className = 'toast'
   el.setAttribute('role', 'alert')
   el.textContent = message
   el.addEventListener('animationend', () => el.remove())
-  host.append(el)
+  toastHost.append(el)
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
