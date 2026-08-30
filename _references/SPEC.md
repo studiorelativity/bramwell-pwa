@@ -359,7 +359,7 @@ ScrollController= { goToDay(day, animate), setSnapStep(15|30|45),
                     invalidate(weeks?), destroy() }
 render.renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[], rowH: number): void
 render.packLanes(spans: EventSpan[]): PackedSpan[]
-render.renderHeader(node: HTMLElement, weeks: WeekIndex[]): void
+render.renderRange(node: HTMLElement, firstWeek: WeekIndex, lastWeek: WeekIndex): void
 year.mount(root: HTMLElement, host: YearHost): YearController
 ```
 

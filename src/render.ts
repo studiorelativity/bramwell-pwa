@@ -165,3 +165,22 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
   }
   void WDAY   // used by year.ts in Task 9
 }
+
+/** "Aug – Sep 2026" when the view straddles, which at rest it does (DECISIONS).
+ *  Only the label's text changes per dock; the buttons are built once by main.ts. */
+export function renderRange(node: HTMLElement, firstWeek: WeekIndex, lastWeek: WeekIndex): void {
+  const a = dayToCivil(dayAt(firstWeek, asOffset(0)))
+  const b = dayToCivil(dayAt(lastWeek, asOffset(6)))
+  const name = (m: number) => new Date(Date.UTC(2000, m - 1, 1)).toLocaleString(undefined, { month: 'short', timeZone: 'UTC' })
+  const next = a.y === b.y
+    ? (a.m === b.m ? `${name(a.m)} ${a.y}` : `${name(a.m)} – ${name(b.m)} ${a.y}`)
+    : `${name(a.m)} ${a.y} – ${name(b.m)} ${b.y}`
+  if (node.textContent === next) return          // no cross-fade when nothing changed
+  node.dataset['in'] = ''
+  node.textContent = next
+  // The enter/exit utility owns the fade; components never write transitions.
+  node.classList.remove('enter')
+  void node.offsetWidth                          // restart the transition
+  node.classList.add('enter')
+  node.dataset['in'] = ''
+}
