@@ -315,8 +315,12 @@ real account. That file is now a record, not an input.
 ## Stage 03 rulings (2026-08-29, made at plan time)
 
 - **The virtualizer never writes `w * H` inline.** Every position and height
-  goes through `posOf(w, rowH, expanded)` / `heightOf(w, rowH, expanded)`,
-  and the scroll-offset inverse `weekAtY` carries the same three-way branch.
+  goes through `posOf(w, rowH, expanded)` / `heightOf(w, rowH, expanded)`.
+  The scroll-offset inverse `weekAtY` keeps the same three-way branch, but it
+  derives its expanded-row region boundaries by CALLING `posOf`/`heightOf` —
+  never by re-deriving the arithmetic — so a change to either propagates
+  automatically. The only exemption is the division that inverts a position
+  back to a week; there is no primitive for that direction.
   This is the single thing that, violated quietly, makes stage 04's inline
   expansion impossible and forces the overlay `OPEN.md` warns about. The
   scroller is SYNTHETIC — `y` is a number we own, not a browser-managed

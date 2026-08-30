@@ -44,9 +44,14 @@ export function posOf(w: WeekIndex, rowH: number, ex: Expanded): number {
 /** Inverse of posOf. O(1): three branches, no cumulative scan, no layout read. */
 export function weekAtY(y: number, rowH: number, ex: Expanded): WeekIndex {
   if (ex === null) return asWeek(Math.floor(y / rowH))
-  const top = ex.week * rowH
+  // The expanded row's region boundaries come from posOf/heightOf, not
+  // reconstructed arithmetic, so a change to either propagates here
+  // automatically. Only the division that INVERTS a position is exempt —
+  // there is no primitive for that.
+  const top = posOf(ex.week, rowH, ex)
+  const bottom = top + heightOf(ex.week, rowH, ex)
   if (y < top) return asWeek(Math.floor(y / rowH))
-  if (y < top + rowH + ex.delta) return ex.week
+  if (y < bottom) return ex.week
   return asWeek(Math.floor((y - ex.delta) / rowH))
 }
 
