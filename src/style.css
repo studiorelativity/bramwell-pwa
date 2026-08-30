@@ -88,15 +88,13 @@ html, body {
 }
 
 /* Today is distinguished by FORM: an inset ring plus an accent number.
-   --today is read from the token exactly once, into a scoped alias, so the
-   ring and the day number share the single reserved hue without a second
-   raw reference to the token appearing in the sheet. */
-.day[data-today] { --today-ring: var(--today); }
+   --today is reserved for today's two marks — the ring and the day
+   number — and appears nowhere else. */
 .day[data-today]::before {
   content: ""; position: absolute; inset: 0; border-radius: inherit;
-  box-shadow: inset 0 0 0 2px var(--today-ring); pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--today); pointer-events: none;
 }
-.day[data-today] .daynum { color: var(--today-ring); font-weight: 700; }
+.day[data-today] .daynum { color: var(--today); font-weight: 700; }
 
 .daynum { position: absolute; top: 3px; right: 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
 .badge { position: absolute; top: 3px; left: 6px; font-size: 11px; color: var(--ink-dim); letter-spacing: .02em; }
