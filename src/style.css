@@ -140,3 +140,26 @@ html, body {
 
 /* Any selector that sets display must re-assert [hidden] (CONVENTIONS). */
 [hidden] { display: none !important; }
+
+/* ---------- year view ---------- */
+.yearview { flex: 1; overflow: auto; position: relative; }
+.yr { display: flex; flex-direction: column; gap: 2px; padding: 8px; }
+/* Each row is a grid of cells plus a bar overlay — the week-row shape at year scale. */
+.yrrow { position: relative; display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 2px; }
+.yrcell { position: relative; aspect-ratio: 1 / 1.25; border-radius: 6px; background: var(--band-a); padding: 2px 3px; min-width: 0; overflow: hidden; }
+.yrcell[data-band="b"] { background: var(--band-b); }
+.yrcell[data-weekend][data-band="a"] { background: var(--band-a-end); }
+.yrcell[data-weekend][data-band="b"] { background: var(--band-b-end); }
+.yrcell[data-pad] { background: none; }
+.yrcell[data-today] { box-shadow: inset 0 0 0 2px var(--today); }
+.yrcell[data-today] .yrnum { color: var(--today); font-weight: 700; }
+.yrwd { font-size: 9px; color: var(--ink-dim); display: block; line-height: 1; }
+.yrnum { font-size: 11px; font-variant-numeric: tabular-nums; display: block; line-height: 1.2; }
+.yrcell .badge { top: auto; bottom: 2px; left: 3px; font-size: 9px; }
+.yrbars {
+  position: absolute; inset: 0;
+  display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 2px;
+  pointer-events: none;
+}
+/* Up to 3 thin bars per cell, stacked from the bottom so they fit a phone-sized cell. */
+.yrbar { grid-row: 1; align-self: end; height: 3px; border-radius: 2px; background: var(--cat); margin-bottom: calc(3px + var(--lane) * 5px); min-width: 0; }

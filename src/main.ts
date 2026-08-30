@@ -7,7 +7,8 @@ import * as gcal from './gcal.ts'
 import * as render from './render.ts'
 import * as scroll from './scroll.ts'
 import * as state from './state.ts'
-import { asOffset, asWeek } from './dates.ts'
+import * as year from './year.ts'
+import { asOffset, asWeek, dayToCivil } from './dates.ts'
 import type { WeekIndex } from './types.ts'
 
 const app = document.getElementById('app')
@@ -52,13 +53,22 @@ if (new URLSearchParams(location.search).has('selftest')) {
   modeBtn.textContent = 'Year'
   const avatar = document.createElement('span')
   avatar.className = 'hdr-avatar'          // reserved; stage 05 fills it
-  hdr.append(range, spacer, todayBtn, modeBtn, avatar)
+  // Year steppers — header, year view only (SPEC "Layout details").
+  const prevY = document.createElement('button'); prevY.id = 'btn-prev-year'; prevY.textContent = '‹'
+  const nextY = document.createElement('button'); nextY.id = 'btn-next-year'; nextY.textContent = '›'
+  prevY.hidden = true; nextY.hidden = true
+  // SPEC order: range, steppers, toggle, Today, avatar.
+  hdr.append(range, prevY, nextY, spacer, modeBtn, todayBtn, avatar)
 
   const scroller = document.createElement('div')
   scroller.className = 'scroller'
-  app.replaceChildren(hdr, scroller)
+  const yearRoot = document.createElement('div')
+  yearRoot.className = 'yearview'
+  yearRoot.hidden = true
+  app.replaceChildren(hdr, scroller, yearRoot)
 
   const MON = asOffset(0)
+  let lastRange = { first: NaN, last: NaN }
   const ctl = scroll.mount(scroller, {
     fillRow: (node, week, rowH) => render.renderWeek(node, week, state.spansForWeek(week), rowH),
     mondayOf: week => state.dayAt(week, MON),
@@ -73,6 +83,13 @@ if (new URLSearchParams(location.search).has('selftest')) {
     },
     onRangeChange: (first, last) => {
       // SPEC: months load as weeks come within ~8 weeks of the viewport, both ways.
+      // Only when the range actually moves: place() reports it on every
+      // repaint, and a repaint is what a cache change triggers. Without this
+      // guard a signed-out session loops — error → notify → invalidate →
+      // place → onRangeChange → ensureMonthsFor refetches the error month →
+      // error … — as one unbroken microtask chain that starves the renderer.
+      if (first === lastRange.first && last === lastRange.last) return
+      lastRange = { first, last }
       const weeks: WeekIndex[] = []
       for (let w = first - 8; w <= last + 8; w++) weeks.push(asWeek(w))
       state.ensureMonthsFor(weeks)
@@ -81,15 +98,64 @@ if (new URLSearchParams(location.search).has('selftest')) {
 
   ctl.setSnapStep(30)
   ctl.goToWeek(state.weekOf(state.today()), false)
+  // ---- year view: mounted lazily on first toggle ----
+  let yearCtl: year.YearController | null = null
+  let shownYear = dayToCivil(state.today()).y
+  const inYear = () => !yearRoot.hidden
+
+  function showYear(on: boolean): void {
+    yearRoot.hidden = !on
+    scroller.hidden = on
+    modeBtn.textContent = on ? 'Cal' : 'Year'
+    modeBtn.setAttribute('aria-pressed', String(on))
+    prevY.hidden = !on
+    nextY.hidden = !on
+    if (on) range.textContent = String(shownYear)
+  }
+  const step = (d: number) => { shownYear += d; yearCtl?.setYear(shownYear); range.textContent = String(shownYear) }
+  prevY.addEventListener('click', () => step(-1))
+  nextY.addEventListener('click', () => step(1))
+  modeBtn.addEventListener('click', () => {
+    const toYear = !inYear()
+    showYear(toYear)
+    if (toYear && yearCtl === null) {
+      // Mounted AFTER unhiding so columnsFor sees a real clientWidth.
+      yearCtl = year.mount(yearRoot, { onPickDay: d => {
+        // Clicking a day returns to the calendar on that day (SPEC "Year view").
+        showYear(false)
+        ctl.goToWeek(state.weekOf(d), false)   // onDock restores the range label
+      } })
+    }
+  })
+
   // SPEC "Layout details": Today goes to today WITHOUT changing the view —
-  // the calendar scrolls and re-snaps; the year view (task 9) pages back to
-  // this year instead. Only the calendar-only behaviour is wired here — task
-  // 9 introduces the year container/controller and branches this handler on
-  // view mode. `modeBtn` is created (the header's shape is this task's job)
-  // but intentionally left without a click handler for now.
-  todayBtn.addEventListener('click', () => ctl.goToWeek(state.weekOf(state.today()), true))
-  // A full refill is 14 fillRow calls — cheaper than mapping month keys to weeks.
-  state.onCacheChange(() => ctl.invalidate())
+  // the calendar scrolls and re-snaps; the year view pages back to this year.
+  todayBtn.addEventListener('click', () => {
+    if (inYear()) {
+      shownYear = dayToCivil(state.today()).y
+      yearCtl?.setYear(shownYear)
+      range.textContent = String(shownYear)
+    } else {
+      ctl.goToWeek(state.weekOf(state.today()), true)
+    }
+  })
+
+  // A full refill is 14 fillRow calls — cheaper than mapping month keys to
+  // weeks. The year view filters by year before repainting (SPEC "Year view").
+  // Coalesced to one repaint per frame: opening a range starts a dozen month
+  // fetches, each of which notifies as it flips to 'loading'.
+  let repaint = 0
+  let yearDirty = false
+  state.onCacheChange(months => {
+    if (months.some(k => k.startsWith(`${shownYear}-`))) yearDirty = true
+    if (repaint !== 0) return
+    repaint = requestAnimationFrame(() => {
+      repaint = 0
+      ctl.invalidate()
+      if (inYear() && yearDirty) yearCtl?.invalidate()
+      yearDirty = false
+    })
+  })
 
   if (import.meta.env.DEV) {
     // STAGE 02 HARNESS — deleted in stage 05, which builds the real first-run screen.

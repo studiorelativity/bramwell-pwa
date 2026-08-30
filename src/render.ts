@@ -5,35 +5,42 @@ import { asOffset, dayToCivil } from './dates.ts'
 /** EventSpan with the lane render.ts assigned. Not persisted, not exported beyond render.ts's consumers. */
 export type PackedSpan = EventSpan & { lane: number }
 
-/** Longest-first first-fit. The id tie-break is load-bearing: without it a
- *  repaint can reshuffle lanes under the user. Bars are all-day only — timed
- *  events render as chips (DECISIONS "In force — scroll and render"). */
-export function packLanes(spans: EventSpan[]): PackedSpan[] {
-  const bars = spans.filter(s => s.event.allDay)
-  bars.sort((a, b) =>
+/** Longest-first first-fit over any column range. Shared by the week rows
+ *  and the year grid so a multi-day event holds ONE lane across a row in
+ *  both. The id tie-break is load-bearing: without it a repaint can
+ *  reshuffle lanes under the user.
+ *
+ *  Per-lane interval lists: an item goes in the lowest lane whose existing
+ *  intervals it genuinely does not overlap. Longest-first only orders
+ *  placement; overlap is decided by true interval intersection, not by
+ *  tracking each lane's rightmost occupied column — that heuristic assumes
+ *  items arrive left to right, which longest-first does not guarantee (a
+ *  later, earlier-starting, non-overlapping item could get shoved into a
+ *  wasted lane). */
+export function assignLanes<T extends { from: number; to: number; id: string }>(items: T[]): (T & { lane: number })[] {
+  const sorted = [...items].sort((a, b) =>
     (b.to - b.from) - (a.to - a.from) ||
     a.from - b.from ||
-    (a.event.id < b.event.id ? -1 : a.event.id > b.event.id ? 1 : 0))
-  // Per-lane interval lists: a span goes in the lowest lane whose existing
-  // intervals it genuinely does not overlap. Longest-first only orders
-  // placement; overlap is decided by true interval intersection, not by
-  // tracking each lane's rightmost occupied offset — that heuristic assumes
-  // spans arrive left to right, which longest-first does not guarantee (a
-  // later, earlier-starting, non-overlapping span could get shoved into a
-  // wasted lane).
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   const lanes: { from: number; to: number }[][] = []
-  const out: PackedSpan[] = []
-  for (const s of bars) {
+  const out: (T & { lane: number })[] = []
+  for (const it of sorted) {
     let lane = 0
-    while (lane < lanes.length && lanes[lane]!.some(iv => s.from <= iv.to && s.to >= iv.from)) lane++
+    while (lane < lanes.length && lanes[lane]!.some(iv => it.from <= iv.to && it.to >= iv.from)) lane++
     if (lane === lanes.length) lanes.push([])
-    lanes[lane]!.push({ from: s.from, to: s.to })
-    out.push({ ...s, lane })
+    lanes[lane]!.push({ from: it.from, to: it.to })
+    out.push({ ...it, lane })
   }
   return out
 }
 
-const WDAY = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+/** Bars are all-day only — timed events render as chips (DECISIONS "In force — scroll and render"). */
+export function packLanes(spans: EventSpan[]): PackedSpan[] {
+  const bars = spans.filter(s => s.event.allDay)
+    .map(s => ({ span: s, from: s.from as number, to: s.to as number, id: s.event.id }))
+  return assignLanes(bars).map(x => ({ ...x.span, lane: x.lane }))
+}
+
 const BAR_H = 20        // must match --bar height + gap in style.css
 const HEAD_H = 20       // day-number band at the top of a tile
 const FOOT_H = 16       // the "+N" line
@@ -163,7 +170,6 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
     rule.style.right = '0'
     node.append(rule)
   }
-  void WDAY   // used by year.ts in Task 9
 }
 
 /** Pure: "Aug – Sep 2026" when the view straddles, which at rest it does (DECISIONS).
