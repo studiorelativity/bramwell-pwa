@@ -177,6 +177,14 @@ let form: HTMLFormElement | null = null
 /** The event being edited; null means a new event. */
 let editing: CalendarEvent | null = null
 let picked = ''
+/** Bumped by every dropForm(), which runs at the start of every openForm() and at every
+ *  close. save()/remove() capture this before their await and compare after: a write
+ *  that outlives its form (Escape closes it, another form opens while the request is
+ *  still in flight) must not touch `form`/`editing` on completion — those globals now
+ *  belong to a DIFFERENT, currently-open form. This is not reachable from the node
+ *  selftest (no DOM, no real await boundary to race) or from the shot.mjs harness
+ *  (it never opens the form); verified by reasoning through the sequence, not observed. */
+let formGen = 0
 
 export function isFormOpen(): boolean { return form !== null && form.isConnected }
 
@@ -332,8 +340,10 @@ function readDraft(): EventDraft {
     end,
     repeat: (field<HTMLSelectElement>('.dp-repeat')?.value ?? 'none') as RepeatRule,
   }
-  const notes = field<HTMLTextAreaElement>('.dp-notes')?.value ?? ''
-  if (notes !== '') draft.notes = notes
+  // Always set, even when empty: state.ts's write paths use `draft.notes !== undefined`
+  // as their "this field changed" sentinel, so an omitted `notes` means "leave it alone"
+  // while an empty string means "the user cleared it" — the only way to clear a note.
+  draft.notes = field<HTMLTextAreaElement>('.dp-notes')?.value ?? ''
   if (!allDay) {
     draft.startMin = parseHm(field<HTMLInputElement>('.dp-startt')?.value ?? '') ?? 0
     draft.endMin = parseHm(field<HTMLInputElement>('.dp-endt')?.value ?? '') ?? 0
@@ -367,16 +377,24 @@ async function save(): Promise<void> {
   if (bad !== null) { showError(bad); return }
   showError(null)
   busy(true)
+  // Captured before the await: if this form is gone by the time the write resolves
+  // (Escape closed it, or another form has since opened), `gen` no longer matches
+  // `formGen` and every touch of `form`/`editing` below is skipped as stale.
+  const gen = formGen
   try {
     if (editing === null) { await state.createEvent(draft) }
     else { await state.updateEvent(editing.id, draft, scopeValue()) }
+    if (gen !== formGen) return               // stale: the write succeeded, but not into this UI
     closeForm()
   } catch (e) {
-    // Both surfaces, every time (SPEC "Event form").
+    // Both surfaces, every time (SPEC "Event form") — the toast fires even when stale,
+    // because the user still needs to learn the write failed even though the form
+    // that made it is gone. Only the form-touching half is conditional on freshness.
     const msg = messageFor(e)
-    showError(msg)
     host.toast(msg)
-  } finally { busy(false) }
+    if (gen !== formGen) return
+    showError(msg)
+  } finally { if (gen === formGen) busy(false) }
 }
 
 async function remove(): Promise<void> {
@@ -392,14 +410,19 @@ async function remove(): Promise<void> {
     return
   }
   busy(true)
+  // See save(): captured before the await so a stale completion (this form closed or
+  // replaced while the delete was in flight) skips every touch of `form`/`editing`.
+  const gen = formGen
   try {
     await state.deleteEvent(editing.id, scope)
+    if (gen !== formGen) return
     closeForm()
   } catch (e) {
     const msg = messageFor(e)
-    showError(msg)
     host.toast(msg)
-  } finally { busy(false) }
+    if (gen !== formGen) return
+    showError(msg)
+  } finally { if (gen === formGen) busy(false) }
 }
 
 function openForm(d: DayNumber, ev: CalendarEvent | null): void {
@@ -416,8 +439,11 @@ function openForm(d: DayNumber, ev: CalendarEvent | null): void {
   field<HTMLInputElement>('.dp-title')?.focus()
 }
 
-/** Silent teardown, used when the form is being replaced or the panel is going away. */
+/** Silent teardown, used when the form is being replaced or the panel is going away.
+ *  Bumping `formGen` here, at the one place `form`/`editing` are cleared, is what makes
+ *  any write request started against the outgoing form recognizably stale afterward. */
 function dropForm(): void {
+  formGen++
   form?.remove()
   form = null
   editing = null
