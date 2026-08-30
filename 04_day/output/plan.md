@@ -1,3 +1,20 @@
+> **SUPERSEDED IN PART — 2026-08-30, final fix wave, before gate close.**
+> This is the stage's working artifact — the record of what was believed
+> before the fix rounds — and it stays where it is. But its motion/scroll
+> code blocks predate five rulings made during execution (`DECISIONS.md`
+> "Stage 04 rulings" 10–14) and prescribe, as copy-pasteable CSS, the
+> ancestor-attribute gate shape `.scroller[data-anim] .week` /
+> `.scroller[data-anim] .bars` (see "Step 3: Add the expand/collapse
+> transition" below) — a shape ruling 11 confirms this engine will never
+> transition `grid-template-columns` through, regardless of write order.
+> This project's rule is not to retry a rejected approach without a new
+> reason; a 2000-line artifact spelling out the rejected shape inside the
+> stage's own output is exactly the hazard that rule exists for.
+> **Do not implement from this file.** For the current design — the
+> same-element gate (`.week[data-anim][data-cols-anim]`), the
+> `--expand-cols` custom-property indirection, and why both are required —
+> read `_references/SPEC.md` "Scroll engine API" instead.
+
 # Stage 04 — Inline day, motion system, event form: Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

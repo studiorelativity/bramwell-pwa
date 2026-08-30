@@ -213,12 +213,16 @@ the same DOM, so typed text cannot be wiped by anything but an explicit rebuild 
   `--t-open --ease-spring`; content staggers in 40ms apart (fade + 6px
   rise). Collapse runs `--t-base --ease-out`, content fades first, no
   stagger.
-- One shared enter/exit utility solves display:none-vs-animation once
-  (`@starting-style` + `transition-behavior: allow-discrete` on enter,
-  `transitionend` on exit). Components never write their own transitions.
-  The utility has three states: `.enter` (hidden at rest), `[data-in]` (entering,
-  staggered by `--i`), `[data-out]` (leaving, opacity only, never staggered).
-  A component sets `--i` as a plain integer; the 40ms cadence stays a token.
+- One shared enter/exit utility solves display:none-vs-animation once, with
+  three states: `.enter` (hidden at rest — the before-change style), `[data-in]`
+  (entering, staggered by `--i`), `[data-out]` (leaving, opacity only, never
+  staggered). A caller forces a reflow (`void node.offsetWidth`) between
+  adding `.enter` and setting `[data-in]`, so the browser commits the hidden
+  style before the transition-eligible one is applied — that forced reflow is
+  what makes the transition run, not `@starting-style`/`transition-behavior:
+  allow-discrete`, which this utility does not use. Components never write
+  their own transitions. A component sets `--i` as a plain integer; the 40ms
+  cadence stays a token.
 - `prefers-reduced-motion`: everything collapses to 80ms opacity-only.
   Carve-out: a toast's animation is its LIFETIME, not motion. Collapsing it to
   80ms would make an error unreadable, so under reduced motion the toast keeps
