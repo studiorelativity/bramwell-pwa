@@ -22,7 +22,7 @@ import {
   settleMs, snapTargetY, weekAtY,
 } from './scroll.ts'
 import type { Expanded } from './scroll.ts'
-import { packLanes, visibilityFor } from './render.ts'
+import { packLanes, visibilityFor, rangeLabel } from './render.ts'
 import type { PackedSpan } from './render.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
@@ -1332,6 +1332,40 @@ const cases: Case[] = [
     if (v[6]!.chipsShown !== 1) return `day 6: expected the 1 chip shown, got ${v[6]!.chipsShown}`
     if (v[6]!.overflow !== 0) return `day 6: expected overflow 0 when everything fits, got ${v[6]!.overflow}`
     return null
+  }],
+
+  ['render: rangeLabel three shapes — same month, same-year straddle, cross-year', () => {
+    const savedAnchor = today()
+    try {
+      // Pin to 2026-08-11, a Tuesday in August. week 0 is the week containing today (that week's Monday).
+      // An anchor on the 11th puts Monday the 10th as the start of week 0.
+      _setAnchorForTest(civilToDay(2026, 8, 11))
+
+      // Week 0 runs Mon 8/10 – Sun 8/16 (all in August). Last day is 8/16.
+      // rangeLabel(0, 0) should produce "Aug 2026" (same month).
+      const sameMonth = rangeLabel(asWeek(0), asWeek(0))
+      if (sameMonth !== 'Aug 2026') return `same month: expected "Aug 2026", got "${sameMonth}"`
+
+      // Week 1 runs Mon 8/17 – Sun 8/23 (still in August).
+      // rangeLabel(0, 1) spans from Mon 8/10 to Sun 8/23 (same month).
+      const stillAug = rangeLabel(asWeek(0), asWeek(1))
+      if (stillAug !== 'Aug 2026') return `two weeks same month: expected "Aug 2026", got "${stillAug}"`
+
+      // Week 2 runs Mon 8/24 – Sun 8/30 (still in August).
+      // Week 3 runs Mon 8/31 – Sun 9/6 (September starts on Sunday).
+      // rangeLabel(0, 3) spans Mon 8/10 to Sun 9/6 (August to September).
+      const straddleYear = rangeLabel(asWeek(0), asWeek(3))
+      if (straddleYear !== 'Aug – Sep 2026') return `same-year straddle: expected "Aug – Sep 2026", got "${straddleYear}"`
+
+      // Now test cross-year. Anchor on 2026-12-28 (a Monday in December).
+      _setAnchorForTest(civilToDay(2026, 12, 28))
+
+      // Week 0 runs Mon 12/28 – Sun 2027-1/3 (December to January).
+      const crossYear = rangeLabel(asWeek(0), asWeek(0))
+      if (crossYear !== 'Dec 2026 – Jan 2027') return `cross-year straddle: expected "Dec 2026 – Jan 2027", got "${crossYear}"`
+
+      return null
+    } finally { _setAnchorForTest(savedAnchor) }
   }],
 ]
 
