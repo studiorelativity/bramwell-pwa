@@ -90,9 +90,13 @@ const PROBE = `(async () => {
   // sleep after tap() risks reading transitionDuration before the browser has
   // applied it (reads the CSS default 0s, not what motion.css actually set) —
   // poll, bounded, rather than assume one frame is always enough headless.
-  const waitForAnim = async (scrollerEl, maxFrames = 10) => {
-    for (let i = 0; i < maxFrames && scrollerEl.dataset.anim === undefined; i++) await waitFrame()
-    return scrollerEl.dataset.anim ?? null
+  // Polls a ROW's own data-anim, not the scroller's (round 6 review): the
+  // gate moved off .scroller onto each pooled .week, because this engine
+  // only starts a grid-template-columns transition through a same-element
+  // attribute selector, never an ancestor's.
+  const waitForAnim = async (rowEl, maxFrames = 10) => {
+    for (let i = 0; i < maxFrames && rowEl.dataset.anim === undefined; i++) await waitFrame()
+    return rowEl.dataset.anim ?? null
   }
   // Two independently-laid-out grids (.week in flow, .bars position:absolute)
   // can legitimately resolve a shared 1fr/0fr track list ~0.01-0.02px apart
@@ -202,7 +206,7 @@ const PROBE = `(async () => {
   // transitionDuration off it — reading immediately after tap() races the
   // frame that sets it and always reads 0.
   tap(target)
-  const animAttr = await waitForAnim(document.querySelector('.scroller'))
+  const animAttr = await waitForAnim(targetRow)
   const animDurMs = Math.round((parseFloat(getComputedStyle(targetRow).transitionDuration) +
                                 parseFloat(getComputedStyle(targetRow).transitionDelay)) * 1000)
   // Mid-flight: the column width must be strictly between its start and end, which
@@ -276,7 +280,9 @@ const PROBE = `(async () => {
   await sleep(140 + 760 + 100)
   const stillOpenAfterScroll = document.querySelector('.day[data-open]') !== null
   const jumpAfterSettle = document.querySelectorAll('.week[data-jump]').length
-  const animAttrAfterScroll = document.querySelector('.scroller').dataset.anim ?? null
+  // No row anywhere should still carry data-anim once settled — checked
+  // across every .week, not just targetRow, same reasoning as jumpAfterSettle.
+  const animAttrAfterScroll = document.querySelector('.week[data-anim]')?.dataset.anim ?? null
 
   // ---- the form: every control hit-tested at its centre ----
   document.querySelector('.dp-add').scrollIntoView({ block: 'center' })
