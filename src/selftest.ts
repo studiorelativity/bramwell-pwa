@@ -325,10 +325,14 @@ const cases: Case[] = [
       '[data-cat="work"] { --cat: var(--cat-work); }',
       '--surface:',
     ]) if (!css.includes(need)) return `missing: ${need}`
-    // Mood values are stage 03: every id resolves to warm for now, and none of them throws.
+    // Stage 03 fills MOODS: every id must now produce its OWN palette.
+    const seen = new Set<string>()
     for (const m of ['warm', 'paper', 'cool', 'sage', 'dusk'] as MoodId[]) {
-      if (themeCss(m) !== css) return `mood ${m} differs from warm before stage 03 fills MOODS`
+      const out = themeCss(m)
+      if (m !== 'warm' && out === css) return `mood ${m} is still identical to warm`
+      seen.add(out)
     }
+    if (seen.size !== 5) return `five moods produced ${seen.size} distinct stylesheets`
     // A non-seed colour with no displayHex takes Google's hex light and a derived twin dark.
     configure({ categories: [{ name: 'solo', label: 'Solo', colorId: '3' }], fallbackCategory: 'solo' })
     const solo = themeCss('warm')
@@ -1209,6 +1213,47 @@ const cases: Case[] = [
       prev = v
     }
     if (!(easeOutCubic(0.5) > 0.5)) return 'easeOutCubic must be above the diagonal (decelerating)'
+    return null
+  }],
+
+  ['categories: the mood ladder holds in both schemes', () => {
+    const lightness = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16)
+      const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255
+      return (Math.max(r, g, b) + Math.min(r, g, b)) / 2
+    }
+    const grab = (css: string, scheme: 'light' | 'dark', token: string): string => {
+      // the dark block is everything after the media query opener
+      const idx = css.indexOf('@media (prefers-color-scheme: dark)')
+      const hay = scheme === 'light' ? css.slice(0, idx) : css.slice(idx)
+      const m = new RegExp(`--${token}:\\s*(#[0-9A-Fa-f]{6})`).exec(hay)
+      return m?.[1] ?? ''
+    }
+    configure({})
+    for (const mood of ['warm', 'paper', 'cool', 'sage', 'dusk'] as MoodId[]) {
+      const css = themeCss(mood)
+      for (const scheme of ['light', 'dark'] as const) {
+        const rung = ['surface', 'band-a-end', 'band-a', 'band-b-end', 'band-b']
+          .map(t => ({ t, hex: grab(css, scheme, t) }))
+        for (const { t, hex } of rung) {
+          if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) return `${mood}/${scheme}: --${t} missing or malformed (${hex || 'absent'})`
+        }
+        // The ladder: ground darkest, then weekend-a, a, weekend-b, b. Identical
+        // ordering in both schemes — light inverts the SURFACE logic, not the ladder.
+        for (let i = 1; i < rung.length; i++) {
+          const lo = rung[i - 1]!, hi = rung[i]!
+          if (!(lightness(hi.hex) > lightness(lo.hex))) {
+            return `${mood}/${scheme}: --${hi.t} (${hi.hex}) is not lighter than --${lo.t} (${lo.hex})`
+          }
+        }
+        // A weekend sits UNDER its own band, not beside it.
+        const byToken = Object.fromEntries(rung.map(r => [r.t, r.hex]))
+        if (!(lightness(byToken['band-a-end']!) < lightness(byToken['band-a']!))) return `${mood}/${scheme}: weekend a is not under band a`
+        if (!(lightness(byToken['band-b-end']!) < lightness(byToken['band-b']!))) return `${mood}/${scheme}: weekend b is not under band b`
+      }
+    }
+    // The seed near-black belongs to Cool, not Warm — it was always hue 220.
+    if (grab(themeCss('cool'), 'dark', 'surface').toUpperCase() !== '#0F1115') return 'cool/dark ground is no longer the seed near-black'
     return null
   }],
 ]

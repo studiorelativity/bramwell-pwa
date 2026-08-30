@@ -148,14 +148,42 @@ export function all(): StoredCategory[] {
 
 // ---------- Theme ----------
 
-type MoodTokens = { surface: string; surfaceDark: string }
+type Bands = {
+  surface: string
+  bandA: string
+  bandAEnd: string
+  bandB: string
+  bandBEnd: string
+}
+type MoodTokens = { light: Bands; dark: Bands }
 
-/** Values are stage 03's, from the design canvas that SPEC "Visual direction" defers to.
- *  Only warm exists in-repo (the seed paint in index.html); the other four ids resolve to
- *  it until stage 03 fills this table, and the four band tokens are not emitted at all.
- *  No palette is invented here. */
-const MOODS: Partial<Record<MoodId, MoodTokens>> = {
-  warm: { surface: '#f7f6f3', surfaceDark: '#0f1115' },
+/** The ladder is fixed; a mood shifts hue and saturation only (SPEC "Visual
+ *  direction"). Lightness relative to the ground: band-a-end +2.5, band-a +4,
+ *  band-b-end +4.5, band-b +6. Month parity is the a/b pair; weekend sits
+ *  under its own band. Dark grounds are near-identical by design — Night Depth
+ *  wants a near-black ground and the mood reads through the bands. */
+const MOODS: Record<MoodId, MoodTokens> = {
+  warm: {
+    light: { surface: '#F2EFEA', bandA: '#FAF9F7', bandAEnd: '#F7F5F2', bandB: '#FEFEFD', bandBEnd: '#FBFAF9' },
+    dark:  { surface: '#141210', bandA: '#1F1C19', bandAEnd: '#1B1816', bandB: '#25211E', bandBEnd: '#211D1A' },
+  },
+  paper: {
+    light: { surface: '#F4F1E9', bandA: '#FBFAF6', bandAEnd: '#F8F7F1', bandB: '#FEFEFD', bandBEnd: '#FCFBF8' },
+    dark:  { surface: '#131210', bandA: '#1F1D1A', bandAEnd: '#1A1916', bandB: '#24221E', bandBEnd: '#201E1B' },
+  },
+  cool: {
+    // The stage-01 seed near-black #0f1115 is hue 220 and lands here exactly.
+    light: { surface: '#EBEEF2', bandA: '#F7F9FA', bandAEnd: '#F3F5F7', bandB: '#FDFEFE', bandBEnd: '#F9FAFB' },
+    dark:  { surface: '#0F1115', bandA: '#181B21', bandAEnd: '#14171C', bandB: '#1C1F26', bandBEnd: '#191C22' },
+  },
+  sage: {
+    light: { surface: '#ECF1EC', bandA: '#F8FAF8', bandAEnd: '#F3F6F4', bandB: '#FEFEFE', bandBEnd: '#F9FBF9' },
+    dark:  { surface: '#101411', bandA: '#191F1B', bandAEnd: '#151B18', bandB: '#1D2520', bandBEnd: '#1A211D' },
+  },
+  dusk: {
+    light: { surface: '#EFECF1', bandA: '#F9F8FA', bandAEnd: '#F5F3F6', bandB: '#FEFEFE', bandBEnd: '#FAF9FB' },
+    dark:  { surface: '#120F15', bandA: '#1C1820', bandAEnd: '#18151C', bandB: '#211C26', bandBEnd: '#1D1922' },
+  },
 }
 
 function lightOf(c: StoredCategory): string {
@@ -167,20 +195,30 @@ function darkOf(c: StoredCategory): string {
   return TWINS.get(light.toUpperCase()) ?? brighten(light)
 }
 
+function bandVars(b: Bands, indent: string): string {
+  return [
+    `${indent}--surface: ${b.surface};`,
+    `${indent}--band-a: ${b.bandA};`,
+    `${indent}--band-a-end: ${b.bandAEnd};`,
+    `${indent}--band-b: ${b.bandB};`,
+    `${indent}--band-b-end: ${b.bandBEnd};`,
+  ].join('\n')
+}
+
 /** [data-cat] rules, --cat-<name> properties, mood tokens. main.ts owns the <style>. */
 export function themeCss(mood: MoodId): string {
-  const tokens = MOODS[mood] ?? MOODS.warm!
+  const tokens = MOODS[mood]
   const light = cats.map(c => `  --cat-${c.name}: ${lightOf(c)};`).join('\n')
   const dark = cats.map(c => `    --cat-${c.name}: ${darkOf(c)};`).join('\n')
   const rules = cats.map(c => `[data-cat="${c.name}"] { --cat: var(--cat-${c.name}); }`).join('\n')
   return [
     `:root {`,
-    `  --surface: ${tokens.surface};`,
+    bandVars(tokens.light, '  '),
     light,
     `}`,
     `@media (prefers-color-scheme: dark) {`,
     `  :root {`,
-    `    --surface: ${tokens.surfaceDark};`,
+    bandVars(tokens.dark, '    '),
     dark,
     `  }`,
     `}`,
