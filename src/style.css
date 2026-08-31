@@ -386,20 +386,77 @@ html, body {
 .yearview { flex: 1; overflow: auto; position: relative; }
 .yr { display: flex; flex-direction: column; gap: 2px; padding: 8px; }
 /* Each row is a grid of cells plus a bar overlay — the week-row shape at year scale. */
-.yrrow { position: relative; display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 2px; }
+/* The template is built per row in year.ts (spine tracks fixed, event days
+   2.2fr, the rest 1fr) and written to --yr-cols. Static by ruling: nothing in
+   this view transitions a track size. The repeat() fallback keeps a row honest
+   if the property is ever missing. */
+.yrrow {
+  position: relative; display: grid;
+  grid-template-columns: var(--yr-cols, repeat(var(--cols), 1fr));
+  gap: 2px; min-height: 40px;
+}
 .yrcell { position: relative; aspect-ratio: 1 / 1.25; border-radius: 6px; background: var(--band-a); padding: 2px 3px; min-width: 0; overflow: hidden; }
 .yrcell[data-band="b"] { background: var(--band-b); }
 .yrcell[data-weekend][data-band="a"] { background: var(--band-a-end); }
 .yrcell[data-weekend][data-band="b"] { background: var(--band-b-end); }
 .yrcell[data-pad] { background: none; }
+/* The hover ring and lift live on their own layer, exactly as .day's do, so the
+   ring fades rather than pops and nothing touches paint. --ring, never --today. */
+.yrcell::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  box-shadow: var(--el-hover), inset 0 0 0 1px var(--ring);
+  opacity: 0; pointer-events: none;
+}
+@media (hover: hover) {
+  .yrcell[data-has-ev]:hover { transform: translateY(-2px); }
+  .yrcell[data-has-ev]:hover::after { opacity: 1; }
+}
+/* An event day reads brighter and heavier, so busy stretches of the year show
+   as texture. Declared BEFORE the today rules: the two selectors have equal
+   specificity, so today would otherwise lose its accent number to source order. */
+.yrcell[data-has-ev] .yrnum { color: var(--ink); font-weight: 620; }
+/* A stretched cell must not also grow TALLER — aspect-ratio on a 2.2fr track
+   would demand ~2.2x the height and drag the whole row with it. The 1fr cells
+   keep their ratio and set the row height; .yrrow's min-height covers the row
+   where every cell is stretched and none is left to define it. */
+.yrcell[data-stretch] { aspect-ratio: auto; }
 .yrcell[data-today] { box-shadow: inset 0 0 0 2px var(--today); }
 .yrcell[data-today] .yrnum { color: var(--today); font-weight: 700; }
 .yrwd { font-size: 9px; color: var(--ink-dim); display: block; line-height: 1; }
-.yrnum { font-size: 11px; font-variant-numeric: tabular-nums; display: block; line-height: 1.2; }
-.yrcell .badge { top: auto; bottom: 2px; left: 3px; font-size: 9px; }
+/* Ordinary days sit back in --ink-dim so an event day's --ink/620 actually
+   reads as brighter (SPEC "Year view"). Without this base the two were the
+   same colour and the contrast the redesign is for did not exist. Today's
+   rule below has equal specificity to the event-day rule and is declared
+   after it, so today keeps its accent number either way. */
+.yrnum { font-size: 11px; font-variant-numeric: tabular-nums; display: block; line-height: 1.2; color: var(--ink-dim); }
+/* The month divider that replaced this grid's `.badge` (SPEC "Year view").
+   Neutral by ruling — the name is --ink-dim and the edge is --rule; --today
+   stays reserved for today's ring and number. z-index lifts it above .yrbars,
+   which is a later sibling, so the divider visibly interrupts a run crossing
+   it rather than being painted over. No `border` anywhere: Night Depth's tiles
+   are not hairline-ruled cells. */
+.yrspine {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--band-b-end); border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--rule);
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-size: 9px; font-weight: 620; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-dim);
+  overflow: hidden; white-space: nowrap; min-width: 0;
+}
+/* Up to 2 event titles inside a stretched cell, between the day number and the
+   bars. The bars are the ROW overlay and stay exactly as they are — a per-cell
+   segment of a multi-day run is not this cell's to hide. */
+.yrtitles { display: flex; flex-direction: column; gap: 1px; margin-top: 2px; min-width: 0; }
+.yrtitle { display: flex; align-items: center; gap: 3px; font-size: 8px; line-height: 1.3; color: var(--ink-dim); min-width: 0; }
+.yrtdot { width: 4px; height: 4px; border-radius: 50%; background: var(--cat); flex: none; }
+.yrtt { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* inherit, never its own repeat(): the stage-04 .bars lesson — an overlay that
+   computes its own template can silently disagree with the row it overlays. */
 .yrbars {
   position: absolute; inset: 0;
-  display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 2px;
+  display: grid; grid-template-columns: inherit; column-gap: inherit;
   pointer-events: none;
 }
 /* Up to 3 thin bars per cell, stacked from the bottom so they fit a phone-sized cell. */
@@ -410,9 +467,13 @@ html, body {
 .yrpanel {
   position: absolute; z-index: 4; pointer-events: none;
   background: var(--band-b); color: var(--ink);
-  border-radius: 8px; box-shadow: var(--el-open);
-  padding: 6px 10px; font-size: 12px; line-height: 1.4;
-  min-width: 140px; max-width: 280px;
+  border-radius: 10px;
+  /* The open elevation plus the same neutral ring the hover layer uses, so the
+     panel reads as the third level rather than a flat plate (DECISIONS: the
+     panel is "restyled in the same tokens in a later pass" — this is it). */
+  box-shadow: var(--el-open), inset 0 0 0 1px var(--ring);
+  padding: 8px 11px; font-size: 12px; line-height: 1.45;
+  min-width: 150px; max-width: 280px;
 }
 .yrp-day { color: var(--ink-dim); font-size: 11px; margin-top: 4px; }
 .yrp-day[data-focus] { color: var(--ink); font-weight: 620; }

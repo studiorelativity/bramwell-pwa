@@ -135,6 +135,18 @@
 }
 .toast { animation: toast-life var(--t-toast) var(--ease-out) both; }
 
+/* Year-cell hover lift, mirroring the .day pattern above: compositor
+   properties only (opacity + transform), never box-shadow, which repaints
+   every frame. Only event days lift — an empty cell has nothing to inspect,
+   and lifting all 365 would be noise. NOTHING here touches
+   grid-template-columns: the year view's stretch is static by ruling, because
+   interpolating that property is the recorded KNOWN LIMITATION. */
+.yrcell::after { transition: opacity var(--t-fast) var(--ease-out); }
+@media (hover: hover) {
+  .yrcell[data-has-ev]:hover { transition: transform var(--t-fast) var(--ease-out); }
+  .yrcell[data-has-ev]:not(:hover) { transition: transform var(--t-base) var(--ease-out); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition-duration: 80ms !important;

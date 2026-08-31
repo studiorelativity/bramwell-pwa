@@ -67,6 +67,25 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
     grid.className = 'yr'
     grid.style.setProperty('--cols', String(cols))
 
+    // 28 columns is the only width wide enough for a full month name and for
+    // inline titles; below it the spine carries a 3-letter name and titles are
+    // dropped (SPEC "Year view"). Stretch is off entirely at 7 columns, where
+    // there is no room to give any cell 2.2fr without crushing the rest.
+    const wide = cols >= 28
+    const stretchOn = cols > 7
+    const SPINE_W = wide ? '24px' : '18px'
+
+    /** The month divider that replaced the year grid's `.badge`. */
+    const spineFor = (m: number): HTMLElement => {
+      const sp = document.createElement('div')
+      sp.className = 'yrspine'
+      const name = new Date(Date.UTC(2000, m - 1, 1))
+        .toLocaleString(undefined, { month: wide ? 'long' : 'short', timeZone: 'UTC' })
+      sp.dataset['monthName'] = name
+      sp.textContent = name
+      return sp
+    }
+
     const cells: HTMLElement[] = []
     for (let i = 0; i < indent; i++) {
       const pad = document.createElement('div')
@@ -76,6 +95,10 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
     }
     for (let d = jan1; d <= dec31; d = asDay(d + 1)) {
       const { m, d: dom } = dayToCivil(d)
+      // The spine goes IN the cells array, immediately before each 1st (Jan 1
+      // included, after the indent pads), so it is a real track and the row's
+      // index arithmetic stays honest rather than needing a parallel offset.
+      if (dom === 1) cells.push(spineFor(m))
       const cell = document.createElement('div')
       cell.className = 'yrcell'
       cell.dataset['band'] = m % 2 === 0 ? 'a' : 'b'
@@ -86,48 +109,113 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
       const wd = document.createElement('span'); wd.className = 'yrwd'; wd.textContent = WDAY[off] ?? ''
       const num = document.createElement('span'); num.className = 'yrnum'; num.textContent = String(dom)
       cell.append(wd, num)
-      if (dom === 1) {
-        const badge = document.createElement('span'); badge.className = 'badge'
-        badge.textContent = new Date(Date.UTC(2000, m - 1, 1)).toLocaleString(undefined, { month: 'short', timeZone: 'UTC' })
-        cell.append(badge)
-      }
+      // No `.badge` here any more: the spine names the month, and printing it
+      // twice on the 1st is the duplicate rendering CONVENTIONS' stand-down
+      // rule exists to stop (SPEC "Layout details" now exempts this view).
       cells.push(cell)
     }
 
-    // One row per `cols` cells, each with its own bar overlay — the same
-    // shape as a week row, so a multi-day run holds ONE lane across the row
-    // and crosses the tile gaps as one object (DECISIONS).
-    for (let start = 0; start < cells.length; start += cols) {
-      const rowCells = cells.slice(start, start + cols)
+    // Pad the tail to a whole row. The template is now built from the row's
+    // OWN tracks rather than a fixed repeat(cols, 1fr), so a short final row
+    // would otherwise spread its handful of December cells across the entire
+    // width — the same reason the year starts with indent pads.
+    const tail = (indent + (dec31 - jan1 + 1)) % cols
+    if (tail !== 0) {
+      for (let i = tail; i < cols; i++) {
+        const pad = document.createElement('div')
+        pad.className = 'yrcell'
+        pad.dataset['pad'] = ''
+        cells.push(pad)
+      }
+    }
+
+    // Rows hold `cols` DAY cells; spines are EXTRA tracks, so a row carrying a
+    // month boundary has cols + 1. Slicing a fixed `cols` ITEMS instead (the
+    // old shape) would let each spine steal a day column and cascade the rest
+    // of the year sideways from every boundary.
+    const rows: HTMLElement[][] = []
+    let cur: HTMLElement[] = []
+    let dayCount = 0
+    for (const el of cells) {
+      if (dayCount === cols) { rows.push(cur); cur = []; dayCount = 0 }
+      cur.push(el)
+      if (!el.classList.contains('yrspine')) dayCount++   // pads hold a column too
+    }
+    if (cur.length > 0) rows.push(cur)
+
+    // Each row is a grid of tracks plus a bar overlay — the week-row shape at
+    // year scale, so a multi-day run holds ONE lane across the row and crosses
+    // the tile gaps as one object (DECISIONS).
+    for (const rowCells of rows) {
       const row = document.createElement('div')
       row.className = 'yrrow'
       row.append(...rowCells)
 
+      // Day number -> its TRACK index in this row. A multi-day bar's end is
+      // looked up here rather than computed as `from + (end - start)`: a spine
+      // sitting between the two days is a track the day arithmetic cannot see,
+      // so that sum stops one track short of every boundary it crosses.
+      const trackOfDay = new Map<number, number>()
+      rowCells.forEach((el, i) => {
+        const d = el.dataset['day']
+        if (d !== undefined) trackOfDay.set(Number(d), i)
+      })
+      const lastDay = trackOfDay.size > 0 ? Math.max(...trackOfDay.keys()) : 0
+
       const items: { from: number; to: number; id: string; cat: string }[] = []
       const seen = new Set<string>()
+      const titles = new Map<number, { title: string; cat: string }[]>()
       rowCells.forEach((cell, i) => {
         const dayAttr = cell.dataset['day']
         if (dayAttr === undefined) return
         const day = asDay(Number(dayAttr))
         for (const ev of eventsForMonth(monthKey(day))) {
-          if (seen.has(ev.id)) continue
-          // Timed events get a bar HERE, unlike a calendar week row, where
-          // render.ts's packLanes excludes them because they already have a
-          // chip. The year grid has no chips, so the same exclusion made a day
-          // with only timed events read as empty — the whole point of the view
-          // is seeing where the year is busy (SPEC "Year view": bars are for
-          // "that day's events", not that day's all-day events).
-          // A timed event occupies its START day only, the rule day.ts's
-          // eventsOn already uses; only an all-day event runs on to ev.end.
           const last = ev.allDay ? ev.end : ev.start
           if (last < day || ev.start > day) continue
+          // Per-cell marks are collected in THIS walk, never a second per-cell
+          // lookup (DECISIONS: markers collected during lane packing). Every
+          // covering event counts here, including ones `seen` skips below —
+          // `seen` dedupes BARS, not day occupancy.
+          cell.dataset['hasEv'] = ''
+          if (stretchOn) cell.dataset['stretch'] = ''
+          const list = titles.get(i) ?? []
+          if (list.length < 2) { list.push({ title: ev.title, cat: ev.category }); titles.set(i, list) }
+          if (seen.has(ev.id)) continue
           seen.add(ev.id)
-          // One cell for a timed event; a real run for an all-day one, so
-          // longest-first still hands multi-day events their lane first.
-          const to = ev.allDay ? Math.min(cols - 1, i + (ev.end - day)) : i
-          items.push({ from: i, to, id: ev.id, cat: ev.category })
+          const endDay = ev.allDay ? Math.min(ev.end, lastDay) : day
+          items.push({ from: i, to: trackOfDay.get(endDay) ?? i, id: ev.id, cat: ev.category })
         }
       })
+
+      // Computed once, here, and never transitioned: interpolating
+      // grid-template-columns is the recorded KNOWN LIMITATION (SPEC "Scroll
+      // engine API"), which is why the stretch is static and hover feedback is
+      // the compositor-only lift instead.
+      row.style.setProperty('--yr-cols', rowCells.map(el =>
+        el.classList.contains('yrspine') ? SPINE_W
+          : stretchOn && el.dataset['hasEv'] !== undefined ? '2.2fr'
+            : '1fr').join(' '))
+
+      // Inline titles only where a stretched cell is actually wide enough.
+      if (wide) {
+        for (const [i, list] of titles) {
+          const cell = rowCells[i]
+          if (cell === undefined) continue
+          const box = document.createElement('div')
+          box.className = 'yrtitles'
+          for (const t of list) {
+            const line = document.createElement('div')
+            line.className = 'yrtitle'
+            line.dataset['cat'] = t.cat
+            const dot = document.createElement('span'); dot.className = 'yrtdot'
+            const tt = document.createElement('span'); tt.className = 'yrtt'; tt.textContent = t.title
+            line.append(dot, tt)
+            box.append(line)
+          }
+          cell.append(box)
+        }
+      }
+
       const layer = document.createElement('div')
       layer.className = 'yrbars'
       for (const it of assignLanes(items)) {
