@@ -90,8 +90,13 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   deliberately shallow, so no background choice separates the spine by more
   than ~1.1:1 — the label itself has to carry it. `--surface` makes the spine a
   recess in the tile field (the Night Depth shape: tiles on a ground, needing
-  no hairline to define them), and `--ink` puts the name at **14.9-15.4:1**
-  across all five moods in both schemes. The spine's own text sets its row's
+  no hairline to define them), and `--ink` put the name at **14.9-15.4:1**
+  across all five moods in both schemes. **Amended again 2026-08-31 to
+  `--ink-strong`** — pure white in dark, pure black in light, **17.9-18.6:1** —
+  after the name still read dim on a real display. The honest note for whoever
+  tunes this next: the remaining gap is NOT contrast ratio. At 10px, uppercase,
+  rotated 90 degrees, the limit is stroke weight; the levers that would move it
+  are font size, spine width, or dropping the rotation where there is room. The spine's own text sets its row's
   minimum height, so a long month name grows its row rather than being cut.
 - **Event-day stretch (2026-08-30), static.** A cell carrying at least one
   event gets a wider track (2.2fr against 1fr); not applied on 7-column
@@ -117,8 +122,16 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   hidden, unless the displayed year changes).
 - **Touch**: first tap raises the panel, second tap on the same day opens
   that day in the calendar view, a tap elsewhere dismisses.
-- `<` `>` step the year. Clicking a day returns to the calendar view on
-  that day. Opening a year calls `ensureMonthsFor` for its months.
+- `<` `>` step the year. **Clicking a day returns to the calendar view on that
+  day — positioned at its week AND expanded (amended 2026-08-31).** "On that
+  day" previously delivered only the scroll: you landed on the right week with
+  nothing open, which is indistinguishable from landing on any of its six
+  neighbours and reads as the pick having been ignored. The day now arrives
+  with its inline expansion open. Ordering is load-bearing — `goToWeek` settles
+  the week synchronously, then `openDayAt` defers a frame and the `setExpanded`
+  behind it runs `fitY`; both want the same week, so `fitY` refines the
+  position instead of fighting it. Opening a year calls `ensureMonthsFor` for
+  its months.
 - No virtualization: 365 cells rebuild in one pass. `onCacheChange`
   filters by year before repainting.
 
