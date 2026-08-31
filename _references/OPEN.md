@@ -227,10 +227,14 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   2.2fr against 2.2fr is 1:1. That is inherent to a proportional track, not a
   bug, and it degrades gracefully (a uniformly busy row is uniformly busy).
   Recorded so it is not rediscovered as a defect.
-- **`.set-avatar-dot` uses `var(--today)`** (`style.css`), violating SPEC's
-  "the one reserved hue… used for nothing else". Introduced in stage 05's
-  chrome work and missed by the whole-branch review; found while checking the
-  year-view redesign's reserved-hue constraint. Left deliberately: it is
-  chrome, not the year view, and fixing it here would widen an iteration
-  scoped to three files. Acceptance criterion 3 of the year-view iteration is
-  therefore met **within the year view**, not repo-wide.
+- **2026-08-31 — CLOSED. `.set-avatar-dot` used `var(--today)`**
+  (`style.css`), violating SPEC's "the one reserved hue… used for nothing
+  else". Introduced in stage 05's chrome work and missed by the whole-branch
+  review; found 2026-08-30 while checking the year-view redesign's
+  reserved-hue constraint, and deferred then because it was chrome rather than
+  the year view. Now `--ink-dim`: the dot already signals connection by
+  PRESENCE — it exists only in the connected state, the reconnect pill
+  standing in otherwise — so it never needed the accent to say so. The
+  reserved-hue rule now holds repo-wide, not only inside the year view.
+  Shipped as the payload for the gate-row-10 two-deploy test, which needed a
+  real content change to move the asset hashes.

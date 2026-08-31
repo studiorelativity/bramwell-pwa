@@ -297,9 +297,16 @@ html, body {
   position: relative; width: 28px; height: 28px; border-radius: 50%;
   background: var(--band-b); border: 0; padding: 0; box-shadow: var(--el-rest);
 }
+/* Neutral, never --today: that hue is reserved for today's ring and its day
+   number and "is used for nothing else" (SPEC "Visual direction"). This dot
+   shipped in stage 05 using it, which the whole-branch review missed; found
+   2026-08-30 while checking the year-view redesign's reserved-hue constraint.
+   The dot already carries connection state by PRESENCE — it exists only in the
+   connected state, where the reconnect pill replaces it otherwise — so it needs
+   no accent hue to say so. */
 .set-avatar-dot {
   position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px;
-  border-radius: 50%; background: var(--today);
+  border-radius: 50%; background: var(--ink-dim);
   box-shadow: 0 0 0 2px var(--surface);
 }
 .set-pill {

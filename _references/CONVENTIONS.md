@@ -112,9 +112,19 @@ twice, the rule goes here.
   the process then hangs past the virtual-time budget. `=1` still works, so a
   light-mode run either way is a useful control that the two mechanisms agree.
   (Stage 02: reproduced independently by two agents on Chrome 151.0.7922.175.)
-- Headless Chrome hangs on service-worker registration. SW behaviour is
-  verified statically (`dist/sw.js` at root, classic script, no ESM,
-  precache list matches emitted paths) and then on a real install.
+- **Headless Chrome registers service workers fine — corrected 2026-08-31.**
+  The stage-02 note said it hangs, and that shaped every SW claim since into
+  "verified statically only". Re-tested against the deployed HTTPS origin with
+  `--headless=new`: `navigator.serviceWorker.ready` resolved in **3.3s**,
+  `state: "activated"`, one registration, cache `bramwell` holding all 8
+  precached paths. Whatever the stage-02 failure was — an older headless mode,
+  or the insecure-origin `vite preview` it was run against — it does not
+  reproduce. SW behaviour is now testable in the harness: registration,
+  precache contents, and whether a new deploy reaches an installed client.
+  Static checks (`dist/sw.js` at root, classic script, no ESM, precache list
+  matches emitted paths) remain useful and cheap, but they are no longer the
+  ceiling. A real device install still answers what a headless profile cannot:
+  the installed-PWA launch path, and iOS Safari specifically.
 - `curl` against `vite preview` returns 200 for unknown paths (SPA
   fallback) — it proves nothing about a file's existence.
 - Every stage ends with a `verification.md`: gate criteria, results,
