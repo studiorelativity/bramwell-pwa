@@ -194,6 +194,36 @@ about: browsers default `updateViaCache: 'imports'` and cap SW script caching at
 24h, so the deploy probably still lands today — but "probably" is not what that
 row asks.
 
+### Gate row 10 — PASS by observation, 2026-08-31
+
+Run after the `/sw.js` Cache Rule closed (§5b). Two real deploys:
+
+1. `688eb23`, docs only — served **byte-identical** asset hashes. A control,
+   not the test: nothing in `_references/` or `CLAUDE.md` reaches `dist`.
+2. `8e2e1b8`, the avatar-dot `--today` fix — a real content change, so the CSS
+   hash moved and `sw.js`'s precache list moved with it.
+
+A client was installed against the pre-deploy-2 build, then reopened once
+deploy 2 was live. Field values on that first online open:
+
+```
+sw state          activated        registrations   1
+cache names       ["bramwell"]     cache bumped    False
+page now running  /assets/index-NSsBPv9j.js  /assets/index-CjhiWC4r.css   (deploy 2)
+still serving old False
+old hashes in cache  /assets/index-C1joVWiX.css  /assets/index-DhFK5Aec.js
+```
+
+The new build is served on the next open, with the cache name untouched —
+which is the whole claim `CONVENTIONS.md`'s "bump nothing by hand for deploys"
+rests on. The superseded hashes remaining in the cache is the recorded
+accumulation trade, not a fault.
+
+**What this does not cover.** A headless profile is not an installed PWA: the
+`standalone` launch path, the iOS Safari SW lifecycle, and a genuinely offline
+cold open all still need a real device. This proves the update mechanism, not
+the install experience.
+
 ### Still human-only
 
 Sign-in cannot work until this is done:
@@ -220,7 +250,7 @@ shipping code reads them (`habits.ts` is a stub, and 07 is on hold to
 | 7 | Display hex vs Google colour both visible when they disagree | pending |
 | 8 | Every mood readable at arm's length, both schemes | pending |
 | 9 | Install as PWA; offline open read-only; a write fails visibly and rolls back | pending |
-| 10 | A second deploy reaches the installed client, no cache bump | pending |
+| 10 | A second deploy reaches the installed client, no cache bump | **PASS 2026-08-31** — see below |
 | 11 | FAB clears the last row's Sunday on the notched phone | pending |
 | 12 | *Carried:* 60fps on a mid phone — **seed the cache across the whole visible window first** | pending |
 

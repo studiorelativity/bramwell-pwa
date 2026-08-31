@@ -502,6 +502,21 @@ if (new URLSearchParams(location.search).has('selftest')) {
   const inYear = () => !yearRoot.hidden
 
   function showYear(on: boolean): void {
+    // Leaving the calendar collapses any open day, and this is load-bearing,
+    // not tidiness. The expansion is calendar state; carried into the year
+    // view it leaves TWO owners of the scroll position. showYear(false)'s own
+    // synthetic resize below schedules a remeasure (the resize listener fires
+    // whenever openDay !== null), which lands a frame LATER than
+    // onPickDay's goToWeek and runs setExpanded -> fitY to keep the OLD
+    // expanded row on screen — silently reverting the jump. Observed: picking
+    // a day six months out set the header to the new range (onDock had fired)
+    // while the calendar sat at the old position, with the stale day still
+    // open. Collapsing on the way OUT removes the second owner at its source,
+    // rather than making each future caller of goToWeek remember to close
+    // first. SPEC's expansion rules ("one day open at a time", Escape
+    // collapses, scrolling does not force-collapse) are silent on view
+    // switches; a day expanded in a view you have left is not one of them.
+    if (on) closeDay()
     yearRoot.hidden = !on
     scroller.hidden = on
     modeBtn.textContent = on ? 'Cal' : 'Year'
