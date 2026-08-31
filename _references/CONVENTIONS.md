@@ -126,3 +126,33 @@ twice, the rule goes here.
   switch that snapped its column template, found by static trace, is why a
   same-week-switch probe was added to the harness rather than trusting the
   trace a second time.)
+- **A probe that compares two measurements compares raw floats with an
+  epsilon, and never rounds the two sides in opposite directions.** Rounding
+  one side up and the other down manufactures a shortfall of up to one unit
+  out of two readings that are actually equal. (2026-08-31, the year-view
+  spine: `Math.ceil(textHeight) > Math.floor(boxHeight)` reported six of
+  twelve month names clipped, every one of them by exactly 1px — the giveaway
+  — and a tracking change was written to fix a layout that was never broken.
+  Comparing the raw values showed 0 of 12 clipped at every width.)
+- **A negative result from a new or modified instrument is not evidence until
+  that instrument has passed a known-good case.** Build the failing case and
+  the passing case together: an instrument that has only ever reported failure
+  has not been shown capable of reporting anything else. This is the general
+  form of the rule already stated for sampling points, and it is now the
+  second time an instrument's own artifact has been mistaken for a product
+  defect:
+  - **2026-08-30, stage 04** — the `columnsInterpolated` probe sampled at 50%
+    of a transition whose `--ease-spring` overshoots past 1.0 from ~35% to
+    ~85%, so a *correct* implementation read as `false`. Five fix rounds
+    chased a boolean pinned false by its own instrument. Full account in
+    `DECISIONS.md` "A retracted conclusion, and why it matters beyond this
+    bug".
+  - **2026-08-31, year-view spine** — `scrollHeight` cannot see overflow on
+    centred content, so a clipping probe reported zero clipped while a month
+    name was visibly cut in a screenshot; the replacement then failed the
+    other way through the rounding above.
+
+  Both were caught by something outside the instrument — a screenshot, and a
+  suspiciously uniform 1px — not by the instrument itself. Neither is a
+  reason to trust screenshots over probes; it is a reason to make every probe
+  demonstrate that it can return both answers before its answer is quoted.

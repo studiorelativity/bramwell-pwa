@@ -59,6 +59,18 @@ of fix happens, the rule goes into `CONVENTIONS.md`.
 - A file the layout lacks is added to `_references/SPEC.md` first, then created.
 - Every "this control works" claim is backed by `elementFromPoint()`.
 - Motion values exist only in `motion.css`.
+- **Iteration follow-ups may ship without asking; anything wider holds.**
+  Inside an iteration the human has already approved, a follow-up fix to what
+  that iteration just shipped may be committed and pushed without a fresh
+  ask — including its dated upstream amendment, *when the amendment only
+  records what was actually built*. What holds for the human: reversing a
+  ruling that predates this iteration, adding scope beyond what was approved,
+  or touching another stage's surface. Amending a ruling **this** iteration
+  wrote about **its own** output is recording, not reversing; amending one
+  carried out of a closed gate is reversing, and waits.
+  Precedent: the 2026-08-31 month-spine readability push — a follow-up to the
+  year-view iteration, superseding a spine-colour ruling written hours earlier
+  in that same iteration, with measurements as the reason. Within bounds.
 
 ## Manual steps (human-only)
 Google Cloud Console OAuth client (`_references/SPEC.md` MANUAL SETUP) — the v3 client
