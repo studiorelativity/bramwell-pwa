@@ -184,6 +184,14 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   (2026-08-31: this replaced the `.badge`); "+N" overflow **bottom-left**;
   habit/journal markers bottom-right (see their specs).
 - Tap/click a day → **inline day expansion** (below). No overlay drawer.
+- **The drag surfaces suppress text selection (2026-08-31).** Dragging the
+  scroller IS how you scroll it, and `scroll.ts` captures the pointer to do
+  that — but nothing stopped the browser reading the same drag as a text
+  selection, so a scroll, or even a tap that moved a pixel, highlighted every
+  day number it passed over. `touch-action: none` governs gestures, not
+  selection; `user-select: none` on `.scroller`, `.yearview` and `.hdr` is what
+  does it. The day panel and the year panel opt back **in**: an event title is
+  worth copying, and form fields must stay editable.
 - **The open day carries a 1px `--ink-strong` inset ring (2026-08-31)**, not
   elevation alone. It shipped at 2px and was immediately too heavy: that
   outweighed both the 1px hover ring and today's own 2px accent, inverting the

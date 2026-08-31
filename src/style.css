@@ -77,6 +77,13 @@ html, body {
    Reconnect pill off-screen and made its centre unhittable. */
 .hdr-avatar { display: flex; align-items: center; min-width: 28px; height: 28px; }
 
+/* Dragging the scroller IS how you scroll it, and scroll.ts captures the
+   pointer to do that — but nothing stopped the browser reading the same drag
+   as a text selection, so a scroll or even a slightly-moved tap highlighted
+   every day number it passed over. `touch-action: none` covers gestures, not
+   selection. The panels below opt back IN: an event title is worth copying. */
+.scroller, .yearview, .hdr { -webkit-user-select: none; user-select: none; }
+.dp, .yrpanel { -webkit-user-select: text; user-select: text; }
 .scroller { position: relative; flex: 1; overflow: hidden; touch-action: none; }
 
 /* STAGE 02 HARNESS — deleted in stage 05. */
