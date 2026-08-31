@@ -59,6 +59,16 @@ html, body {
   background: var(--surface);
 }
 .hdr-range { font-weight: 620; font-size: 15px; }
+/* Centred on the HEADER, not between its flex items, so it stays put whatever
+   the range label's width does. pointer-events:none because it sits over the
+   spacer and must never eat a click aimed at a control. Hidden on phones,
+   where the range, the toggle, Today and the avatar already fill the bar. */
+.hdr-title {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  font-weight: 620; font-size: 14px; letter-spacing: .04em;
+  color: var(--ink); pointer-events: none; white-space: nowrap;
+}
+@media (max-width: 560px) { .hdr-title { display: none; } }
 .hdr-spacer { flex: 1; }
 .hdr button { font: inherit; color: var(--ink); background: none; border: 0; padding: 6px 10px; border-radius: 8px; }
 .hdr button[aria-pressed="true"] { background: var(--band-b); }
@@ -210,7 +220,13 @@ html, body {
 /* The picked cell keeps the open elevation — the third and last level; nothing
    else on screen casts a shadow (SPEC "Visual direction — Night Depth"). */
 .day[data-open] {
-  box-shadow: var(--el-open); overflow: hidden;
+  /* Elevation alone did not read as "this day is open" — the shadow is the
+     third level but it has no edge, so the picked day looked like its
+     neighbours. --ink-strong (white in dark, black in light) is the only
+     neutral with enough separation at 2px; --ring is the HOVER weight and
+     --today is reserved. Today's own ring is a ::before pseudo-element, so an
+     open today keeps its accent painted over this one and stays identifiable. */
+  box-shadow: var(--el-open), inset 0 0 0 2px var(--ink-strong); overflow: hidden;
   /* Above .bars and .rule. Both are LATER siblings inside .week, so with every
      child at z-index auto they paint over the open cell — an all-day bar drew
      a stripe across the panel's header. .week's `will-change: transform` makes

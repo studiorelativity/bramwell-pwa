@@ -52,6 +52,11 @@ if (new URLSearchParams(location.search).has('selftest')) {
   const modeBtn = document.createElement('button')
   modeBtn.id = 'btn-mode'
   modeBtn.textContent = 'Year'
+  // Centred on the header by CSS, so it is not a flex sibling competing with
+  // the range label for space (SPEC "Layout details").
+  const title = document.createElement('span')
+  title.className = 'hdr-title'
+  title.textContent = 'Bramwell'
   const avatar = document.createElement('span')
   avatar.className = 'hdr-avatar'          // filled by chrome.ts (avatar, reconnect pill, or nothing)
   // Year steppers — header, year view only (SPEC "Layout details").
@@ -59,7 +64,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
   const nextY = document.createElement('button'); nextY.id = 'btn-next-year'; nextY.textContent = '›'
   prevY.hidden = true; nextY.hidden = true
   // SPEC order: range, steppers, toggle, Today, avatar.
-  hdr.append(range, prevY, nextY, spacer, modeBtn, todayBtn, avatar)
+  hdr.append(range, prevY, nextY, spacer, title, modeBtn, todayBtn, avatar)
 
   const scroller = document.createElement('div')
   scroller.className = 'scroller'
@@ -519,7 +524,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     if (on) closeDay()
     yearRoot.hidden = !on
     scroller.hidden = on
-    modeBtn.textContent = on ? 'Cal' : 'Year'
+    modeBtn.textContent = on ? 'Month' : 'Year'
     modeBtn.setAttribute('aria-pressed', String(on))
     prevY.hidden = !on
     nextY.hidden = !on

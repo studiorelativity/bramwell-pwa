@@ -376,7 +376,10 @@ function buildSheet(): HTMLElement {
   // Written only; never switches the CURRENT view. It is the view a session
   // OPENS in (SPEC "Settings"), which main.ts reads at boot.
   const view = row('Default view')
-  view.append(segment(['Cal', 'Year'], p0.defaultView === 'year' ? 'Year' : 'Cal', v => {
+  // LABELS are Month/Year to match the header toggle (2026-08-31); the STORED
+  // value stays 'cal'/'year' — it is persisted prefs, and renaming it would
+  // silently reset every existing install's default view.
+  view.append(segment(['Month', 'Year'], p0.defaultView === 'year' ? 'Year' : 'Month', v => {
     state.savePrefs({ ...state.prefs(), defaultView: v === 'Year' ? 'year' : 'cal' })
   }))
   body.append(view)

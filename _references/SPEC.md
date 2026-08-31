@@ -144,10 +144,16 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
 - Sticky header, left to right: the month(s) or year in view (heavier
   weight; "Aug – Sep 2026" when the view straddles, which at rest it does;
   cross-fades on change; the window is the docked week ±3), year steppers
-  (year view only), the Cal/Year toggle, a Today button, the account avatar.
+  (year view only), the **Month/Year** toggle, a Today button, the account
+  avatar. **2026-08-31: the toggle reads "Month"/"Year"** — it said "Cal",
+  which named the implementation rather than what the user is looking at.
+  The app name sits **centred on the header**, positioned against the header
+  itself rather than as a flex sibling, so the range label's width cannot
+  shift it; `pointer-events: none` so it can never eat a click aimed at a
+  control, and hidden at phone widths where the bar is already full.
 - **Today button** goes to today without changing the view: calendar
   scrolls and re-snaps; year view pages back to the current year. The
-  Cal/Year toggle is the only control that switches views.
+  Month/Year toggle is the only control that switches views.
 - A floating add button, bottom-right, safe-area aware, both views. Opens
   the event form pre-filled with the date nearest viewport centre
   (calendar: mid-week day of the docked week; year: today). `n` on desktop
@@ -178,6 +184,13 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   (2026-08-31: this replaced the `.badge`); "+N" overflow **bottom-left**;
   habit/journal markers bottom-right (see their specs).
 - Tap/click a day → **inline day expansion** (below). No overlay drawer.
+- **The open day carries a 2px `--ink-strong` inset ring (2026-08-31)**, not
+  elevation alone. The open elevation is the third and last shadow level but it
+  has no edge, so an expanded day — especially one arrived at from the year
+  view — did not read as picked. `--ring` is the hover weight and `--today` is
+  reserved, which leaves the strong neutral. Today's own accent ring is a
+  `::before` pseudo-element and paints over this one, so an open today keeps
+  its identity.
 
 ## Visual direction — Night Depth
 
@@ -357,7 +370,7 @@ Ported behaviour (content contract unchanged from the drawer):
 ## Settings
 
 A sheet from the avatar: account row ("Google Calendar · Connected") with
-sign-out; snap 15/30/45; default view (Cal/Year); a **Colors** section
+sign-out; snap 15/30/45; default view (labelled Month/Year, stored as `cal`/`year`); a **Colors** section
 (below); Mood; sound row is a labelled stub. All prefs; no new storage. A
 background refresh must not close or reset the sheet.
 
