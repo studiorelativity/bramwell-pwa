@@ -208,3 +208,22 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   on the worker is exactly the thing that would make that intermittently false
   on the one engine this app cares most about. Fix, then re-run the two-deploy
   gate row rather than reasoning about it.
+
+## Opened at the year-view redesign (2026-08-30)
+- **The 14-column stretch factor is unverified on a device.** Event-day cells
+  take 2.2fr against 1fr. At 28 columns that reads; at 14 (tablet and phone)
+  the cells are already wider, so the same factor may over-stretch a busy row
+  and squeeze the ordinary days. Screenshots were taken at 1440 and 390, but
+  a screenshot is not arm's-length legibility. Tune at the next device gate —
+  do not guess a second number from a headless render.
+- **A row where EVERY day has an event gets no stretch at all**, because
+  2.2fr against 2.2fr is 1:1. That is inherent to a proportional track, not a
+  bug, and it degrades gracefully (a uniformly busy row is uniformly busy).
+  Recorded so it is not rediscovered as a defect.
+- **`.set-avatar-dot` uses `var(--today)`** (`style.css`), violating SPEC's
+  "the one reserved hue… used for nothing else". Introduced in stage 05's
+  chrome work and missed by the whole-branch review; found while checking the
+  year-view redesign's reserved-hue constraint. Left deliberately: it is
+  chrome, not the year view, and fixing it here would widen an iteration
+  scoped to three files. Acceptance criterion 3 of the year-view iteration is
+  therefore met **within the year view**, not repo-wide.

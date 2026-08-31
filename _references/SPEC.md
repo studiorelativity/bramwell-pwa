@@ -55,18 +55,48 @@ and no lens (built, tried, rejected — do not retry).
 Toggled from the header. One calendar year at once, no scrolling on desktop.
 
 - A continuous **week-aligned grid, 28 day columns per row** (four weeks),
-  first row indented by the weekday of 1 January so every column is the
-  same weekday all year. Tablets AND phones fall back to 14 columns (a
-  390px phone scrolls about one row — accepted at the stage-03 gate); 7
-  only below 360px.
-- Each cell: weekday abbreviation, day number, a month badge on the 1st,
-  the month band and weekend shade, and up to **3 thin category-coloured
+  first row indented by the weekday of 1 January. Tablets AND phones fall
+  back to 14 columns (a 390px phone scrolls about one row — accepted at the
+  stage-03 gate); 7 only below 360px.
+- **2026-08-30: strict column alignment is traded away.** Every column was
+  the same weekday all year; month spines and stretched event days (both
+  below) each insert or widen a track, so that no longer holds. It is a
+  deliberate trade, not a regression: the per-cell weekday letter (`.yrwd`)
+  carries the weekday instead, and the weekend shade stays per-cell
+  (`data-weekend`), so weekend banding survives approximately. Supersedes
+  the stage-03 phrasing; the 14-column phone ruling is unchanged.
+- Each cell: weekday abbreviation, day number, the month band and weekend
+  shade, and up to **3 thin category-coloured
   bars** for that day's events, longest-first so a multi-day event holds
   one lane across the row. More than 3 are dropped in the grid; the panel
   lists them all. **"Events" includes timed ones**, unlike a calendar week
   row where a timed event is excluded from the bars because it has a chip
   instead: this grid has no chips, so excluding them made a day of timed
   events read as empty. A timed event is a single-cell bar on its start day.
+- **Month spine (2026-08-30).** Between the last cell of a month and the 1st
+  of the next — and before the year's first in-year cell — a narrow non-day
+  track carries the full month name in caps, reading bottom-up
+  (`writing-mode: vertical-rl`). Desktop 24px and the full name; 14-column
+  layouts 18px and a 3-letter name. **The spine replaces the `.badge` month
+  label in the year grid**, which is why "Layout details" now exempts this
+  view from identical badge treatment: two month names on the 1st would be
+  the same duplicate rendering CONVENTIONS' stand-down rule exists to stop.
+  Its colour is neutral — `--ink-dim` for the name, the `--rule`/`--ring`
+  neutral for its edge. Never `--today`.
+- **Event-day stretch (2026-08-30), static.** A cell carrying at least one
+  event gets a wider track (2.2fr against 1fr); not applied on 7-column
+  layouts. At 28-column widths a stretched cell also shows up to 2 event
+  titles inline — one line each, ellipsised, with a category dot — between
+  the day number and the bars. **No track size in the year view is ever
+  animated**: interpolating `grid-template-columns` is a recorded KNOWN
+  LIMITATION (see "Scroll engine API"), so the template is computed once per
+  `build()` and nothing transitions it. Hover feedback is the existing Night
+  Depth lift instead.
+- Day numbers on event days render `--ink` at weight 620; ordinary days stay
+  `--ink-dim`. Today keeps `--today`, its ring and its number — unchanged.
+- Cells with events take the Night Depth hover lift (`translateY(-2px)` plus
+  the `--ring` fade, compositor properties only, declarations in
+  `motion.css`). The panel contract below is unchanged.
 - The panel's date is formatted by **locale**, never a hardcoded `d/m` — that
   reads as a 30th month to a US reader. `timeZone: 'UTC'`, since `DayNumber`
   is a UTC civil date.
@@ -101,7 +131,9 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   does the same, ignored inside inputs or with a day open. It must not
   cover the last row's Sunday events on a notched phone.
 - A thin rule + month badge marks each month boundary inline, from the 1st
-  to the end of that week row. Badge treatment is identical in both views.
+  to the end of that week row. Badge treatment is identical in both views
+  **except the year grid**, where the month spine replaces the badge
+  (2026-08-30; see "Year view"). The calendar view is unchanged.
 - **All-day and multi-day events render as bars** spanning their days
   within each week row, wrapping across consecutive rows. Longest-first
   lane packing. Title once, on the true start; continuations carry no
@@ -824,9 +856,10 @@ Calendar (carried forward, all still binding):
 - Flick three months: 60fps, settles softly onto a centred anchor at the
   chosen 15/30/45; header updates.
 - Double-tapping a day on a phone never zooms the page.
-- Year view: all 365 days on a desktop window, week-aligned, badges, today;
-  hover (tap on phone) shows three days with events in full; clicking a
-  day returns to it.
+- Year view: all 365 days on a desktop window, week-aligned except where a
+  month spine or a stretched event day shifts a track, month spines naming
+  each month, today; hover (tap on phone) shows three days with events in
+  full; clicking a day returns to it.
 - Scroll a year into the past: months load as approached, no jank, `.week`
   node count stays at 14.
 - A 3-week all-day commitment renders as a wrapping bar across three rows

@@ -116,6 +116,48 @@ why. New rulings made during the rebuild go at the bottom, dated.
   `[hidden] { display: none }`.
 - Flex-gap trap: text nodes are not flex items; wrap titles in a span.
 
+## Year view redesign (2026-08-30)
+
+Iteration session, not a stage session: this amends closed stage-03
+territory. Upstream edits landed before any code.
+
+- **Hairline borders on year cells: considered again for contrast, rejected
+  again.** Night Depth's statement stands — cells are "rounded raised tiles
+  on a near-black ground, **not** hairline-ruled grid cells" (SPEC "Visual
+  direction"), and hairlines are the rejected v3 direction. The flatness
+  being reacted to is band contrast, not missing rules; the answer is the
+  spine, event-day ink weight and the stretch. No new reason to retry was
+  found, so the entry in "Rejected — do not retry" stands unamended.
+- **Year-view stretch is static.** Animating `grid-template-columns` is the
+  recorded KNOWN LIMITATION (SPEC "Scroll engine API";
+  `04_day/output/verification.md` §3 — five fix rounds, cause never
+  established). Hover *growth* was rejected for the same reason. The
+  template is computed once per `build()`; hover feedback is the existing
+  compositor-only lift. This adds no case to the limitation's list and needs
+  no `data-cols-anim` machinery.
+- **The spine is neutral.** Name in `--ink-dim`, edge in the `--rule`/
+  `--ring` neutral. `--today` stays reserved to today's ring and number
+  (SPEC: "the one reserved hue… used for nothing else"), so the prototype's
+  teal spine edge was not carried over.
+- **The month spine replaces the year grid's `.badge`.** Keeping both would
+  print the month name twice on the 1st — exactly the duplicate rendering
+  CONVENTIONS' stand-down rule exists to stop. Because SPEC asserted
+  identical badge treatment across views in two further places, this
+  required amending "Layout details" and the Definition of done as well, not
+  only "Year view". Those two edits were **not** in the iteration file's own
+  amendment list; they were raised as a conflict and authorised before any
+  code was written.
+- **The year view's column-alignment property is traded for stretch +
+  spine**, superseding the stage-03 phrasing. The 14-column phone ruling is
+  unchanged. The weekday letter and the per-cell weekend shade carry what
+  alignment used to.
+- **No webfont.** The draft's serif month label (Newsreader) was dropped: the
+  app is system-stack, and a webfont is a Visual-direction amendment plus an
+  SW precache concern on a deployed PWA. The spine uses the existing stack at
+  weight 620, letter-spaced caps.
+- **No new hex.** The draft's `--yv-*` palette was discarded; colours come
+  from the mood ladder in `categories.ts` and the existing non-mood tokens.
+
 ## In force — shell and chrome
 
 - Service worker registers in production only.
