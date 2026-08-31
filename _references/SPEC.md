@@ -957,6 +957,24 @@ Supabase: see `HABITS.md`.
   flipping the whole zone to "Respect Existing Headers" — the apex is an
   unrelated site. **Verify the deployed header, never the file**: `_headers`
   being correct proves nothing about what the browser receives.
+- **Resolved 2026-08-31, and the resolution lives OUTSIDE this repo.** A
+  zone-level Cache Rule on `no.fail` — hostname `bramwell.no.fail` AND URI
+  path `/sw.js`, Browser TTL "Respect origin TTL" — plus a custom purge of
+  that URL. On the wire: `cache-control: no-cache`,
+  `cf-cache-status: REVALIDATED`.
+  **This is dashboard state, not a file.** Nothing in the repository asserts
+  it, no build step recreates it, and no test covers it: a zone change, a
+  rule reordering, a project or domain migration, or a new Cache Rule with a
+  broader match can silently revert it, and the only visible symptom is a
+  deploy that quietly takes hours to reach installed clients. The detector is
+  one command, and it belongs in the deploy checklist rather than anyone's
+  memory:
+
+  ```
+  curl -sI https://bramwell.no.fail/sw.js | grep -i cache-control
+  #  expect: cache-control: no-cache
+  #  a max-age here means the Cache Rule is gone or is being out-matched
+  ```
 - Preview deployments cannot sign in (Google rejects wildcard origins).
   Anything touching auth or the API is tested on `bramwell.no.fail`.
 - Deploying is a prerequisite for PWA/offline gate items, not a step after

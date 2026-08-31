@@ -198,9 +198,16 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   from the harness and the isolated repro is kept as the record.
 
 ## Opened at the first deploy (2026-08-30)
-- **`/sw.js` is served `max-age=14400` through the proxied zone, not the
-  `no-cache` `_headers` sets.** Diagnosed, not yet fixed: it needs a Cloudflare
-  Cache Rule, which is human-only. `SPEC.md` DEPLOY carries the full finding.
+- **2026-08-31 — CLOSED. `/sw.js` was served `max-age=14400` through the
+  proxied zone, not the `no-cache` `_headers` sets.** Fixed by the human in the
+  Cloudflare dashboard: a zone-level Cache Rule on `no.fail` matching hostname
+  `bramwell.no.fail` AND URI path `/sw.js`, Browser TTL set to "Respect origin
+  TTL", followed by a custom purge of that URL. Verified on the wire —
+  `cache-control: no-cache`, `cf-cache-status: REVALIDATED`, with
+  `x-content-type-options` and `referrer-policy` still present, so the fix did
+  not displace the `/*` block. The mechanism stays documented in `SPEC.md`
+  DEPLOY as a live hazard, because the Cache Rule is dashboard state that
+  lives outside this repo. Original finding below, kept for the reasoning.
   Probably not breaking today — browsers default `updateViaCache: 'imports'`, so
   the worker script itself bypasses the HTTP cache on an update check, and they
   cap SW script caching at 24h regardless. But the gate row is "a deploy reaches
