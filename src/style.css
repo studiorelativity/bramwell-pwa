@@ -2,6 +2,12 @@
    motion values live in motion.css. */
 :root {
   --ink: #1A1A1A;
+  /* The strongest ink, for small type that has to carry a whole element on its
+     own — today only the month spine and the calendar's month name, both of
+     which are 9-10px caps and, in the year view, rotated 90 degrees. --ink
+     measures 14.9:1 there and still read dim on a real display, because at
+     that size and angle the limit is stroke weight, not contrast ratio. */
+  --ink-strong: #000000;
   --ink-dim: #6B6B6B;
   --rule: rgba(0, 0, 0, .08);
   --today: #0D9488;
@@ -17,6 +23,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --ink: #E8E6E1;
+    --ink-strong: #FFFFFF;
     --ink-dim: #9A978F;
     --rule: rgba(255, 255, 255, .09);
     --today: #2DD4BF;
@@ -159,7 +166,7 @@ html, body {
   padding: 1px 6px 2px; border-radius: 0 0 6px 0;
   background: var(--surface);
   font-size: 9px; font-weight: 620; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--ink); white-space: nowrap;
+  color: var(--ink-strong); white-space: nowrap;
 }
 
 /* ---------- bars ---------- */
@@ -488,7 +495,7 @@ html, body {
      scrollHeight cannot see overflow on centred content, and ceil/floor
      rounding invents a 1px shortfall that is not there. */
   font-size: 10px; font-weight: 620; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--ink);
+  color: var(--ink-strong);
   overflow: hidden; white-space: nowrap; min-width: 0;
 }
 /* Up to 2 event titles inside a stretched cell, between the day number and the
