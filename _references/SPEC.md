@@ -140,18 +140,30 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   (calendar: mid-week day of the docked week; year: today). `n` on desktop
   does the same, ignored inside inputs or with a day open. It must not
   cover the last row's Sunday events on a notched phone.
-- A thin rule + month badge marks each month boundary inline, from the 1st
-  to the end of that week row. Badge treatment is identical in both views
-  **except the year grid**, where the month spine replaces the badge
-  (2026-08-30; see "Year view"). The calendar view is unchanged.
+- **A named month marker at each boundary, inline, from the 1st to the end of
+  that week row. Amended 2026-08-31: the `.badge` is gone from BOTH views.**
+  The year grid has its vertical spine; the calendar has the horizontal
+  equivalent — a transparent strip carrying the boundary line, with the full
+  month name in `--ink` caps on a `--surface` recess at its left end, where the
+  badge used to sit. One name per boundary, never two (CONVENTIONS' stand-down
+  rule).
+  **The calendar strip must stay transparent**, and this is measured, not
+  taste: it occupies the row's top 0-15px and `.daynum` sits at `top: 3px`, so
+  a filled band covered the day number of every day in the month's first week.
+  The name rides at the left because day numbers are top-RIGHT; that is the one
+  place in the row it collides with nothing. It remains absolutely positioned
+  inside the week row, exactly as the 1px hairline it replaced was — no layout
+  height, and the virtualizer never learns it exists, so uniform row maths and
+  the single variable-height row are untouched.
 - **All-day and multi-day events render as bars** spanning their days
   within each week row, wrapping across consecutive rows. Longest-first
   lane packing. Title once, on the true start; continuations carry no
   title, keep a flat edge on the broken side, and drop the spine.
 - **Timed events render as chips only** (no thin bars), sorted by start,
   with a category dot, muted tabular start time, and title.
-- Day numbers **top-right**; inline month badge **top-left**; "+N" overflow
-  **bottom-left**; habit/journal markers bottom-right (see their specs).
+- Day numbers **top-right**; the month name **top-left** at a boundary row
+  (2026-08-31: this replaced the `.badge`); "+N" overflow **bottom-left**;
+  habit/journal markers bottom-right (see their specs).
 - Tap/click a day → **inline day expansion** (below). No overlay drawer.
 
 ## Visual direction — Night Depth

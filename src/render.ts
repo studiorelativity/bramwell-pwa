@@ -119,6 +119,7 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
 
   node.replaceChildren()
   let firstOfMonth = -1
+  let firstOfMonthNum = 0
 
   for (let o = 0; o < 7; o++) {
     const day = dayAt(week, asOffset(o))
@@ -137,10 +138,11 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
 
     if (d === 1) {
       firstOfMonth = o
-      const badge = document.createElement('span')
-      badge.className = 'badge'
-      badge.textContent = new Date(Date.UTC(2000, m - 1, 1)).toLocaleString(undefined, { month: 'short', timeZone: 'UTC' })
-      cell.append(badge)
+      firstOfMonthNum = m
+      // No `.badge` on the cell: the month band below names the month, and
+      // printing it twice on the 1st is the duplicate rendering CONVENTIONS'
+      // stand-down rule exists to stop — the same call the year grid made.
+      // SPEC "Layout details" exempts both views from the shared badge now.
     }
 
     const chipList = chips[o] ?? []
@@ -193,10 +195,20 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
   node.append(layer)
 
   if (firstOfMonth >= 0) {
+    // The month band: the year view's spine, laid horizontally because this
+    // view runs vertically. Still absolutely positioned inside the week row,
+    // exactly as the hairline it replaces was — it costs no layout height and
+    // the virtualizer never learns it exists, so uniform row maths and the one
+    // variable-height row are untouched.
     const rule = document.createElement('div')
     rule.className = 'rule'
     rule.style.left = `calc(${firstOfMonth} * (100% / 7))`
     rule.style.right = '0'
+    const name = document.createElement('span')
+    name.className = 'rule-m'
+    name.textContent = new Date(Date.UTC(2000, firstOfMonthNum - 1, 1))
+      .toLocaleString(undefined, { month: 'long', timeZone: 'UTC' })
+    rule.append(name)
     node.append(rule)
   }
 }
