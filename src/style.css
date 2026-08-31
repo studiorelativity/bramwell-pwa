@@ -225,8 +225,12 @@ html, body {
      neighbours. --ink-strong (white in dark, black in light) is the only
      neutral with enough separation at 2px; --ring is the HOVER weight and
      --today is reserved. Today's own ring is a ::before pseudo-element, so an
-     open today keeps its accent painted over this one and stays identifiable. */
-  box-shadow: var(--el-open), inset 0 0 0 2px var(--ink-strong); overflow: hidden;
+     open today keeps its accent painted over this one and stays identifiable.
+     1px, not 2: at 2px it outweighed BOTH the 1px hover ring and today's own
+     2px accent, which inverted the hierarchy — the open day shouted louder
+     than the one day the palette reserves a hue for. A hairline at full ink
+     still separates cleanly without becoming the loudest thing on screen. */
+  box-shadow: var(--el-open), inset 0 0 0 1px var(--ink-strong); overflow: hidden;
   /* Above .bars and .rule. Both are LATER siblings inside .week, so with every
      child at z-index auto they paint over the open cell — an all-day bar drew
      a stripe across the panel's header. .week's `will-change: transform` makes

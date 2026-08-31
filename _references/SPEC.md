@@ -184,8 +184,11 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   (2026-08-31: this replaced the `.badge`); "+N" overflow **bottom-left**;
   habit/journal markers bottom-right (see their specs).
 - Tap/click a day → **inline day expansion** (below). No overlay drawer.
-- **The open day carries a 2px `--ink-strong` inset ring (2026-08-31)**, not
-  elevation alone. The open elevation is the third and last shadow level but it
+- **The open day carries a 1px `--ink-strong` inset ring (2026-08-31)**, not
+  elevation alone. It shipped at 2px and was immediately too heavy: that
+  outweighed both the 1px hover ring and today's own 2px accent, inverting the
+  hierarchy so the open day shouted louder than the one day the palette
+  reserves a hue for. A hairline at full ink separates without dominating. The open elevation is the third and last shadow level but it
   has no edge, so an expanded day — especially one arrived at from the year
   view — did not read as picked. `--ring` is the hover weight and `--today` is
   reserved, which leaves the strong neutral. Today's own accent ring is a
