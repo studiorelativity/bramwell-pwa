@@ -543,9 +543,20 @@ if (new URLSearchParams(location.search).has('selftest')) {
     if (yearCtl === null) {
       // Mounted AFTER unhiding so columnsFor sees a real clientWidth.
       yearCtl = year.mount(yearRoot, { onPickDay: d => {
-        // Clicking a day returns to the calendar on that day (SPEC "Year view").
+        // Clicking a day returns to the calendar ON that day (SPEC "Year view")
+        // — positioned at its week AND expanded. Scrolling to the week alone
+        // left the picked day indistinguishable from its six neighbours, which
+        // reads as the pick not having taken.
+        //
+        // Order is load-bearing. goToWeek is synchronous and settles the week;
+        // openDayAt defers its real work to a rAF, and the setExpanded that
+        // follows runs fitY to keep the expanded row on screen. Both now want
+        // the SAME week, so fitY refines the position instead of fighting it —
+        // the opposite of the stale-expansion case showYear(true) collapses at
+        // its source, where fitY was holding a row from a week nobody asked for.
         showYear(false)
         ctl.goToWeek(state.weekOf(d), false)   // onDock restores the range label
+        openDayAt(d)
       } })
     }
   }
