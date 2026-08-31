@@ -135,10 +135,20 @@ territory. Upstream edits landed before any code.
   template is computed once per `build()`; hover feedback is the existing
   compositor-only lift. This adds no case to the limitation's list and needs
   no `data-cols-anim` machinery.
-- **The spine is neutral.** Name in `--ink-dim`, edge in the `--rule`/
-  `--ring` neutral. `--today` stays reserved to today's ring and number
-  (SPEC: "the one reserved hue… used for nothing else"), so the prototype's
-  teal spine edge was not carried over.
+- **The spine is neutral.** `--today` stays reserved to today's ring and
+  number (SPEC: "the one reserved hue… used for nothing else"), so the
+  prototype's teal spine edge was not carried over.
+- **Superseded same day, after the deploy: the spine is `--ink` on
+  `--surface`, with no edge — not `--ink-dim` on `--band-b-end` with a
+  `--rule` inset.** The first version was reported unreadable. Measurement
+  found the text was not the main fault (5.1-5.9:1, above AA); the spine was
+  **1.01:1 against its neighbouring cells** — optically the same colour, so it
+  never read as an object. Since the band ladder is intentionally shallow and
+  no background gets past ~1.1:1, the label carries it: `--surface` turns the
+  spine into a recess in the tile field, and `--ink` puts the name at
+  14.9-15.4:1 in every mood and scheme. The `--rule` inset was dropped as
+  redundant once the recess defines the edge — and closer to "not
+  hairline-ruled grid cells" than the inset was.
 - **The month spine replaces the year grid's `.badge`.** Keeping both would
   print the month name twice on the 1st — exactly the duplicate rendering
   CONVENTIONS' stand-down rule exists to stop. Because SPEC asserted

@@ -81,8 +81,18 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   label in the year grid**, which is why "Layout details" now exempts this
   view from identical badge treatment: two month names on the 1st would be
   the same duplicate rendering CONVENTIONS' stand-down rule exists to stop.
-  Its colour is neutral — `--ink-dim` for the name, the `--rule`/`--ring`
-  neutral for its edge. Never `--today`.
+  Its colour is neutral, never `--today`. **Amended 2026-08-30 after the first
+  deploy: the name is `--ink` on a `--surface` ground, not `--ink-dim` on
+  `--band-b-end`.** The original was legible on paper — 5.1-5.9:1, above AA —
+  but unreadable in practice, and measuring showed why: at `--band-b-end` the
+  spine sat **1.01:1** against the cells beside it, optically identical, so it
+  read as a gap with faint text rather than a divider. The band ladder is
+  deliberately shallow, so no background choice separates the spine by more
+  than ~1.1:1 — the label itself has to carry it. `--surface` makes the spine a
+  recess in the tile field (the Night Depth shape: tiles on a ground, needing
+  no hairline to define them), and `--ink` puts the name at **14.9-15.4:1**
+  across all five moods in both schemes. The spine's own text sets its row's
+  minimum height, so a long month name grows its row rather than being cut.
 - **Event-day stretch (2026-08-30), static.** A cell carrying at least one
   event gets a wider track (2.2fr against 1fr); not applied on 7-column
   layouts. At 28-column widths a stretched cell also shows up to 2 event
