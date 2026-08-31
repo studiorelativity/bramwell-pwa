@@ -91,12 +91,21 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   than ~1.1:1 — the label itself has to carry it. `--surface` makes the spine a
   recess in the tile field (the Night Depth shape: tiles on a ground, needing
   no hairline to define them), and `--ink` put the name at **14.9-15.4:1**
-  across all five moods in both schemes. **Amended again 2026-08-31 to
-  `--ink-strong`** — pure white in dark, pure black in light, **17.9-18.6:1** —
-  after the name still read dim on a real display. The honest note for whoever
-  tunes this next: the remaining gap is NOT contrast ratio. At 10px, uppercase,
-  rotated 90 degrees, the limit is stroke weight; the levers that would move it
-  are font size, spine width, or dropping the rotation where there is room. The spine's own text sets its row's
+  across all five moods in both schemes. Raised to `--ink-strong` (pure white
+  in dark, pure black in light, 17.9-18.6:1) and it STILL read faintly, which
+  settled the diagnosis: at 10px, uppercase, rotated 90 degrees, the limit is
+  **stroke weight, not contrast ratio** — no colour choice was going to fix it.
+- **The spine is INVERTED (2026-08-31, and this is the version that works):** a
+  solid `--ink-strong` block carrying `--surface` letters, so the BLOCK is the
+  marker and the name is negative space inside it. That sidesteps stroke weight
+  entirely — a filled 24px bar reads at a squint where 10px rotated strokes
+  never did, which is the whole point of the spine. 17.9-19.0:1 across all five
+  moods in both schemes. **The calendar's month name is inverted to match**, so
+  a month boundary looks the same in either view.
+  Three attempts to reach this — `--ink-dim`, `--ink`, `--ink-strong` — each
+  measured comfortably above AA and each reported as hard to see. Recorded so
+  the next person reads it as the lesson it is: when a legible contrast ratio
+  keeps failing in practice, the variable being measured is the wrong one. The spine's own text sets its row's
   minimum height, so a long month name grows its row rather than being cut.
 - **Event-day stretch (2026-08-30), static.** A cell carrying at least one
   event gets a wider track (2.2fr against 1fr); not applied on 7-column

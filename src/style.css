@@ -181,9 +181,10 @@ html, body {
    band ladder could not separate it. */
 .rule-m {
   padding: 1px 6px 2px; border-radius: 0 0 6px 0;
-  background: var(--surface);
+  /* Inverted to match the year view's spine (2026-08-31) — same reasoning. */
+  background: var(--ink-strong); color: var(--surface);
   font-size: 9px; font-weight: 620; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--ink-strong); white-space: nowrap;
+  white-space: nowrap;
 }
 
 /* ---------- bars ---------- */
@@ -509,7 +510,12 @@ html, body {
      text in it rather than a divider. --surface makes it a recess in the tile
      field, which is the Night Depth shape (tiles on a ground) and needs no
      hairline to define it. Measured across all five moods, both schemes. */
-  background: var(--surface); border-radius: 6px;
+  /* INVERTED (2026-08-31): a solid --ink-strong block with --surface letters,
+     not white strokes on a dark recess. Contrast was already maxed at 18.6:1
+     and the month still read faintly, because at 10px rotated 90 degrees the
+     limit is stroke weight, not ratio — a filled block sidesteps that entirely
+     by making the BLOCK the marker and the letters the negative space. */
+  background: var(--ink-strong); color: var(--surface); border-radius: 6px;
   writing-mode: vertical-rl; transform: rotate(180deg);
   /* --ink, not --ink-dim. The label is the only thing that can carry this: the
      band ladder is deliberately shallow, so no background choice separates the
@@ -522,7 +528,6 @@ html, body {
      scrollHeight cannot see overflow on centred content, and ceil/floor
      rounding invents a 1px shortfall that is not there. */
   font-size: 10px; font-weight: 620; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--ink-strong);
   overflow: hidden; white-space: nowrap; min-width: 0;
 }
 /* Up to 2 event titles inside a stretched cell, between the day number and the
