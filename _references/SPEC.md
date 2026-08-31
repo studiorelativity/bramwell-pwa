@@ -263,7 +263,14 @@ the add/edit form, the habit checklist (`HABITS.md`), and the journal link
 (`JOURNAL.md`).
 
 - One day open at a time; opening another collapses the first; Escape
-  collapses; scrolling does not force-collapse.
+  collapses; scrolling does not force-collapse. **Leaving for the year view
+  collapses it too (2026-08-31, confirmed by the human).** The expansion is
+  calendar state: a day expanded in a view you have left is not one of the
+  cases above, and keeping it alive gave the scroll position two owners —
+  `fitY` holding the old row on screen against `goToWeek` jumping to a picked
+  day, with the deferred one winning. Collapsing on the way OUT removes the
+  second owner at its source rather than making every future caller of
+  `goToWeek` remember to close first.
 - The virtualizer must support **exactly one variable-height row**: rows
   below the expanded one shift by an animated delta. If this cannot be
   done cleanly, stop and revise — do not fake it with an overlay.

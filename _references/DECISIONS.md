@@ -168,6 +168,20 @@ territory. Upstream edits landed before any code.
 - **No new hex.** The draft's `--yv-*` palette was discarded; colours come
   from the mood ladder in `categories.ts` and the existing non-mood tokens.
 
+## Year-to-calendar handoff (2026-08-31)
+
+- **Leaving the calendar for the year view collapses the open day.** Confirmed
+  by the human after being flagged as a behaviour change beyond the reported
+  defect. The narrow alternative was weighed and rejected: collapsing only
+  inside `onPickDay` would also have fixed the bug and preserved the expansion
+  across a plain Year-and-back toggle, and it would not have broken anything —
+  on that path there is no competing `goToWeek`. It was rejected as a rule that
+  is harder to hold in your head, for a state that means little in a view you
+  have left. Do not reopen without a new reason.
+- **Clicking a year-view day opens that day, not just its week.** "On that day"
+  had delivered only the scroll, which is indistinguishable from landing on any
+  of its six neighbours.
+
 ## In force — shell and chrome
 
 - Service worker registers in production only.
