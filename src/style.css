@@ -13,8 +13,11 @@
   --today: #0D9488;
   /* The elapsed-time line (SPEC "Visual direction"). --past is the second
      reserved hue: a deep red on the light ground, a soft coral on the dark one
-     so it never glares. --future is the neutral track it runs along. */
-  --past: #B42318;
+     so it never glares — and at HALF opacity, because the rail is a reference
+     line, not a commitment, and Night Depth reserves full strength for the
+     event bars. Opacity rather than texture: a dashed line across 240 cells is
+     the busy-ness the row-level rail was built to remove. */
+  --past: rgba(180, 35, 24, .5);
   --future: rgba(23, 24, 27, .18);
   --ring: rgba(23, 24, 27, .22);
   --scrim: rgba(0, 0, 0, .35);
@@ -32,7 +35,7 @@
     --ink-dim: #9A978F;
     --rule: rgba(255, 255, 255, .09);
     --today: #2DD4BF;
-    --past: #F87171;
+    --past: rgba(248, 113, 113, .55);
     --future: rgba(232, 230, 225, .22);
     --ring: rgba(232, 230, 225, .26);
     --scrim: rgba(0, 0, 0, .55);
@@ -142,9 +145,15 @@ html, body {
   box-shadow: var(--el-hover), inset 0 0 0 1px var(--ring);
   opacity: 0; pointer-events: none;
 }
+/* DOWN, not up (2026-09-02). The lift used to go up 2px — straight into the
+   band where the elapsed-time rail sits at the row's top edge, so the rail
+   cut across the hovered tile just below its edge and covered the ring on
+   today or the open day. Pressing the tile down leaves the rail in a clean
+   2px gap above it. The shadow still deepens: the affordance is unchanged,
+   only its direction. */
 @media (hover: hover) {
   .day:hover {
-    transform: translateY(-2px);
+    transform: translateY(2px);
   }
   .day:hover::after { opacity: 1; }
 }
@@ -493,7 +502,7 @@ html, body {
   opacity: 0; pointer-events: none;
 }
 @media (hover: hover) {
-  .yrcell[data-has-ev]:hover { transform: translateY(-2px); }
+  .yrcell[data-has-ev]:hover { transform: translateY(2px); }
   .yrcell[data-has-ev]:hover::after { opacity: 1; }
 }
 /* An event day reads brighter and heavier, so busy stretches of the year show

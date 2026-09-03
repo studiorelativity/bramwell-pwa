@@ -227,7 +227,10 @@ bar treatment, restraint).
   through tile surface value (in-month vs out-month, weekend shade).
 - Exactly three elevation levels: resting cell, hovered cell, open day.
   Nothing else casts a shadow.
-- Hover: cell lifts `translateY(-2px)`, shadow deepens, a 1px neutral ring
+- Hover: cell **presses down** `translateY(2px)` (amended 2026-09-02 — it
+  lifted up until the elapsed-time rail arrived at the row's top edge; a 2px
+  lift put the tile's edge into the rail's band, so the rail cut across the
+  tile and covered the ring on today or the open day), shadow deepens, a 1px neutral ring
   (`--ring`, never `--today` — that hue is reserved for today's own mark and
   used for nothing else) fades in (compositor properties only: opacity and
   transform, never box-shadow, which repaints every frame).
@@ -238,8 +241,10 @@ bar treatment, restraint).
   year** carries a 2px line along its top edge: `--past` (red) on days behind
   today, `--future` (a quiet neutral track) on days ahead, with today's own
   ring between them. Read across a row it is a progress bar through the year
-  — the track is the year, the red is how much of it has gone, today is the
-  head. Days outside the current year carry neither, so scrolling into last
+  — the track is the year, the red is how much of it has gone, today is the head. `--past` runs at **half opacity** — a reference line, not
+  a commitment, and Night Depth keeps full strength for the event bars; opacity
+  rather than texture, because a dashed line across 240 cells is the busy-ness
+  the row-level rail exists to remove. Days outside the current year carry neither, so scrolling into last
   year shows a plain grid: the line answers "where am I in THIS year", not
   "is this date in the past". Same treatment in both views. `--past` is the
   second reserved hue, alongside `--today`; neither is a category colour and
