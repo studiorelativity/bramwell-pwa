@@ -41,6 +41,18 @@ export function packLanes(spans: EventSpan[]): PackedSpan[] {
   return assignLanes(bars).map(x => ({ ...x.span, lane: x.lane }))
 }
 
+/** One segment of the elapsed-time line, spanning tracks `from..to` of a row's
+ *  overlay grid. Explicit grid-row 1 + grid-column, like a bar, so it shares
+ *  row 1 with the bars rather than being auto-placed beneath them. Shared with
+ *  the year grid, whose tracks include spines and stretched cells — the caller
+ *  passes TRACK indices, never day offsets. */
+export function tline(cls: 'tline-past' | 'tline-future', from: number, to: number): HTMLElement {
+  const el = document.createElement('div')
+  el.className = `tline ${cls}`
+  el.style.gridColumn = `${from + 1} / ${to + 2}`
+  return el
+}
+
 /** SPEC "Inline day expansion": the phone rule is ≤560px. */
 export const PHONE_MAX_W = 560
 /** Desktop: the open day takes three tracks to a neighbour's one. */
@@ -133,7 +145,6 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
     cell.dataset['band'] = m % 2 === 0 ? 'a' : 'b'
     if (o >= 5) cell.dataset['weekend'] = ''
     if (day === t) cell.dataset['today'] = ''
-    else if (day >= jan1 && day <= dec31) cell.dataset[day < t ? 'past' : 'future'] = ''
     cell.dataset['day'] = String(day)
 
     const num = document.createElement('span')
@@ -197,6 +208,20 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
     if (!p.continuesBefore) bar.textContent = p.event.title
     layer.append(bar)
   }
+  // The elapsed-time line: ONE straight segment per class per row, drawn in
+  // this overlay grid so it spans its columns as a single item and runs
+  // unbroken across the tile gaps. It was first drawn on each cell's top edge;
+  // a rounded tile with a gap either side breaks that at every corner, so 240
+  // past days read as 240 red arcs rather than a line (SPEC "Visual direction").
+  let pastFrom = -1, pastTo = -1, futFrom = -1, futTo = -1
+  for (let o = 0; o < 7; o++) {
+    const day = dayAt(week, asOffset(o))
+    if (day === t || day < jan1 || day > dec31) continue
+    if (day < t) { if (pastFrom < 0) pastFrom = o; pastTo = o }
+    else { if (futFrom < 0) futFrom = o; futTo = o }
+  }
+  if (pastFrom >= 0) layer.append(tline('tline-past', pastFrom, pastTo))
+  if (futFrom >= 0) layer.append(tline('tline-future', futFrom, futTo))
   node.append(layer)
 
   if (firstOfMonth >= 0) {

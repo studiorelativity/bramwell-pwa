@@ -244,10 +244,13 @@ bar treatment, restraint).
   "is this date in the past". Same treatment in both views. `--past` is the
   second reserved hue, alongside `--today`; neither is a category colour and
   a red category bar is a filled 18px shape, not a 2px edge, so the two
-  cannot be confused. The line lives on `::before`, which every non-today
-  cell has free — today's ring is `.day`'s `::before`, and `.yrcell` paints
-  its ring on the cell itself — as an inset box-shadow so it follows the tile
-  radius rather than reading as a hairline rule.
+  cannot be confused. **It is drawn per ROW, not per cell** — one straight
+  segment per class in the row's overlay grid (`.bars` / `.yrbars`), spanning
+  the past (or future) columns as a single item, so it runs unbroken across
+  the tile gaps. The first version was a 2px edge on each cell's own `::before`;
+  a rounded tile with a gap either side breaks that at every corner, and ~240
+  past days read as ~240 red arcs. A month spine sits above the overlay and
+  interrupts the segment visibly, which reads as a month tick on the rail.
 - Light mode gets the same structure with inverted surface logic; dark is
   the design-lead mode. `prefers-color-scheme` is honored.
 - Event bars: category colour at ~16% as fill, full colour for text and a

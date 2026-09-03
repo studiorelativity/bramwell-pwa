@@ -232,19 +232,15 @@ html, body {
 .chips { position: absolute; left: 6px; right: 6px; bottom: 16px; display: flex; flex-direction: column; gap: 2px; }
 
 /* ---------- the elapsed-time line (SPEC "Visual direction") ---------- */
-/* A 2px line along the top edge of every day in the CURRENT year: --past
-   behind today, --future ahead of it, today's own ring between. Read across a
-   row it is a progress bar through the year. On ::before, which is free on
-   every cell that is not today (.day's today ring IS its ::before; .yrcell
-   paints its ring on the cell). Inset box-shadow, not a border, so it follows
-   the tile radius and is not a hairline rule (Night Depth). */
-.day[data-past]::before, .day[data-future]::before,
-.yrcell[data-past]::before, .yrcell[data-future]::before {
-  content: ""; position: absolute; inset: 0; border-radius: inherit;
-  pointer-events: none;
-}
-.day[data-past]::before, .yrcell[data-past]::before { box-shadow: inset 0 2px 0 0 var(--past); }
-.day[data-future]::before, .yrcell[data-future]::before { box-shadow: inset 0 2px 0 0 var(--future); }
+/* ONE straight segment per class per row, drawn in the row's overlay grid
+   (.bars / .yrbars) so it spans the past — or future — columns as a single
+   item and runs unbroken across the tile gaps. The first version put a 2px
+   edge on each CELL: a rounded tile with a gap either side breaks that at
+   every corner, so ~240 past days read as ~240 red arcs, not a line. No
+   radius here, on purpose. */
+.tline { grid-row: 1; align-self: start; height: 2px; margin-top: 0; min-width: 0; pointer-events: none; }
+.tline-past { background: var(--past); }
+.tline-future { background: var(--future); }
 
 /* ---------- inline day expansion ---------- */
 /* The picked cell keeps the open elevation — the third and last level; nothing

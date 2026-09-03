@@ -1,7 +1,7 @@
 // STAGE 03 — year view. 365/366 cells in one pass; no virtualization.
 import type { CalendarEvent, DayNumber, MonthKey } from './types.ts'
 import { asDay, civilToDay, dayToCivil, monthKey, offsetOf } from './dates.ts'
-import { assignLanes } from './render.ts'
+import { assignLanes, tline } from './render.ts'
 import { ensureMonthsFor, eventsForMonth, today, weekOf } from './state.ts'
 
 export type YearHost = { onPickDay(day: DayNumber): void }
@@ -108,7 +108,6 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
       const off = offsetOf(d)
       if (off >= 5) cell.dataset['weekend'] = ''
       if (d === t) cell.dataset['today'] = ''
-      else if (markYear) cell.dataset[d < t ? 'past' : 'future'] = ''
       cell.dataset['day'] = String(d)
       const wd = document.createElement('span'); wd.className = 'yrwd'; wd.textContent = WDAY[off] ?? ''
       const num = document.createElement('span'); num.className = 'yrnum'; num.textContent = String(dom)
@@ -222,6 +221,20 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
 
       const layer = document.createElement('div')
       layer.className = 'yrbars'
+      // The elapsed-time line, one straight segment per class per row, in
+      // TRACK indices: a spine between two days is a track the segment simply
+      // spans, and the spine (z-index above this layer) interrupts it visibly —
+      // a month tick on the year's rail, which is the right thing to see.
+      if (markYear) {
+        let pf = -1, pt = -1, ff = -1, ft = -1
+        for (const [d, i] of trackOfDay) {
+          if (d === t) continue
+          if (d < t) { if (pf < 0 || i < pf) pf = i; if (i > pt) pt = i }
+          else { if (ff < 0 || i < ff) ff = i; if (i > ft) ft = i }
+        }
+        if (pf >= 0) layer.append(tline('tline-past', pf, pt))
+        if (ff >= 0) layer.append(tline('tline-future', ff, ft))
+      }
       for (const it of assignLanes(items)) {
         if (it.lane >= MAX_LANES) continue
         const bar = document.createElement('div')
