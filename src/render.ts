@@ -1,7 +1,7 @@
 // STAGE 03 — week rows, bars, chips, lane packing, month badges, header. Sets data-cat and nothing else per frame.
 import type { EventSpan, WeekIndex, DayOffset } from './types.ts'
 import { dayAt, today } from './state.ts'
-import { asOffset, dayToCivil } from './dates.ts'
+import { asOffset, civilToDay, dayToCivil } from './dates.ts'
 /** EventSpan with the lane render.ts assigned. Not persisted, not exported beyond render.ts's consumers. */
 export type PackedSpan = EventSpan & { lane: number }
 
@@ -109,6 +109,10 @@ export function visibilityFor(packed: PackedSpan[], chipCounts: number[], cap: n
  *  per frame — all colour comes from categories.themeCss(). */
 export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[], rowH: number): void {
   const t = today()
+  // The elapsed-time line is scoped to the CURRENT calendar year (SPEC
+  // "Visual direction"): computed once per row, not per cell.
+  const ty = dayToCivil(t).y
+  const jan1 = civilToDay(ty, 1, 1), dec31 = civilToDay(ty, 12, 31)
   const cap = capacityFor(rowH)
   const packed = packLanes(spans)
 
@@ -129,6 +133,7 @@ export function renderWeek(node: HTMLElement, week: WeekIndex, spans: EventSpan[
     cell.dataset['band'] = m % 2 === 0 ? 'a' : 'b'
     if (o >= 5) cell.dataset['weekend'] = ''
     if (day === t) cell.dataset['today'] = ''
+    else if (day >= jan1 && day <= dec31) cell.dataset[day < t ? 'past' : 'future'] = ''
     cell.dataset['day'] = String(day)
 
     const num = document.createElement('span')

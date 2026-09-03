@@ -11,6 +11,11 @@
   --ink-dim: #6B6B6B;
   --rule: rgba(0, 0, 0, .08);
   --today: #0D9488;
+  /* The elapsed-time line (SPEC "Visual direction"). --past is the second
+     reserved hue: a deep red on the light ground, a soft coral on the dark one
+     so it never glares. --future is the neutral track it runs along. */
+  --past: #B42318;
+  --future: rgba(23, 24, 27, .18);
   --ring: rgba(23, 24, 27, .22);
   --scrim: rgba(0, 0, 0, .35);
   --cat-err: #D14343;
@@ -27,6 +32,8 @@
     --ink-dim: #9A978F;
     --rule: rgba(255, 255, 255, .09);
     --today: #2DD4BF;
+    --past: #F87171;
+    --future: rgba(232, 230, 225, .22);
     --ring: rgba(232, 230, 225, .26);
     --scrim: rgba(0, 0, 0, .55);
     --cat-err: #F87171;
@@ -223,6 +230,21 @@ html, body {
 .chip .at { color: var(--ink-dim); font-variant-numeric: tabular-nums; flex: none; }
 .chip .ttl { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .chips { position: absolute; left: 6px; right: 6px; bottom: 16px; display: flex; flex-direction: column; gap: 2px; }
+
+/* ---------- the elapsed-time line (SPEC "Visual direction") ---------- */
+/* A 2px line along the top edge of every day in the CURRENT year: --past
+   behind today, --future ahead of it, today's own ring between. Read across a
+   row it is a progress bar through the year. On ::before, which is free on
+   every cell that is not today (.day's today ring IS its ::before; .yrcell
+   paints its ring on the cell). Inset box-shadow, not a border, so it follows
+   the tile radius and is not a hairline rule (Night Depth). */
+.day[data-past]::before, .day[data-future]::before,
+.yrcell[data-past]::before, .yrcell[data-future]::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none;
+}
+.day[data-past]::before, .yrcell[data-past]::before { box-shadow: inset 0 2px 0 0 var(--past); }
+.day[data-future]::before, .yrcell[data-future]::before { box-shadow: inset 0 2px 0 0 var(--future); }
 
 /* ---------- inline day expansion ---------- */
 /* The picked cell keeps the open elevation — the third and last level; nothing

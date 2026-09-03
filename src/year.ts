@@ -62,6 +62,9 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
     const indent = offsetOf(jan1)                 // 0 = Mon, so every column is one weekday
     const dec31 = civilToDay(year, 12, 31)
     const t = today()
+    // The elapsed-time line marks the CURRENT calendar year only (SPEC "Visual
+    // direction"); another year shows a plain grid.
+    const markYear = year === dayToCivil(t).y
 
     const grid = document.createElement('div')
     grid.className = 'yr'
@@ -105,6 +108,7 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
       const off = offsetOf(d)
       if (off >= 5) cell.dataset['weekend'] = ''
       if (d === t) cell.dataset['today'] = ''
+      else if (markYear) cell.dataset[d < t ? 'past' : 'future'] = ''
       cell.dataset['day'] = String(d)
       const wd = document.createElement('span'); wd.className = 'yrwd'; wd.textContent = WDAY[off] ?? ''
       const num = document.createElement('span'); num.className = 'yrnum'; num.textContent = String(dom)

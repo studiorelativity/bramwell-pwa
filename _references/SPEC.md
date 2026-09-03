@@ -232,9 +232,22 @@ bar treatment, restraint).
   used for nothing else) fades in (compositor properties only: opacity and
   transform, never box-shadow, which repaints every frame).
 - Today: accent inset ring on the cell plus accent day number. `--today`
-  is the one reserved hue outside the categories and is used for nothing
-  else. Today is distinguished by **form** so a red category can never
-  read as today.
+  is reserved for today's own mark and used for nothing else. Today is
+  distinguished by **form** so a red category can never read as today.
+- **The elapsed-time line (2026-08-31).** Every day of the **current calendar
+  year** carries a 2px line along its top edge: `--past` (red) on days behind
+  today, `--future` (a quiet neutral track) on days ahead, with today's own
+  ring between them. Read across a row it is a progress bar through the year
+  — the track is the year, the red is how much of it has gone, today is the
+  head. Days outside the current year carry neither, so scrolling into last
+  year shows a plain grid: the line answers "where am I in THIS year", not
+  "is this date in the past". Same treatment in both views. `--past` is the
+  second reserved hue, alongside `--today`; neither is a category colour and
+  a red category bar is a filled 18px shape, not a 2px edge, so the two
+  cannot be confused. The line lives on `::before`, which every non-today
+  cell has free — today's ring is `.day`'s `::before`, and `.yrcell` paints
+  its ring on the cell itself — as an inset box-shadow so it follows the tile
+  radius rather than reading as a hairline rule.
 - Light mode gets the same structure with inverted surface logic; dark is
   the design-lead mode. `prefers-color-scheme` is honored.
 - Event bars: category colour at ~16% as fill, full colour for text and a
@@ -252,7 +265,10 @@ bar treatment, restraint).
   +6 points of lightness. Light inverts the surface logic (ground mid-light,
   tiles lighter) at the same step ratios.
 - Restraint rule: the user's commitments are the only strong colour on
-  screen. Mood tints only move the quiet ground beneath them.
+  screen. Mood tints only move the quiet ground beneath them. **One sanctioned
+  exception (2026-08-31): the elapsed-time line.** It is structural, like
+  today's ring, not decorative — and it is held to a 2px edge, never a fill,
+  so ~240 past days do not become a red field.
 
 ## Inline day expansion
 
