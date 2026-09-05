@@ -511,8 +511,8 @@ button.set-fr-connect:focus-visible, button.set-fab:focus-visible { outline-colo
 
 /* ---------- press feedback ---------- */
 /* Every button family presses down 1px while held: compositor-only, and its
-   transition lives in motion.css. A disabled control does not press. The
-   list mirrors motion.css's; keep the two together. */
+   timing lives in motion.css. A disabled control does not press. The list
+   mirrors motion.css's; keep the two together. */
 :is(.hdr button, .set-fab, .set-avatar, .set-pill, .set-btn, .set-segb, .set-cat-del,
     .set-fr-connect, .set-fr-demo, .dp-chip, .dp-add, .dp-ev, .dp-actions button):active:not(:disabled) {
   transform: translateY(1px);
@@ -528,7 +528,7 @@ button.set-fr-connect:focus-visible, button.set-fab:focus-visible { outline-colo
 /* Each row is a grid of cells plus a bar overlay — the week-row shape at year scale. */
 /* The template is built per row in year.ts (spine tracks fixed, event days
    2.2fr, the rest 1fr) and written to --yr-cols. Static by ruling: nothing in
-   this view transitions a track size. The repeat() fallback keeps a row honest
+   this view eases a track size. The repeat() fallback keeps a row honest
    if the property is ever missing. */
 .yrrow {
   position: relative; display: grid;
