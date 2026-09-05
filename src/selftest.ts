@@ -25,7 +25,7 @@ import type { Expanded } from './scroll.ts'
 import { packLanes, visibilityFor, rangeLabel, columnsFor, PHONE_MAX_W } from './render.ts'
 import type { PackedSpan } from './render.ts'
 import { validate } from './day.ts'
-import { sanitizePlanning } from './plan.ts'
+import { daysUsed, firstBlocked, runOf, sanitizePlanning } from './plan.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -279,6 +279,67 @@ const cases: Case[] = [
     if (rows.length !== 2) return `rows kept: ${rows.length}`
     if ('budgetDays' in rows[0]! || 'blocks' in rows[0]!) return `invalid planning fields survived: ${JSON.stringify(rows[0])}`
     if (rows[1]?.budgetDays !== 30 || rows[1]?.blocks !== true) return `valid planning fields lost: ${JSON.stringify(rows[1])}`
+    return null
+  }],
+
+  ['plan: runOf orders, clips and is inclusive', () => {
+    const y0 = civilToDay(2026, 1, 1), y1 = civilToDay(2026, 12, 31)
+    const a = civilToDay(2026, 8, 14), b = civilToDay(2026, 8, 10)
+    const r = runOf(a, b, y0, y1)
+    if (r.start !== b || r.end !== a) return `not ordered: ${JSON.stringify(r)}`
+    const same = runOf(a, a, y0, y1)
+    if (same.start !== a || same.end !== a) return `single day: ${JSON.stringify(same)}`
+    // A run reaching past the year is clipped at BOTH ends (SPEC).
+    const over = runOf(civilToDay(2025, 12, 28), civilToDay(2027, 1, 3), y0, y1)
+    if (over.start !== y0 || over.end !== y1) return `not clipped: ${JSON.stringify(over)}`
+    return null
+  }],
+
+  ['plan: daysUsed counts distinct in-year all-day days of one category', () => {
+    const y0 = civilToDay(2026, 1, 1), y1 = civilToDay(2026, 12, 31)
+    const d = (m: number, dd: number) => civilToDay(2026, m, dd)
+    const allDay = (id: string, category: string, start: DayNumber, end: DayNumber): CalendarEvent =>
+      ({ id, title: id, category, start, end, allDay: true })
+    const events: CalendarEvent[] = [
+      allDay('a', 'vacation', d(8, 3), d(8, 7)),              // 5 days
+      allDay('b', 'vacation', d(8, 6), d(8, 9)),              // overlaps a by 2 -> +2
+      allDay('c', 'vacation', d(12, 30), civilToDay(2027, 1, 2)), // 2 in-year days
+      { id: 't', title: 't', category: 'vacation', start: d(8, 20), end: d(8, 20), allDay: false, startMin: 60, endMin: 120 },
+      allDay('w', 'work', d(8, 1), d(8, 31)),                 // another category
+    ]
+    const got = daysUsed(events, 'vacation', y0, y1)
+    if (got !== 9) return `vacation days: ${got} (want 5 + 2 + 2 = 9)`
+    if (daysUsed(events, 'work', y0, y1) !== 31) return 'work days off'
+    if (daysUsed(events, 'ghost', y0, y1) !== 0) return 'an absent category counted'
+    // eventsForMonth stores a boundary-crossing event in BOTH months, so the
+    // caller hands the same event twice; distinct days make that harmless.
+    const twice = daysUsed([...events, events[2]!], 'vacation', y0, y1)
+    if (twice !== 9) return `a duplicated event double-counted: ${twice}`
+    // A run wholly in another year counts nothing.
+    if (daysUsed([allDay('z', 'vacation', civilToDay(2025, 6, 1), civilToDay(2025, 6, 9))], 'vacation', y0, y1) !== 0) return 'another year counted'
+    return null
+  }],
+
+  ['plan: firstBlocked finds the lowest blocked day or null', () => {
+    const d = (m: number, dd: number) => civilToDay(2026, m, dd)
+    const allDay = (id: string, category: string, start: DayNumber, end: DayNumber): CalendarEvent =>
+      ({ id, title: id, category, start, end, allDay: true })
+    const events: CalendarEvent[] = [
+      allDay('b1', 'blackout', d(8, 13), d(8, 15)),
+      allDay('b2', 'blackout', d(8, 11), d(8, 11)),
+      allDay('v', 'vacation', d(8, 1), d(8, 31)),
+      { id: 'bt', title: 'bt', category: 'blackout', start: d(8, 9), end: d(8, 9), allDay: false, startMin: 0, endMin: 30 },
+    ]
+    const blocks = new Set(['blackout'])
+    const run = { start: d(8, 10), end: d(8, 16) }
+    if (firstBlocked(run, events, blocks) !== d(8, 11)) return `lowest blocked: ${firstBlocked(run, events, blocks)}`
+    // The lowest day is the lowest IN THE RUN, not the event's own start.
+    const mid = { start: d(8, 14), end: d(8, 20) }
+    if (firstBlocked(mid, events, blocks) !== d(8, 14)) return `clipped to the run: ${firstBlocked(mid, events, blocks)}`
+    if (firstBlocked({ start: d(8, 16), end: d(8, 20) }, events, blocks) !== null) return 'a clear run reported a block'
+    // A timed blackout on Aug 9 is not a block; only all-day events carry the rule.
+    if (firstBlocked({ start: d(8, 8), end: d(8, 9) }, events, blocks) !== null) return 'a timed event blocked'
+    if (firstBlocked(run, events, new Set<string>()) !== null) return 'an empty blocking set blocked'
     return null
   }],
 
