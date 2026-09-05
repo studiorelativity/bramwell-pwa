@@ -29,6 +29,24 @@ function applyTheme(): void {
 
 applyTheme()
 
+/** SPEC "Demo mode" (2026-09-05): demo configures the seed with `budgetDays: 30` on
+ *  Vacation, in memory only. Two passes through the one writer: enableDemo() empties
+ *  the in-memory prefs, so the first applyTheme() resolves to the seed (which now
+ *  carries Vacation and Blackout, DECISIONS "Planning layer rulings", amended); the
+ *  budget is then written onto that resolved list with savePrefs — which in demo
+ *  updates memory and nothing else — and applied. state.ts never learns the seed
+ *  list, and categories.ts keeps its single writer. Shared by `?demo` and the
+ *  first-run button. */
+function enterDemo(): void {
+  state.enableDemo()
+  applyTheme()
+  state.savePrefs({
+    ...state.prefs(),
+    categories: categories.all().map(c => c.name === 'vacation' ? { ...c, budgetDays: 30 } : c),
+  })
+  applyTheme()
+}
+
 if (new URLSearchParams(location.search).has('selftest')) {
   const { selfTest } = await import('./selftest.ts')
   const results = await selfTest()
@@ -47,8 +65,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
   // ensureMonthsFor, which must already be inert.
   const params = new URLSearchParams(location.search)
   if (params.has('demo')) {
-    state.enableDemo()
-    applyTheme()                              // configure() from the demo prefs
+    enterDemo()
     params.delete('demo')
     const rest = params.toString()
     history.replaceState(null, '', location.pathname + (rest === '' ? '' : `?${rest}`) + location.hash)
@@ -460,8 +477,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // window that has already rendered, and lastRange is reset so the (inert)
     // month loading and the range label re-run over the seeded months.
     enterDemo: () => {
-      state.enableDemo()
-      applyTheme()
+      enterDemo()
       lastRange = { first: NaN, last: NaN }
       ctl.invalidate()
       yearCtl?.invalidate()

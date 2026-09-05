@@ -532,23 +532,33 @@ const DEMO_TITLES: Record<'work' | 'personal' | 'other', readonly string[]> = {
   other: ['Boiler service', 'Parcel pickup', 'Vet', 'Recycling day', 'Car MOT', 'Library books due', 'Bins out'],
 }
 
+/** The seed's colorIds, as SPEC "Categories and customization" freezes them (work 9,
+ *  personal 10, financial 5, other 8; vacation 7 and blackout 11 appended 2026-09-05).
+ *  Hard-coded HERE on purpose: a demo calendar stands in for Google's data, which carries
+ *  colorIds and not names, and category is resolved from the colorId at read time like any
+ *  other event. Resolving names through the configured set instead would make the seed
+ *  depend on whatever prefs happen to be loaded when demo is entered. */
+type DemoCat = 'work' | 'personal' | 'financial' | 'other' | 'vacation' | 'blackout'
+const DEMO_COLOR: Record<DemoCat, string> =
+  { work: '9', personal: '10', financial: '5', other: '8', vacation: '7', blackout: '11' }
+
 /** SPEC "Demo mode": deterministic, anchored to the given day, every render path — a 21-day
  *  span across three rows, weekly recurring timed chips with recurringEventId, monthly and
  *  quarterly financial all-days, weekend spans, one day that overflows the year cell's three
- *  bars, every seed category. Category names resolve to colorIds through the configured set,
- *  so the seed never hard-codes a colorId. Pure: `fetchedAt` is a parameter so two calls for
- *  one anchor are byte-identical. An event lives in every in-window month it touches — the
- *  cache invariant spansForWeek's dedupe depends on. */
+ *  bars, every seed category, and (2026-09-05) a few Vacation runs and one Blackout block in
+ *  the anchor's year so the plan strip reads mid-budget. Pure: `fetchedAt` is a parameter so
+ *  two calls for one anchor are byte-identical. An event lives in every in-window month it
+ *  touches — the cache invariant spansForWeek's dedupe depends on. */
 function demoSeed(anchor: DayNumber, fetchedAt: number): Record<MonthKey, MonthEntry> {
   const rnd = mulberry32(DEMO_SEED)
   const int = (lo: number, hi: number): number => lo + Math.floor(rnd() * (hi - lo + 1))
   const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)] as T
   const events: StoredEvent[] = []
-  const allDay = (id: string, title: string, cat: string, start: DayNumber, end: DayNumber): void => {
-    events.push({ id, title, allDay: true, colorId: colorIdFor(cat), start, end })
+  const allDay = (id: string, title: string, cat: DemoCat, start: DayNumber, end: DayNumber): void => {
+    events.push({ id, title, allDay: true, colorId: DEMO_COLOR[cat], start, end })
   }
-  const timed = (id: string, title: string, cat: string, day: DayNumber, startMin: number, endMin: number, series?: string): void => {
-    const ev: StoredEvent = { id, title, allDay: false, colorId: colorIdFor(cat), start: day, end: day, startMin, endMin }
+  const timed = (id: string, title: string, cat: DemoCat, day: DayNumber, startMin: number, endMin: number, series?: string): void => {
+    const ev: StoredEvent = { id, title, allDay: false, colorId: DEMO_COLOR[cat], start: day, end: day, startMin, endMin }
     if (series !== undefined) ev.recurringEventId = series
     events.push(ev)
   }
@@ -587,13 +597,28 @@ function demoSeed(anchor: DayNumber, fetchedAt: number): Record<MonthKey, MonthE
   allDay('demo:longweekend', 'Long weekend away', 'personal', at(-3, 4), at(-2, 0))
   // 5. One day, three days out, that overflows the year cell's three bars.
   const stackDay = addDays(anchor, 3)
-  const stack: [string, string][] = [['Dentist', 'personal'], ['Car service', 'other'], ['Parcel arrives', 'other'], ['Call Mum', 'personal'], ['Library books due', 'other']]
+  const stack: [string, DemoCat][] = [['Dentist', 'personal'], ['Car service', 'other'], ['Parcel arrives', 'other'], ['Call Mum', 'personal'], ['Library books due', 'other']]
   stack.forEach(([title, cat], i) => allDay(`demo:stack:${i}`, title, cat, stackDay, stackDay))
+  // 7. The planning layer (SPEC "Demo mode", 2026-09-05): Vacation runs of 5 + 4 + 3 days and
+  // one 5-day Blackout block, all inside the anchor's civil year AND the window, so the strip
+  // reads "12 / 30" against the budget main.ts sets in memory. Placed at fixed fractions of
+  // the Mondays available rather than at fixed dates: the window always holds at least nine
+  // months of the anchor's year, but which nine depends on the anchor.
+  const yearStart = civilToDay(ay, 1, 1), yearEnd = civilToDay(ay, 12, 31)
+  const mondays: DayNumber[] = []
+  for (let d = Math.max(yearStart, windowFirst); d <= Math.min(yearEnd, windowLast); d++) {
+    if (offsetOf(asDay(d)) === 0 && d + 6 <= Math.min(yearEnd, windowLast)) mondays.push(asDay(d))
+  }
+  const mondayAt = (fraction: number): DayNumber => mondays[Math.floor(mondays.length * fraction)] ?? anchor
+  allDay('demo:vac:1', 'Vacation', 'vacation', mondayAt(0.15), addDays(mondayAt(0.15), 4))   // Mon..Fri
+  allDay('demo:vac:2', 'Vacation', 'vacation', mondayAt(0.55), addDays(mondayAt(0.55), 3))   // Mon..Thu
+  allDay('demo:vac:3', 'Vacation', 'vacation', addDays(mondayAt(0.8), 2), addDays(mondayAt(0.8), 4))   // Wed..Fri
+  allDay('demo:blackout', 'Blackout', 'blackout', mondayAt(0.4), addDays(mondayAt(0.4), 4))   // Mon..Fri
   // 6. Filler, 6–10 per month, mostly timed, drawn from the generator so the layout is fixed.
   for (const mo of months) {
     const n = int(6, 10)
     for (let j = 0; j < n; j++) {
-      const cat = pick(['work', 'work', 'personal', 'personal', 'other'] as const)
+      const cat: 'work' | 'personal' | 'other' = pick(['work', 'work', 'personal', 'personal', 'other'] as const)
       const title = pick(DEMO_TITLES[cat])
       const day = addDays(mo.first, int(0, mo.last - mo.first))
       const id = `demo:${mo.key}:${j}`

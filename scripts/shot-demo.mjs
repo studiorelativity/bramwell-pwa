@@ -185,10 +185,58 @@ async function probeYear() {
       panelLists = document.querySelector('.yrpanel')?.querySelectorAll('.yrp-ev').length ?? null
       document.querySelector('.yearview').dispatchEvent(new PointerEvent('pointerleave'))
     }
-    // Session A's strip, when present: report what it says, and try one paint.
-    const strip = document.querySelector('.plan-strip, .strip, [data-strip], .plchip, .plan')
-    const stripText = strip === null ? null : (strip.closest('.yearview')?.querySelector('.plan-strip, .strip, [data-strip]')?.textContent ?? strip.textContent)
-    const out = { ok: true, modeHit, cells: yr.querySelectorAll('.yrcell[data-day]').length, barsOnOverflow, panelLists, stripPresent: strip !== null, stripText }
+    const out = { ok: true, modeHit, cells: yr.querySelectorAll('.yrcell[data-day]').length, barsOnOverflow, panelLists }
+    // The planning layer (iteration A, merged under this branch): the strip reads the
+    // demo's in-memory budget, and a paint is refused with the demo message BEFORE any
+    // optimistic paint — the strip's figure and the grid's bars are unchanged after it.
+    const frame = () => new Promise(r => requestAnimationFrame(r))
+    const strip = document.querySelector('.planstrip')
+    out.stripPresent = strip !== null
+    if (strip !== null) {
+      const chipSel = '.planchip[data-cat="vacation"]'
+      const chip = strip.querySelector(chipSel)
+      out.vacationChipHit = HIT(chipSel)
+      out.vacationFigure = chip?.querySelector('.planchip-fig')?.textContent ?? null
+      out.blackoutFigure = strip.querySelector('.planchip[data-cat="blackout"] .planchip-fig')?.textContent ?? null
+      out.chips = [...strip.querySelectorAll('.planchip')].map(c => c.textContent)
+      chip.click()
+      await sleep(100)
+      out.modeAfterChip = document.querySelector('[data-mode]')?.dataset.mode ?? null
+      // Two consecutive free days (no all-day event on either), both on screen.
+      const st = window.bramwell.state
+      const t = st.today()
+      const mk = d => { const x = new Date(d * 86400000); return x.getUTCFullYear() + '-' + String(x.getUTCMonth() + 1).padStart(2, '0') }
+      const free = d => st.eventsForMonth(mk(d)).every(e => !(e.allDay && e.start <= d && e.end >= d))
+      const centre = el => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] }
+      const onScreen = el => { const [x, y] = centre(el); const h = document.elementFromPoint(x, y); return h !== null && (h === el || el.contains(h)) }
+      let a = null, b = null
+      for (let d = t + 14; d < t + 240 && a === null; d++) {
+        const ca = yr.querySelector('.yrcell[data-day="' + d + '"]'), cb = yr.querySelector('.yrcell[data-day="' + (d + 1) + '"]')
+        if (ca && cb && free(d) && free(d + 1) && onScreen(ca) && onScreen(cb)) { a = ca; b = cb }
+      }
+      if (a === null) { out.paint = { ok: false, why: 'no two free on-screen days' } }
+      else {
+        const barsBefore = yr.querySelectorAll('.yrbar').length
+        const [ax, ay] = centre(a), [bx, by] = centre(b)
+        const ev = (type, x, y) => new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 7, pointerType: 'mouse', isPrimary: true })
+        a.dispatchEvent(ev('pointerdown', ax, ay))
+        b.dispatchEvent(ev('pointermove', bx, by))
+        const paintedMidDrag = document.querySelectorAll('.yrcell[data-paint]').length
+        b.dispatchEvent(ev('pointerup', bx, by))
+        let toast = null
+        for (let i = 0; i < 60; i++) { await frame(); if (toast === null) toast = document.querySelector('.toast')?.textContent ?? null }
+        const figAfter = document.querySelector(chipSel + ' .planchip-fig')?.textContent ?? null
+        out.paint = { ok: true, days: [a.dataset.day, b.dataset.day], paintedMidDrag, toast, toastIsDemoMessage: toast === ${JSON.stringify(DEMO_MESSAGE)},
+          figureBefore: out.vacationFigure, figureAfter: figAfter, figureUnchanged: figAfter === out.vacationFigure,
+          barsUnchanged: yr.querySelectorAll('.yrbar').length === barsBefore || document.querySelectorAll('.yrbar').length === barsBefore,
+          paintedAfter: document.querySelectorAll('.yrcell[data-paint]').length,
+          overlayEverPainted: [...document.querySelectorAll('.yrbar')].some(n => n.textContent === 'Vacation' && Number(n.dataset.day ?? -1) === Number(a.dataset.day)) }
+      }
+      // Leave paint mode the way the user does: click the chip again.
+      document.querySelector(chipSel)?.click()
+      await sleep(100)
+      out.modeAfterSecondClick = document.querySelector('[data-mode]')?.dataset.mode ?? null
+    }
     document.getElementById('btn-mode').click()
     await sleep(400)
     return out

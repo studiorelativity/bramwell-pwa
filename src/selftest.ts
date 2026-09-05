@@ -1838,8 +1838,22 @@ const cases: Case[] = [
       if (onOverflow.length < 4) return `the overflow day carries ${onOverflow.length} all-day events`
       // 6. every seed category, by colorId.
       const colorIds = new Set(evs.map(e => e.colorId))
-      for (const c of ['9', '10', '5', '8']) if (!colorIds.has(c)) return `seed colorId ${c} unused`
-      // 7. enableDemo() installs exactly this seed for today().
+      for (const c of ['9', '10', '5', '8', '7', '11']) if (!colorIds.has(c)) return `seed colorId ${c} unused`
+      // 7. The planning layer: 12 distinct Vacation days and one 5-day Blackout block in the
+      // anchor's civil year, every one inside the window — so the strip reads "12 / 30".
+      const y0 = civilToDay(2026, 1, 1), y1 = civilToDay(2026, 12, 31)
+      const vacDays = new Set<number>()
+      for (const e of evs) if (e.allDay && e.colorId === '7') for (let d = Math.max(e.start, y0); d <= Math.min(e.end, y1); d++) vacDays.add(d)
+      if (vacDays.size !== 12) return `vacation days in the year: ${vacDays.size}`
+      const vacRuns = evs.filter(e => e.allDay && e.colorId === '7')
+      if (vacRuns.length !== 3 || !vacRuns.every(e => e.title === 'Vacation')) return `vacation runs: ${vacRuns.length}`
+      const blackout = evs.filter(e => e.colorId === '11')
+      if (blackout.length !== 1 || blackout[0]?.allDay !== true || blackout[0].end - blackout[0].start !== 4) return `blackout: ${blackout.length} event(s)`
+      for (const e of [...vacRuns, ...blackout]) if (e.start < y0 || e.end > y1) return `${e.id} leaves the year`
+      // Vacation and Blackout never overlap each other: a demo blackout over a demo holiday
+      // would show the conflict rule refusing its own seed.
+      for (const v of vacRuns) if (!(v.end < blackout[0].start || v.start > blackout[0].end)) return `${v.id} overlaps the blackout`
+      // 8. enableDemo() installs exactly this seed for today().
       enableDemo()
       const installed = eventsForMonth('2026-09')
       if (installed.length !== a['2026-09']?.events.length) return `enableDemo installed ${installed.length} events for 2026-09, seed has ${a['2026-09']?.events.length}`
