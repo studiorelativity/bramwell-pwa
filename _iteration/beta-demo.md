@@ -33,10 +33,11 @@ until then seed events only.
 3. Entry: `?demo` and the first-run button. Pill in the avatar slot; pill
    click and any Connect exits demo and calls `signIn()`. Reload lands on
    first-run (nothing persisted).
-4. **After rebasing on A:** demo `configure()`s the seed + `vacation`
-   (colorId 7, budget 30) + `blackout` (colorId 11, blocks) and seeds a few
-   Vacation runs and one Blackout block in the current year so the strip
-   reads mid-budget. If A has not landed when you get here, ship without
+4. **After rebasing on A:** `vacation` (colorId 7) and `blackout` (colorId
+   11, blocks) are now IN the seed (amended 2026-09-05); demo `configure()`s
+   the seed with `budgetDays: 30` set on `vacation` in memory only, and seeds
+   a few Vacation runs and one Blackout block in the current year so the
+   strip reads mid-budget. If A has not landed when you get here, ship without
    it and record it in verification as the one open item.
 5. README: what it is (the wall-calendar framing, one paragraph), run,
    deploy-your-own (Cloudflare + the OAuth origin rules from SPEC "MANUAL

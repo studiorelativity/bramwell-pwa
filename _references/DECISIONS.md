@@ -667,6 +667,18 @@ any code; three parallel iteration sessions run from these.
 - **The seed is unchanged.** "Vacation" and "Blackout" are not seeded: the
   seed is frozen for colorId reasons, and not every user plans leave. Demo
   configures them in memory so the layer is visible without a sign-in.
+  - **Amended 2026-09-05, before session A opened: Vacation and Blackout ARE
+    seeded.** Session C's first-run copy pitches painting vacations and
+    blackouts; a new install with no Vacation chip contradicts its own first
+    screen and sends the user to Settings before the pitch is true. Vacation:
+    colorId 7, no budget — a budget is personal and is set in Settings, the
+    strip shows days used until then. Blackout: colorId 11, `blocks`. The
+    "colorId reasons" were checked: the seed holds 9, 10, 5, 8, so 7 and 11
+    collide with nothing, and no existing row changes. "Not every user plans
+    leave" is covered by delete, which leaves Google untouched. Existing
+    installs are unaffected — the seed applies only when prefs carry no
+    categories. Demo no longer configures the pair; it sets a budget on the
+    seeded Vacation in memory.
 - **The 14-column stretch is 1.35fr, from a measurement.** At 375px a busy
   row at 2.2fr compressed its plain days to an unreadable strip (screenshot,
   2026-09-05, signed-out cache). Closes the `OPEN.md` item opened at the

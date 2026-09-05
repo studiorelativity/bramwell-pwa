@@ -34,6 +34,13 @@ is a new directory — create it.
    `blocks?: true`. `sanitize()` keeps the row and drops an invalid field.
    Selftest: budget 0, 367, 2.5, "30" (string) all dropped; 1 and 366 kept;
    `blocks: 1` and `blocks: "true"` dropped; `blocks: true` kept.
+   **Seed (amended 2026-09-05, DECISIONS "Planning layer rulings"):** append
+   `vacation` (label Vacation, colorId `'7'`, no budget) and `blackout`
+   (label Blackout, colorId `'11'`, `blocks: true`) to `SEED`, after
+   `financial` and before `OTHER`. Pick `displayHex` per Night Depth and add
+   both dark twins to `TWINS`. The frozen-seed comment stays true: existing
+   rows and their colorIds do not change. Seed holds 9, 10, 5, 8; 7 and 11
+   are free. Selftest: the seed sanitizes to itself with `blocks` intact.
 2. **`src/plan.ts`**, DOM-free, imports `types.ts`/`dates.ts` only.
    - `runOf(a, b, yearStart, yearEnd)` — ordered, inclusive, clipped.
    - `daysUsed(events, categoryName, yearStart, yearEnd)` — distinct days,
