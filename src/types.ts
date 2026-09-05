@@ -123,6 +123,12 @@ export type StoredCategory = {
   colorId: string
   /** Optional on-screen override of the Google colour. */
   displayHex?: string
+  /** Days per calendar year the user means to spend on it, integer 1..366
+   *  (SPEC "Planning layer", 2026-09-05). Absent = no budget. */
+  budgetDays?: number
+  /** Days carrying an event of this category may not be planned over.
+   *  Literally `true` or absent — sanitize() drops anything else. */
+  blocks?: true
 }
 
 export type Prefs = {

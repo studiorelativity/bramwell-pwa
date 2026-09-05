@@ -25,6 +25,7 @@ import type { Expanded } from './scroll.ts'
 import { packLanes, visibilityFor, rangeLabel, columnsFor, PHONE_MAX_W } from './render.ts'
 import type { PackedSpan } from './render.ts'
 import { validate } from './day.ts'
+import { sanitizePlanning } from './plan.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -255,6 +256,54 @@ const cases: Case[] = [
     return null
   }],
 
+  ['plan: sanitizePlanning keeps the row and drops an invalid field', () => {
+    // Planning fields ride on the category row (SPEC "Planning layer"): a bad
+    // value costs the FIELD, never the category.
+    const bud = (v: unknown) => sanitizePlanning({ budgetDays: v })
+    for (const v of [0, 367, 2.5, '30', -1, NaN, null, true]) {
+      if ('budgetDays' in bud(v)) return `budgetDays ${JSON.stringify(v)} was kept`
+    }
+    if (bud(1).budgetDays !== 1) return `budgetDays 1 -> ${JSON.stringify(bud(1))}`
+    if (bud(366).budgetDays !== 366) return `budgetDays 366 -> ${JSON.stringify(bud(366))}`
+    const blk = (v: unknown) => sanitizePlanning({ blocks: v })
+    for (const v of [1, 'true', false, 'yes', {}]) {
+      if ('blocks' in blk(v)) return `blocks ${JSON.stringify(v)} was kept`
+    }
+    if (blk(true).blocks !== true) return `blocks true -> ${JSON.stringify(blk(true))}`
+    if (Object.keys(sanitizePlanning({})).length !== 0) return 'an empty row grew a field'
+    // Through the category loader: the row survives, the bad field does not.
+    const rows = sanitize([
+      { name: 'a', label: 'A', colorId: '1', budgetDays: '30', blocks: 1 },
+      { name: 'b', label: 'B', colorId: '2', budgetDays: 30, blocks: true },
+    ])
+    if (rows.length !== 2) return `rows kept: ${rows.length}`
+    if ('budgetDays' in rows[0]! || 'blocks' in rows[0]!) return `invalid planning fields survived: ${JSON.stringify(rows[0])}`
+    if (rows[1]?.budgetDays !== 30 || rows[1]?.blocks !== true) return `valid planning fields lost: ${JSON.stringify(rows[1])}`
+    return null
+  }],
+
+  ['categories: the seed sanitizes to itself, blocks intact', () => {
+    configure({})
+    const seed = all()
+    const again = sanitize(seed)
+    if (JSON.stringify(again) !== JSON.stringify(seed)) return `seed changed under sanitize: ${JSON.stringify(again)}`
+    const black = seed.find(c => c.name === 'blackout')
+    if (black?.blocks !== true || black.colorId !== '11') return `blackout: ${JSON.stringify(black)}`
+    const vac = seed.find(c => c.name === 'vacation')
+    if (vac === undefined || vac.colorId !== '7' || 'budgetDays' in vac || 'blocks' in vac) return `vacation: ${JSON.stringify(vac)}`
+    // Frozen seed: the four original rows and their colorIds are untouched.
+    const orig = seed.slice(0, 3).map(c => `${c.name}:${c.colorId}`).join(',') + ',' + seed[5]?.name + ':' + seed[5]?.colorId
+    if (orig !== 'work:9,personal:10,financial:5,other:8') return `original rows moved: ${orig}`
+    // Both new rows carry a hand-picked dark twin, not a derived one.
+    const css = themeCss('warm')
+    for (const c of [vac, black]) {
+      const light = c.displayHex ?? ''
+      if (!css.includes(`--cat-${c.name}: ${light}`)) return `${c.name} light hex missing from themeCss`
+      if (css.includes(`--cat-${c.name}: ${brighten(light)}`)) return `${c.name} dark twin is brighten(), not hand-picked`
+    }
+    return null
+  }],
+
   ['categories: brighten floors lightness, caps saturation', () => {
     // Independent HSL measurement — the oracle, not the algorithm under test.
     const measure = (hex: string): { h: number; s: number; l: number } => {
@@ -283,13 +332,13 @@ const cases: Case[] = [
 
   ['categories: resolution, fallback and seed substitution', () => {
     configure({})
-    if (all().map(c => c.name).join(',') !== 'work,personal,financial,other') return `seed: ${all().map(c => c.name).join(',')}`
+    if (all().map(c => c.name).join(',') !== 'work,personal,financial,vacation,blackout,other') return `seed: ${all().map(c => c.name).join(',')}`
     if (categoryFor('9').name !== 'work') return `colorId 9 -> ${categoryFor('9').name}`
     if (categoryFor('1').name !== 'other') return `unknown colorId -> ${categoryFor('1').name}`
     if (categoryFor(undefined).name !== 'other') return `absent colorId -> ${categoryFor(undefined).name}`
     // A blob that sanitizes to nothing must not leave zero categories.
     configure({ categories: [{ name: '', label: '', colorId: '99' }] as unknown as StoredCategory[] })
-    if (all().length !== 4) return `empty blob did not fall back to seed: ${all().length}`
+    if (all().length !== 6) return `empty blob did not fall back to seed: ${all().length}`
     // A fallbackCategory naming a category that is not present falls back to the first.
     configure({ categories: [{ name: 'solo', label: 'Solo', colorId: '7' }], fallbackCategory: 'ghost' })
     if (fallback().name !== 'solo') return `dangling fallback -> ${fallback().name}`

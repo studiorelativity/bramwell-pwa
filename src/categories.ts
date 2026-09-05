@@ -1,5 +1,6 @@
 // STAGE 02 — category resolution, Google colour table, moods, themeCss(). DOM-free; never imports state.ts.
 import type { GoogleColor, MoodId, Prefs, StoredCategory } from './types.ts'
+import { sanitizePlanning } from './plan.ts'
 
 // ---------- Tables ----------
 
@@ -23,11 +24,17 @@ const GOOGLE_HEX = new Map(GOOGLE_COLORS.map(c => [c.id, c.hex]))
 
 const OTHER: StoredCategory = { name: 'other', label: 'Other', colorId: '8', displayHex: '#64748B' }
 
-/** Frozen: existing events in the user's calendar already carry these colorIds. */
+/** Frozen: existing events in the user's calendar already carry these colorIds.
+ *  Vacation and Blackout were appended 2026-09-05 (DECISIONS "Planning layer
+ *  rulings", amended): 7 and 11 collided with nothing, and no existing row or
+ *  colorId changed. Vacation carries no budget — that is personal and set in
+ *  Settings; Blackout blocks. */
 const SEED: readonly StoredCategory[] = [
   { name: 'work', label: 'Work', colorId: '9', displayHex: '#3056D3' },
   { name: 'personal', label: 'Personal', colorId: '10', displayHex: '#17925A' },
   { name: 'financial', label: 'Financial', colorId: '5', displayHex: '#D97706' },
+  { name: 'vacation', label: 'Vacation', colorId: '7', displayHex: '#0E86C4' },
+  { name: 'blackout', label: 'Blackout', colorId: '11', displayHex: '#B3261E', blocks: true },
   OTHER,
 ]
 
@@ -38,6 +45,8 @@ const TWINS = new Map([
   ['#17925A', '#4FC48D'],
   ['#D97706', '#F0A13C'],
   ['#64748B', '#94A3B8'],
+  ['#0E86C4', '#5CC1F2'],
+  ['#B3261E', '#F28B82'],
 ])
 
 // ---------- Colour maths ----------
@@ -106,10 +115,11 @@ export function sanitize(raw: unknown): StoredCategory[] {
     names.add(name)
     colorIds.add(colorId)
     // The two branches are required by exactOptionalPropertyTypes: `displayHex: undefined`
-    // is not assignable to an optional property.
+    // is not assignable to an optional property. The planning fields come back
+    // from plan.ts already in that shape (present only when valid).
     out.push(typeof displayHex === 'string' && HEX_RE.test(displayHex)
-      ? { name, label, colorId, displayHex }
-      : { name, label, colorId })
+      ? { name, label, colorId, displayHex, ...sanitizePlanning(r) }
+      : { name, label, colorId, ...sanitizePlanning(r) })
   }
   return out
 }
