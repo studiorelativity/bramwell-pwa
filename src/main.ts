@@ -690,7 +690,10 @@ if (new URLSearchParams(location.search).has('selftest')) {
         openDayAt(d)
       }, toast: chrome.toast })
       yearRoot.append(yrNote)          // under the grid; year.ts never replaces root's children
+    } else if (yearDirty) {
+      yearCtl.invalidate()             // cache changed while the year was hidden (see onCacheChange)
     }
+    yearDirty = false                  // a fresh mount is fresh; an invalidate just consumed it
     refreshYearNote()
   }
   modeBtn.addEventListener('click', () => {
@@ -742,8 +745,15 @@ if (new URLSearchParams(location.search).has('selftest')) {
       // reaches the pill: there is no auth event to subscribe to.
       chromeCtl.syncConnection()
       ctl.invalidate()
-      if (inYear() && yearDirty) { yearCtl?.invalidate(); refreshYearNote() }
-      yearDirty = false
+      // Only a VISIBLE year view consumes the dirty flag. A write made from the
+      // month view used to clear it here without rebuilding (year.ts bails on a
+      // hidden root), so the year stayed stale until reload — found at the
+      // planning-layer gate, 2026-09-05: paint in the year, erase in the month,
+      // come back, the run is still drawn. openYear() consumes it instead.
+      if (inYear()) {
+        if (yearDirty) { yearCtl?.invalidate(); refreshYearNote() }
+        yearDirty = false
+      }
     })
   })
 

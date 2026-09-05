@@ -312,3 +312,15 @@ row". Not retuned — A's grid. Shot: `final-demo-390-dark-year.png`.
 - Demo mode on a device; the demo header at widths between 390 and 560 with a
   longer range label (e.g. "Dec 2026 – Jan 2027") — the 389/390 fit above is
   for "Aug – Sep 2026".
+
+## Gate fix folded in after the three sessions landed (2026-09-05)
+- **The year view stayed stale after a write made in the month view** (found
+  by the human at the planning-layer gate: paint in the year, erase in the
+  month, reopen the year, the run is still drawn until a reload). Cause, in
+  `main.ts` since stage 03: `onCacheChange` cleared `yearDirty` whether or not
+  the year view was visible, and `year.ts` bails on a hidden root, so the
+  rebuild never happened and the flag was gone. Fix: only a visible year
+  consumes the flag; `openYear()` invalidates when it finds it set. Probe
+  `_iteration/output/stale-year.probe.mjs` (open year, back to month, save an
+  event there, reopen): `gridRebuiltOnOpen` false before, true after; 67/67,
+  build clean. Not A's, not C's surface — a gate fix on the integration tip.
