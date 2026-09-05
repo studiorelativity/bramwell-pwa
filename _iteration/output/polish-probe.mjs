@@ -450,8 +450,9 @@ if (want('coarse')) {
       await pressKey('Escape', 'Escape', 27); await sleep(400)
     }
     await js('window.bramwell.chrome.openSheet()'); await sleep(300)
-    r[k].sheet = await js("Object.fromEntries(['.set-cat-lab', '.set-cat-cid', '.set-cat-hex'].map(s => [s, getComputedStyle(document.querySelector(s)).fontSize]))")
-    r[k].sheetFits = await js("(() => { const s = document.getElementById('sheet'); const rows = [...s.querySelectorAll('.set-cat')]; const sr = s.getBoundingClientRect(); return { clipped: rows.filter(row => [...row.children].some(c => c.getBoundingClientRect().right > sr.right + .5)).length, rows: rows.length } })()")
+    // .plan-bud is the Budget number input A's row added (rebased 2026-09-05); absent before A.
+    r[k].sheet = await js("Object.fromEntries(['.set-cat-lab', '.set-cat-cid', '.set-cat-hex', '.plan-bud'].map(s => [s, document.querySelector(s) ? getComputedStyle(document.querySelector(s)).fontSize : null]))")
+    r[k].sheetFits = await js("(() => { const s = document.getElementById('sheet'); const rows = [...s.querySelectorAll('.set-cat, .plan-row')]; const sr = s.getBoundingClientRect(); return { clipped: rows.filter(row => [...row.children].some(c => c.getBoundingClientRect().right > sr.right + .5)).length, rows: rows.length } })()")
     r[k].sheetShot = await shot(`coarse-${k}-sheet`)
     await pressKey('Escape', 'Escape', 27); await sleep(200)
     await js("document.getElementById('btn-mode').click()"); await sleep(400)

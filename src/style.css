@@ -488,7 +488,8 @@ html, body {
    input, textarea and select the app renders is listed; desktop keeps 12px. */
 @media (pointer: coarse) {
   .dp-form input, .dp-form textarea, .dp-form select,
-  .set-cat-lab, .set-cat-hex, .set-cat-cid { font-size: 16px; }
+  .set-cat-lab, .set-cat-hex, .set-cat-cid,
+  .plan-bud { font-size: 16px; }   /* the Budget number input A's row added (rebased 2026-09-05) */
 }
 
 /* ---------- keyboard focus ---------- */
@@ -675,7 +676,7 @@ button.set-fr-connect:focus-visible, button.set-fab:focus-visible { outline-colo
 .planchip-fig[data-over] { color: var(--ink-strong); font-weight: 620; }
 /* The run highlight: the category's bar fill (16%) laid OVER the tile as an
    image layer, so the band colour stays under it — the same color-mix the
-   .bar/.yrbar fills use. It snaps by ruling; no transition here or in motion.css. */
+   .bar/.yrbar fills use. It snaps by ruling; nothing eases it, here or in motion.css. */
 .yrcell[data-paint] {
   background-image: linear-gradient(
     color-mix(in srgb, var(--cat) 16%, transparent),
