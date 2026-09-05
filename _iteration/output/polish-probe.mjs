@@ -333,10 +333,14 @@ if (want('light')) {
 }
 
 // ---------------- Ticket 7: toast placement ----------------
-if (want('toast')) {
+// `toastbefore` re-injects the pre-ticket rule (#toasts { bottom: 24px }) on
+// top of the current build: the before-run's raiseToast never fired (its own
+// bug, fixed since), and the ticket changed exactly that one value.
+if (want('toast') || want('toastbefore')) {
   const r = {}
+  const before = want('toastbefore') && !want('toast')
   for (const scheme of ['dark']) {
-    await nav({ w: 390, h: 844, scheme })
+    await nav({ w: 390, h: 844, scheme, extra: before ? "addEventListener('DOMContentLoaded', () => { const st = document.createElement('style'); st.textContent = '#toasts { bottom: 24px !important }'; document.head.append(st) })" : '' })
     if (await openDayWithForm() && await raiseToast()) {
       r[scheme] = await js(`(() => { const t = document.querySelector('.toast').getBoundingClientRect(); const f = document.getElementById('fab').getBoundingClientRect()
         const cs = getComputedStyle(document.getElementById('toasts'))

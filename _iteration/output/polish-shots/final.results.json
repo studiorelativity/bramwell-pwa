@@ -1,0 +1,75 @@
+{
+  "coarse": {
+    "fine": {
+      "matches": {
+        "coarse": false,
+        "hoverNone": false
+      },
+      "form": {
+        ".dp-title": "12px",
+        ".dp-allday": "12px",
+        ".dp-start": "12px",
+        ".dp-startt": "12px",
+        ".dp-repeat": "12px",
+        ".dp-notes": "12px"
+      },
+      "formFits": {
+        "right": 381,
+        "innerWidth": 390,
+        "docScrollW": 390
+      },
+      "formShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-coarse-fine-form.png",
+      "sheet": {
+        ".set-cat-lab": "13px",
+        ".set-cat-cid": "12px",
+        ".set-cat-hex": "13.3333px",
+        ".plan-bud": "12px"
+      },
+      "sheetFits": {
+        "clipped": 0,
+        "rows": 12
+      },
+      "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-coarse-fine-sheet.png",
+      "yearFits": {
+        "docScrollW": 390,
+        "innerWidth": 390
+      }
+    },
+    "coarse": {
+      "matches": {
+        "coarse": true,
+        "hoverNone": true
+      },
+      "form": {
+        ".dp-title": "16px",
+        ".dp-allday": "16px",
+        ".dp-start": "16px",
+        ".dp-startt": "16px",
+        ".dp-repeat": "16px",
+        ".dp-notes": "16px"
+      },
+      "formFits": {
+        "right": 381,
+        "innerWidth": 390,
+        "docScrollW": 390
+      },
+      "formShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-coarse-coarse-form.png",
+      "sheet": {
+        ".set-cat-lab": "16px",
+        ".set-cat-cid": "16px",
+        ".set-cat-hex": "16px",
+        ".plan-bud": "16px"
+      },
+      "sheetFits": {
+        "clipped": 0,
+        "rows": 12
+      },
+      "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-coarse-coarse-sheet.png",
+      "yearFits": {
+        "docScrollW": 390,
+        "innerWidth": 390
+      }
+    }
+  },
+  "exceptions": []
+}
