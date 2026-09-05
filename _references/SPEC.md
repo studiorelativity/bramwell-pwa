@@ -1021,6 +1021,11 @@ writes immediately.
   and coalesces concurrent callers through an in-flight map. A failed
   fetch sets `error` but **keeps the prior events**, so a refresh failure
   never blanks a month already on screen. Stage 03 owns *when* to call it.
+  **Amended 2026-09-05:** *when* is the range change AND the app returning
+  to the foreground — `visibilitychange` to visible, window `focus`, and
+  `online` each re-run `ensureMonthsFor` over the visible weeks. The
+  five-minute rule still decides whether a fetch happens; there is no timer.
+  Without this a parked tab never sees a write made on another device.
 - `spansForWeek` gathers the one or two month keys the week touches and
   **dedupes by event id**: an event crossing a month boundary is stored in
   both months, and a week straddling that boundary would otherwise draw

@@ -67,6 +67,27 @@ polish claim without a screenshot pair is not verified.
     `last` selected when the field is absent. Selftest the launch resolution
     as a pure function if you can lift it into `state.ts`. Verify: switch to
     Year, reload, land in Year; set Month in Settings, reload, land in Month.
+11. **iOS Safari auto-zoom on form focus** (05 gate, phone, 2026-09-05). Every
+    input, textarea and select is 12px; iOS zooms the page to 16/12 = 1.33×
+    when one gets focus and never zooms back, so both views run off the
+    screen and the header title is cut at the left (three screenshots, the
+    overflow measured at 1.32–1.4×). Fix in `style.css`: under
+    `@media (pointer: coarse)` set `.dp-form input, .dp-form textarea,
+    .dp-form select, .set-cat-lab, .set-cat-hex, .set-cat-cid` and any
+    other field to `font-size: 16px`; desktop keeps 12px. Do NOT use
+    `maximum-scale=1` in the viewport meta — Android honours it and kills
+    pinch zoom (WCAG 1.4.4). Verify on the phone: reload, tap a title
+    field, the page must not zoom; then check both views still fit at 390.
+12. **Foreground refresh** (05 gate, 2026-09-05; SPEC "State API" amended).
+    `ensureMonthsFor` runs only from `onRangeChange`, so a desktop tab
+    parked on this week never refetches — a phone-side write showed up
+    only after sign-out. In `main.ts`: on `visibilitychange` → visible,
+    `focus`, and `online`, call `state.ensureMonthsFor` over the currently
+    visible weeks (the same list `onRangeChange` passes); the 5-minute rule
+    in `state.ts` decides whether anything actually fetches. No timer. The
+    transient-UI rule already holds (a refresh never touches an open form
+    or sheet). Verify: with a form open, fire `visibilitychange`; the form
+    survives and the month refetches only if stale.
 
 ## Not yours
 Year-view stretch (A retuned it). Hover panel restyle (done, per the

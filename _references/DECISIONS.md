@@ -695,6 +695,14 @@ any code; three parallel iteration sessions run from these.
   already owns the view switch in `main.ts` and the Settings sheet. The type
   change landed on `main` before A and C branched so neither edits
   `types.ts` for it.
+- **05 gate on the phone, 2026-09-05: two findings, both to session C.**
+  (1) iOS auto-zoom: form fields at 12px make Safari zoom the page 1.33× on
+  focus and leave it there; the cure is 16px fields under coarse pointers,
+  not `maximum-scale=1`, which disables pinch zoom on Android. (2) A parked
+  desktop tab never refetches: `ensureMonthsFor` ran only on range change.
+  Foreground events now re-run it; the 5-minute rule is unchanged and no
+  polling timer is added (a timer would fetch for nobody). The landscape
+  address bar is Safari's, not ours: judged in the installed PWA.
 - **The 14-column stretch is 1.35fr, from a measurement.** At 375px a busy
   row at 2.2fr compressed its plain days to an unreadable strip (screenshot,
   2026-09-05, signed-out cache). Closes the `OPEN.md` item opened at the
