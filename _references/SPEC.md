@@ -216,6 +216,17 @@ live on the category in prefs.
   compresses its ordinary days below legibility. The factor becomes 2.2 at
   28 columns and **1.35 at 14**; still off at 7. Thirty painted vacation days
   would otherwise make the phone year unreadable. Closes the `OPEN.md` item.
+- **Both views (amended 2026-09-05).** The layer belongs to the calendar,
+  not to the year view: the strip, paint mode, the conflict rule and erase
+  work in the month view too, on the month grid's day cells. The year view
+  ships first (iteration A); the month view follows in iteration D, after A
+  merges, mounting the same controller on the month grid. To make that a
+  mount and not a rewrite, A builds the drag/paint/erase controller against
+  a host interface — a root element, a way to resolve a pointer position to
+  a day cell, a way to enumerate the cells of a run, and the write/toast
+  callbacks — with no dependency on `year.ts` internals beyond that. Where
+  the strip sits in the month view (the header row, or a row that scrolls
+  with the grid) is D's brainstorm, not decided here.
 - Not in this layer: AI suggestions, holidays, a second Google calendar,
   weekend/weekday budget accounting. Recorded in `OPEN.md` with the reasons.
 
@@ -509,12 +520,21 @@ categories?       StoredCategory[]     absent -> seed
 fallbackCategory? name                 absent -> "other"
 mood?             MoodId               absent -> "warm"
 snapStepDays?     15 | 30 | 45         absent -> 30
-defaultView?      "cal" | "year"       absent -> "cal"
+defaultView?      "cal" | "year" | "last"   absent -> "last"
+lastView?         "cal" | "year"       written on every view switch
 lastDockedDay?    DayNumber            written at dock, not read at launch
 ```
 
 `defaultView` **is** read at launch, unlike `lastDockedDay`: the view a
 session opens in is a setting, where the scroll position is not.
+**Amended 2026-09-05:** the setting has three values. `"cal"` and `"year"`
+open that view; `"last"` (the default for new installs, and what an absent
+field means) opens the view the previous session ended in, read from
+`lastView`, which `main.ts` writes on every Month ↔ Year switch. Absent
+`lastView` under `"last"` opens the month. The Settings segment reads
+Last / Month / Year. The view IS a setting and the last-used view IS the
+sensible default: the user switches between them constantly, and a fixed
+default would be wrong half the time.
 
 ## Categories and customization
 

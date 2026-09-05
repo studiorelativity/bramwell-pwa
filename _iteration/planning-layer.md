@@ -104,8 +104,19 @@ is a new directory — create it.
   that has only ever reported one answer proves nothing).
 - On the real wire (human): SPEC "Definition of done — Planning layer".
 
+## Build for the month view without building it (amended 2026-09-05)
+SPEC "Planning layer — Both views": iteration D will mount your paint/erase
+controller on the month grid after you merge. So the controller (mode state,
+pointer capture, `elementFromPoint` → cell, run highlight, the
+`firstBlocked` check, the write, Escape) takes a host object — root element,
+`cellAt(x, y): Element | null`, `cellsIn(run): Element[]`, `dayOf(cell)`,
+`laneZeroId(cell)`, `createEvent`, `deleteEvent`, `toast` — and reads
+nothing from `year.ts` closures. Keep it in `year.ts` for now; D lifts it out
+(a new file goes into SPEC's layout first, as always). Do not mount it on the
+month grid yourself.
+
 ## Out of bounds
 Anything in `OPEN.md` "Opened at the planning layer". Holidays, AI, weekday
-budgets, split-erase, a second calendar. Do not touch `day.ts`, `scroll.ts`,
+budgets, split-erase, a second calendar. The month-view mount (iteration D). Do not touch `day.ts`, `scroll.ts`,
 `render.ts`, `motion.css`, `sw.ts`, first-run, or the settings sheet outside
 `buildColors()`.

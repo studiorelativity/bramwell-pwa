@@ -134,9 +134,12 @@ export type Prefs = {
   mood?: MoodId
   /** Absent -> 30. */
   snapStepDays?: 15 | 30 | 45
-  /** Absent -> "cal". Read at launch, unlike lastDockedDay: the view a session
-   *  opens in is a setting, where the scroll position is not (SPEC "Settings"). */
-  defaultView?: 'cal' | 'year'
+  /** Absent -> "last" (2026-09-05). Read at launch: "cal"/"year" open that view;
+   *  "last" opens whatever lastView holds, falling back to "cal". */
+  defaultView?: 'cal' | 'year' | 'last'
+  /** Written on every Month/Year switch; read at launch only when defaultView
+   *  is "last" or absent (SPEC "Settings", amended 2026-09-05). */
+  lastView?: 'cal' | 'year'
   /** Written at dock, not read at launch. */
   lastDockedDay?: DayNumber
 }

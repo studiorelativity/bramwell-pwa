@@ -679,6 +679,22 @@ any code; three parallel iteration sessions run from these.
     installs are unaffected — the seed applies only when prefs carry no
     categories. Demo no longer configures the pair; it sets a budget on the
     seeded Vacation in memory.
+- **The planning layer works in both views; year first, month in iteration D
+  (2026-09-05, before A opened).** The human: "we really need it to happen in
+  both, I flip-flop between year and month a lot." Not folded into A because
+  A's surface excludes `render.ts` and C is already in `main.ts`; a third
+  session on the month grid during A and C is how merges go bad. Instead A
+  builds the controller host-agnostic (SPEC "Planning layer — Both views")
+  and D mounts it on the month grid after A merges. Rejected: painting in
+  the year view only — the strip's ledger is useful wherever the user is
+  looking, and the month view is where half their time goes.
+- **New installs open in the last-used view (2026-09-05).** `defaultView`
+  gains `"last"`, the default; `lastView` is written on every switch. Same
+  reason: the user flips between views constantly, so any fixed default is
+  wrong half the time. Supersedes "absent -> cal". Owner: session C, which
+  already owns the view switch in `main.ts` and the Settings sheet. The type
+  change landed on `main` before A and C branched so neither edits
+  `types.ts` for it.
 - **The 14-column stretch is 1.35fr, from a measurement.** At 375px a busy
   row at 2.2fr compressed its plain days to an unreadable strip (screenshot,
   2026-09-05, signed-out cache). Closes the `OPEN.md` item opened at the

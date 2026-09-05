@@ -27,6 +27,7 @@ not apply to them. Open exactly one per session, by name:
 | A — planning layer | `_iteration/planning-layer.md` | `planning-layer` |
 | B — demo + beta on-ramp (06 run early) | `_iteration/beta-demo.md` | `demo` |
 | C — beta polish | `_iteration/polish.md` | `polish` |
+| D — month-view planning (opens after A merges) | `_iteration/month-plan.md` | `month-plan` |
 
 Merge order A, B, C. Their upstream edits are already in `_references/`
 (DECISIONS "Planning layer rulings"); an iteration file that asks you to

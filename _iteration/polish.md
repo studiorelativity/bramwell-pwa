@@ -59,6 +59,14 @@ polish claim without a screenshot pair is not verified.
 9. **Press feedback on buttons** (header, FAB, sheet, chips): `:active`
    `translateY(1px)` or opacity, compositor-only, declared in `motion.css`
    with `--t-fast`. Skip if it already exists.
+10. **Open in the last-used view** (SPEC "Settings", amended 2026-09-05; the
+    type change is already on `main`). `main.ts`: write `prefs.lastView` on
+    every `showYear()` switch; at launch, `defaultView` `"year"` → year,
+    `"cal"` → month, `"last"` or absent → `lastView ?? "cal"`. Sheet: the
+    view segment becomes Last / Month / Year, stored `last`/`cal`/`year`,
+    `last` selected when the field is absent. Selftest the launch resolution
+    as a pure function if you can lift it into `state.ts`. Verify: switch to
+    Year, reload, land in Year; set Month in Settings, reload, land in Month.
 
 ## Not yours
 Year-view stretch (A retuned it). Hover panel restyle (done, per the
