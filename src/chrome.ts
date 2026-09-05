@@ -306,7 +306,59 @@ function buildColors(): HTMLElement {
       r.append(el('span', 'set-note', 'Fallback'))
     }
 
-    wrap.append(r)
+    // --- planning fields (SPEC "Planning layer"): a second line under the
+    // row, because .set-cat already carries six controls at 380px and does not
+    // wrap. Both are structural edits -> rebuild(). ---
+    const pr = el('div', 'plan-row')
+    pr.dataset['cat'] = c.name
+    pr.append(el('span', 'plan-lbl', 'Budget'))
+    const bud = el('input', 'plan-bud')
+    bud.type = 'number'
+    bud.min = '1'
+    bud.max = '366'
+    bud.inputMode = 'numeric'
+    bud.placeholder = '—'
+    bud.value = c.budgetDays === undefined ? '' : String(c.budgetDays)
+    bud.setAttribute('aria-label', `Budget in days per year for ${c.label}`)
+    bud.addEventListener('change', () => {
+      const raw = bud.value.trim()
+      if (raw === '') {
+        // Blank = delete the field (exactOptionalPropertyTypes: drop the key, never `undefined`).
+        writeCats(currentCats().map(x => {
+          if (x.name !== c.name) return x
+          const { budgetDays: _drop, ...rest } = x
+          return rest
+        }), fallbackName)
+        rebuild()
+        return
+      }
+      const n = Number(raw)
+      // sanitize() would drop an out-of-range value on the next load; refuse it
+      // here instead of writing a field that silently vanishes.
+      if (!Number.isInteger(n) || n < 1 || n > 366) { bud.value = c.budgetDays === undefined ? '' : String(c.budgetDays); return }
+      writeCats(currentCats().map(x => x.name === c.name ? { ...x, budgetDays: n } : x), fallbackName)
+      rebuild()
+    })
+    pr.append(bud, el('span', 'plan-unit', 'days / yr'))
+    // A pressed button styled as the segment control, not a checkbox — iOS PWA
+    // checkbox styling is the OPEN.md hazard (brief, step 6).
+    const segw = el('div', 'set-seg')
+    const blk = el('button', 'set-segb plan-blocks', 'Blocks')
+    blk.type = 'button'
+    blk.setAttribute('aria-pressed', String(c.blocks === true))
+    blk.setAttribute('aria-label', `${c.label} blocks planning over its days`)
+    blk.addEventListener('click', () => {
+      writeCats(currentCats().map(x => {
+        if (x.name !== c.name) return x
+        if (x.blocks === true) { const { blocks: _drop, ...rest } = x; return rest }
+        return { ...x, blocks: true }
+      }), fallbackName)
+      rebuild()
+    })
+    segw.append(blk)
+    pr.append(segw)
+
+    wrap.append(r, pr)
   }
 
   // --- add: dead at 11, WITH the reason (SPEC) ---
