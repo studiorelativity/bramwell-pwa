@@ -1,74 +1,106 @@
 {
-  "coarse": {
-    "fine": {
-      "matches": {
-        "coarse": false,
-        "hoverNone": false
+  "demo": {
+    "light": {
+      "pill": {
+        "h": 31,
+        "w": 116,
+        "oneLine": true,
+        "right": 354
       },
-      "form": {
-        ".dp-title": "12px",
-        ".dp-allday": "12px",
-        ".dp-start": "12px",
-        ".dp-startt": "12px",
-        ".dp-repeat": "12px",
-        ".dp-notes": "12px"
+      "hdrOverflow": false,
+      "hdrScrollW": 390,
+      "innerWidth": 390,
+      "avatarRight": 382,
+      "rangeText": "Aug – Sep 2026",
+      "rangeLines": 1,
+      "children": [
+        "hdr-range enter:114",
+        "hdr-spacer:0",
+        "btn-mode:40",
+        "btn-today:51",
+        "hdr-avatar:144"
+      ],
+      "slot": [
+        "demo-pill:116",
+        "avatar:28"
+      ],
+      "isDemo": true,
+      "headerShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-demo-390-light-header.png",
+      "account": {
+        "text": "Demo",
+        "buttons": [
+          "sheet-connect:Connect"
+        ]
       },
-      "formFits": {
-        "right": 381,
-        "innerWidth": 390,
-        "docScrollW": 390
+      "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-demo-390-light-sheet.png",
+      "connectHit": true,
+      "afterConnect": {
+        "isDemo": false,
+        "sheetOpen": false,
+        "pill": false,
+        "firstRunShown": false,
+        "toast": "popup_failed"
       },
-      "formShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-coarse-fine-form.png",
-      "sheet": {
-        ".set-cat-lab": "13px",
-        ".set-cat-cid": "12px",
-        ".set-cat-hex": "13.3333px",
-        ".plan-bud": "12px"
+      "year390": {
+        "docScrolls": false,
+        "yearScrolls": true,
+        "yearScrollH": 1188,
+        "yearClientH": 724,
+        "stripH": 40,
+        "rows": 27
       },
-      "sheetFits": {
-        "clipped": 0,
-        "rows": 12
-      },
-      "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-coarse-fine-sheet.png",
-      "yearFits": {
-        "docScrollW": 390,
-        "innerWidth": 390
-      }
+      "yearShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-demo-390-light-year.png"
     },
-    "coarse": {
-      "matches": {
-        "coarse": true,
-        "hoverNone": true
+    "dark": {
+      "pill": {
+        "h": 31,
+        "w": 116,
+        "oneLine": true,
+        "right": 354
       },
-      "form": {
-        ".dp-title": "16px",
-        ".dp-allday": "16px",
-        ".dp-start": "16px",
-        ".dp-startt": "16px",
-        ".dp-repeat": "16px",
-        ".dp-notes": "16px"
+      "hdrOverflow": false,
+      "hdrScrollW": 390,
+      "innerWidth": 390,
+      "avatarRight": 382,
+      "rangeText": "Aug – Sep 2026",
+      "rangeLines": 1,
+      "children": [
+        "hdr-range enter:114",
+        "hdr-spacer:0",
+        "btn-mode:40",
+        "btn-today:51",
+        "hdr-avatar:144"
+      ],
+      "slot": [
+        "demo-pill:116",
+        "avatar:28"
+      ],
+      "isDemo": true,
+      "headerShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-demo-390-dark-header.png",
+      "account": {
+        "text": "Demo",
+        "buttons": [
+          "sheet-connect:Connect"
+        ]
       },
-      "formFits": {
-        "right": 381,
-        "innerWidth": 390,
-        "docScrollW": 390
+      "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-demo-390-dark-sheet.png",
+      "connectHit": true,
+      "afterConnect": {
+        "isDemo": false,
+        "sheetOpen": false,
+        "pill": false,
+        "firstRunShown": false,
+        "toast": "popup_failed"
       },
-      "formShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-coarse-coarse-form.png",
-      "sheet": {
-        ".set-cat-lab": "16px",
-        ".set-cat-cid": "16px",
-        ".set-cat-hex": "16px",
-        ".plan-bud": "16px"
+      "year390": {
+        "docScrolls": false,
+        "yearScrolls": true,
+        "yearScrollH": 1188,
+        "yearClientH": 724,
+        "stripH": 40,
+        "rows": 27
       },
-      "sheetFits": {
-        "clipped": 0,
-        "rows": 12
-      },
-      "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-coarse-coarse-sheet.png",
-      "yearFits": {
-        "docScrollW": 390,
-        "innerWidth": 390
-      }
+      "yearShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/final-demo-390-dark-year.png"
     }
   },
   "exceptions": []

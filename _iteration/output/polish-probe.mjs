@@ -104,7 +104,7 @@ await send('Page.enable'); await send('Runtime.enable'); await send('Network.ena
 await send('Network.setBlockedURLs', { urls: ['*accounts.google.com*'] })
 
 let scripts = []
-async function nav({ seed = SEED_DEFAULT, prefs = null, gis = GIS_FAIL, w = 1440, h = 900, scheme = 'dark', motion = 'no-preference', coarse = false, extra = '' } = {}) {
+async function nav({ seed = SEED_DEFAULT, prefs = null, gis = GIS_FAIL, w = 1440, h = 900, scheme = 'dark', motion = 'no-preference', coarse = false, extra = '', url = URL_ } = {}) {
   for (const s of scripts) await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: s })
   scripts = []
   const src = [
@@ -120,7 +120,7 @@ async function nav({ seed = SEED_DEFAULT, prefs = null, gis = GIS_FAIL, w = 1440
   const features = [{ name: 'prefers-color-scheme', value: scheme }, { name: 'prefers-reduced-motion', value: motion }]
   await send('Emulation.setEmulatedMedia', { features })
   loaded = false
-  await send('Page.navigate', { url: URL_ })
+  await send('Page.navigate', { url })
   for (let i = 0; i < 100 && !loaded; i++) await sleep(100)
   await sleep(900)
 }
@@ -501,6 +501,41 @@ if (want('foreground')) {
   // path shot.mjs already trusts) must leave the form alive too.
   r.resizeControl = await fire("window.dispatchEvent(new Event('resize'))")
   results.foreground = r
+}
+
+// ---------------- Post-rebase (B landed): demo mode at 390 ----------------
+// The pill must stay one line, the sheet's account row must read Demo and
+// offer Connect on the pill's own path, and the year view's scroll metrics
+// with A's strip above the grid are recorded (B saw yearFitsWithoutScroll: false).
+if (want('demo')) {
+  const r = {}
+  for (const scheme of ['light', 'dark']) {
+    await nav({ w: 390, h: 844, scheme, url: `${URL_}?demo` })
+    await sleep(500)
+    r[scheme] = await js(`(() => { const p = document.getElementById('demo-pill'); const hdr = document.querySelector('.hdr'); const pr = p ? p.getBoundingClientRect() : null
+      const fs = p ? parseFloat(getComputedStyle(p).fontSize) : 0
+      return { pill: p ? { h: Math.round(pr.height), w: Math.round(pr.width), oneLine: pr.height < 2 * fs * 1.3, right: Math.round(pr.right) } : null,
+        hdrOverflow: hdr.scrollWidth > hdr.clientWidth + .5, hdrScrollW: hdr.scrollWidth, innerWidth,
+        avatarRight: Math.round(document.getElementById('avatar')?.getBoundingClientRect().right ?? -1),
+        rangeText: document.querySelector('.hdr-range').textContent, rangeLines: document.querySelector('.hdr-range').getClientRects().length,
+        children: [...hdr.children].filter(c => !c.hidden && getComputedStyle(c).display !== 'none').map(c => (c.id || c.className) + ':' + Math.round(c.getBoundingClientRect().width)),
+        slot: [...document.querySelector('.hdr-avatar').children].map(c => c.id + ':' + Math.round(c.getBoundingClientRect().width)),
+        isDemo: window.bramwell.state?.isDemo?.() ?? null } })()`)
+    r[scheme].headerShot = await shot(`demo-390-${scheme}-header`)
+    await js('window.bramwell.chrome.openSheet()'); await sleep(400)
+    r[scheme].account = await js("(() => { const row = document.querySelector('#sheet-body .set-row'); return { text: row.querySelector('.set-lbl').textContent, buttons: [...row.querySelectorAll('button')].map(b => (b.id || b.className) + ':' + b.textContent) } })()")
+    r[scheme].sheetShot = await shot(`demo-390-${scheme}-sheet`)
+    r[scheme].connectHit = await hit('#sheet-connect')
+    if (r[scheme].connectHit === true) {
+      await js("document.getElementById('sheet-connect').click()"); await sleep(400)
+      r[scheme].afterConnect = await js("({ isDemo: window.bramwell.state?.isDemo?.() ?? null, sheetOpen: window.bramwell.chrome.isSheetOpen(), pill: document.getElementById('demo-pill') !== null, firstRunShown: !!document.getElementById('firstrun') && !document.getElementById('firstrun').hidden, toast: document.querySelector('.toast')?.textContent ?? null })")
+      await nav({ w: 390, h: 844, scheme, url: `${URL_}?demo` }); await sleep(500)
+    } else { await pressKey('Escape', 'Escape', 27); await sleep(200) }
+    await js("document.getElementById('btn-mode').click()"); await sleep(600)
+    r[scheme].year390 = await js("(() => { const yv = document.querySelector('.yearview'); return { docScrolls: document.scrollingElement.scrollHeight > innerHeight + .5, yearScrolls: yv.scrollHeight > yv.clientHeight + .5, yearScrollH: yv.scrollHeight, yearClientH: yv.clientHeight, stripH: Math.round(document.querySelector('.planstrip')?.getBoundingClientRect().height ?? 0), rows: document.querySelectorAll('.yrrow').length } })()")
+    r[scheme].yearShot = await shot(`demo-390-${scheme}-year`)
+  }
+  results.demo = r
 }
 
 results.exceptions = exceptions

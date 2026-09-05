@@ -416,17 +416,28 @@ function buildSheet(): HTMLElement {
   body.id = 'sheet-body'
 
   // --- account ---
-  const acct = row(auth.isSignedIn() ? 'Google Calendar · Connected' : 'Google Calendar · Not connected')
-  const out = el('button', 'set-btn', 'Sign out')
-  out.id = 'signout'
-  out.type = 'button'
-  out.addEventListener('click', () => {
-    // Mark BEFORE the resync: syncRef -> syncConnection reads leftDeliberately to
-    // land on first-run rather than stale (SPEC "Settings": "sign-out returns to
-    // first-run" — the cache is still warm the instant signOut() resolves).
-    void auth.signOut().finally(() => { markLeftRef?.(); closeSheet(); syncRef?.() })
-  })
-  acct.append(out)
+  // In demo the row says so and offers Connect — the pill's own path — rather
+  // than a Sign out with nothing to sign out of (B's finding, 2026-09-05).
+  const inDemo = state.isDemo()
+  const acct = row(inDemo ? 'Demo' : auth.isSignedIn() ? 'Google Calendar · Connected' : 'Google Calendar · Not connected')
+  if (inDemo) {
+    const go = el('button', 'set-btn', 'Connect')
+    go.id = 'sheet-connect'
+    go.type = 'button'
+    go.addEventListener('click', () => { closeSheet(); connectRef?.() })
+    acct.append(go)
+  } else {
+    const out = el('button', 'set-btn', 'Sign out')
+    out.id = 'signout'
+    out.type = 'button'
+    out.addEventListener('click', () => {
+      // Mark BEFORE the resync: syncRef -> syncConnection reads leftDeliberately to
+      // land on first-run rather than stale (SPEC "Settings": "sign-out returns to
+      // first-run" — the cache is still warm the instant signOut() resolves).
+      void auth.signOut().finally(() => { markLeftRef?.(); closeSheet(); syncRef?.() })
+    })
+    acct.append(out)
+  }
   body.append(acct)
 
   // --- snap ---
@@ -493,6 +504,11 @@ function buildSheet(): HTMLElement {
 /** Set by mount; the sheet's sign-out row needs to re-sync the connection. */
 let syncRef: (() => void) | null = null
 
+/** Set by mount; in demo the sheet's account row offers Connect on the SAME
+ *  path the demo pill takes (exit demo, then sign in) — mount's connect(),
+ *  reached the way syncRef is, so no new host hook. */
+let connectRef: (() => void) | null = null
+
 /** Set by mount; the sheet's sign-out row needs to mark the departure as
  *  deliberate BEFORE syncRef's resync runs (see `leftDeliberately` in mount). */
 let markLeftRef: (() => void) | null = null
@@ -538,6 +554,7 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
 
   hostRef = host
   syncRef = () => { api.syncConnection() }
+  connectRef = () => { connect() }
   markLeftRef = () => { leftDeliberately = true }
 
   let firstRun: HTMLElement | null = null

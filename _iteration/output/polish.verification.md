@@ -22,18 +22,20 @@ for the gate, not promoted upstream.
 
 ## Gate
 
-- `npm run selftest` — **64/64** (57 on entry; +2 mine, +5 A's after the rebase).
+- `npm run selftest` — **67/67** (57 on entry; +2 mine, +5 A's, +3 B's).
 - `npm run build` — green: `tsc --noEmit`, vite build, `sw.js: 8 precached paths`.
 - `grep -n 'transition\|animation' src/style.css` — **returns nothing** (exit 1).
   On entry it returned one line (a comment, "this view transitions a track
-  size"); after the rebase a second (A's "no transition here"). Both were
+  size"); after the rebase on A a second (A's "no transition here"). Both were
   prose; both reworded. See "Out of bounds" for the second.
-- Rebased on `origin/planning-layer` (5 commits, A landed). **`origin/demo` had
-  0 commits beyond the merge base at every fetch**, so B is not rebased on;
-  B is expected to contain A, and every file B owns (`state.ts` seed, the demo
-  button/pill, README/LICENSE) is untouched here except the two shared
-  `chrome.ts` regions listed under ticket 1, which are B's to merge past.
-- Pushed: `polish`, `--force-with-lease` (rebased). Not merged.
+- Rebased first on `origin/planning-layer` (A, 5 commits), then — once B had
+  pushed — on **`origin/demo`** (7 commits on top of A, A confirmed an
+  ancestor). Two conflicts in all, both adjacent-line unions in `main.ts`
+  `showYear()`/`openYear()` (A's `exitMode()` and `toast` host beside my
+  `lastView` write and `yrNote` append) and two import-line unions in
+  `selftest.ts` against B. Every `final-*` shot and number below is from the
+  tree on top of `origin/demo`.
+- Pushed: `polish`, `--force-with-lease -u` (rebased). Not merged.
 
 ## Tickets
 
@@ -209,6 +211,57 @@ case** (transient-UI rule). Shot: `final-foreground-form-after-refresh.png`
 `visibilityState` at `hidden` after `active`, so it was dropped as an
 unfaithful instrument (recorded so nobody retries it).
 
+## After B landed: three items from A's and B's verifications, in my surface
+
+**B1 — every field in the sheet at 16px under a coarse pointer (A's
+`.plan-bud`).** The coarse rule now covers containers, not classes:
+`.dp-form :is(input, textarea, select)` and `#sheet :is(input, textarea,
+select)` — so A's Budget number input, and anything a later row adds, is
+16px without a per-class entry, and `#sheet`'s id outranks A's own later
+`.plan-bud { font-size: 12px }` (a first attempt with `.plan-bud` in the list
+lost to exactly that; `input.plan-bud` fixed it; the container form replaced
+both). Probe (`coarse`): fine → label 13px, select 12px, hex 13.33px,
+`.plan-bud` 12px; coarse → **all 16px**, `.dp-*` fields 16px, 12 sheet rows
+(`.set-cat` + `.plan-row`) with 0 clipped at 390. Shots:
+`final-coarse-coarse-sheet.png` (with A's rows) vs `final-coarse-fine-sheet.png`.
+
+**B2 — the sheet's account row in demo.** `chrome.ts` `buildSheet`: when
+`state.isDemo()` the row reads **Demo** and offers **Connect**
+(`#sheet-connect`), which closes the sheet and calls mount's `connect()` —
+the same closure B's `#demo-pill` uses (exit demo → `host.onDemoExit()` →
+resync → `auth.signIn()`), reached through a module-level `connectRef` set
+by mount exactly as `syncRef`/`markLeftRef` are. No new host hook; B's pill
+and first-run button untouched. Probe (`demo`, `?demo` at 390, both
+schemes): row text `Demo`, buttons `[sheet-connect:Connect]`, the button hit
+by `elementFromPoint`; after the click `isDemo: false`, sheet closed, the
+pill gone, and the fake GIS's `popup_failed` toast — proof the sign-in path
+ran. Shots: `before-demo-390-light-sheet.png` ("Google Calendar · Not
+connected" + Sign out) → `final-demo-390-light-sheet.png` (Demo + Connect).
+
+**B3 — the "Demo · Connect" pill wrapped at 390.** `style.css`: `.set-pill {
+white-space: nowrap }`, and because a one-line pill plus B's avatar need
+144px in the slot, the phone header (`≤560px`) tightens to `gap: 6px`,
+`padding: 0 8px`, buttons `6px 6px`, and `.hdr-range` is `nowrap` so a short
+row would show as overflow rather than a split label — a first attempt with
+8px gaps kept the pill on one line but wrapped the range instead, which the
+shot caught and the width probe then explained. No colour, font or shadow.
+Probe (`demo`): pill 116×31, one line; header children 114 + 40 + 51 + 144
+plus 40 of gaps and padding = 389 of 390, `hdr.scrollWidth` 390, range on
+one line, avatar right edge 382. Shots: `before-demo-390-dark-header.png`
+(two-line pill) → `final-demo-390-dark-header.png`. Tight by design: any
+longer range label or pill text at 390 overflows, and both are B's/render's
+copy — recorded, not solved here.
+
+**B's `yearFitsWithoutScroll: false` at 390×844.** Measured in demo, both
+schemes: the **document does not scroll** (`scrollingElement.scrollHeight ≤
+innerHeight`); the year view scrolls **inside itself** — `scrollHeight` 1188
+against a 724px client (844 − 56 header − 64 FAB strip), 27 rows at 14
+columns, A's strip 40px of that. So the strip did not make the page scroll;
+the year at 390 was already taller than the viewport by roughly eleven rows
+before A (the before-run's `before-light-390-light-year.png` shows the same
+cut at August), which does not match the stage-03 note "scrolls about one
+row". Not retuned — A's grid. Shot: `final-demo-390-dark-year.png`.
+
 ## Rulings made here (for the gate to promote or reverse)
 1. Ticket 3: the note is `main.ts`'s, appended under the grid after mount;
    `state.monthsNotLoaded` is the query.
@@ -218,6 +271,9 @@ unfaithful instrument (recorded so nobody retries it).
 4. Ticket 10: the launch table is `state.resolveLaunchView`.
 5. Ticket 11: A's `.plan-bud` is a field and gets 16px.
 6. Tickets 5, 6, 8: verified, no change shipped.
+7. B2: the demo account row reads "Demo" with a Connect on the pill's path.
+8. B3: the phone header tightens (6px gaps, 8px padding, 6px button padding,
+   range `nowrap`) rather than the pill or the label changing copy or size.
 
 ## Upstream amendments I believe are needed (not made)
 - SPEC "State API": add `resolveLaunchView(p: Prefs): 'cal' | 'year'` and
@@ -234,8 +290,12 @@ unfaithful instrument (recorded so nobody retries it).
   now measured).
 - OPEN.md "Year view fetch on a signed-out cache": closed by ticket 3.
 - CONVENTIONS "Verification": PORT — a dev server that dies with the session
-  leaves its port to whichever vite starts next; 5173 answered 200 from
-  session B's tree. Derive the port after every restart, not once per session.
+  leaves its port to whichever vite starts next. Twice here: 5173 answered 200
+  from session B's tree after the first restart; later 5174 was answered by
+  A's tree (a probe read `window.bramwell.state` as undefined and every
+  coarse field as 12px — a stale tree, not a regression). Derive the port
+  after every restart, and check the served `main.ts` carries a marker of
+  the tree under test before trusting a run.
 
 ## Out of bounds, touched or not
 - **Touched:** one word in a comment inside A's `.plan*` block of `style.css`
@@ -249,4 +309,6 @@ unfaithful instrument (recorded so nobody retries it).
 ## Not tested
 - Any real device: iOS auto-zoom on the phone, the home indicator, a
   trackpad, a touch screen, the installed PWA.
-- `origin/demo` — not landed at the time of the final pass.
+- Demo mode on a device; the demo header at widths between 390 and 560 with a
+  longer range label (e.g. "Dec 2026 – Jan 2027") — the 389/390 fit above is
+  for "Aug – Sep 2026".

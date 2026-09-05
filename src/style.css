@@ -86,6 +86,15 @@ html, body {
    (SPEC "First-run and connection state"). A fixed width here clipped the
    Reconnect pill off-screen and made its centre unhittable. */
 .hdr-avatar { display: flex; align-items: center; min-width: 28px; height: 28px; }
+/* Phone: B's "Demo · Connect" pill plus the avatar need more than the 12px
+   gaps leave at 390, so the pill wrapped to two lines (B's finding,
+   2026-09-05). Tighter gaps and button padding buy the one line; no colour,
+   font or shadow changes. */
+@media (max-width: 560px) {
+  .hdr { gap: 6px; padding: 0 8px; }
+  .hdr button { padding: 6px 6px; }
+  .hdr-range { white-space: nowrap; }     /* the label never wraps; if the row is short, it shows as overflow, not a split label */
+}
 
 /* Dragging the scroller IS how you scroll it, and scroll.ts captures the
    pointer to do that — but nothing stopped the browser reading the same drag
@@ -403,6 +412,7 @@ html, body {
   font: inherit; font-size: 12px; font-weight: 620;
   color: var(--surface); background: var(--cat-err);
   border: 0; border-radius: 999px; padding: 5px 10px;
+  white-space: nowrap;                     /* "Demo · Connect" wrapped at 390 */
 }
 
 /* Reserved by #app's padding-bottom (below) so it can never sit on the last
@@ -485,11 +495,13 @@ html, body {
    views ran off the screen and the header title was cut at the left). 16px
    under a coarse pointer is the cure; `maximum-scale=1` in the viewport meta
    is not — Android honours it and kills pinch zoom (WCAG 1.4.4). Every
-   input, textarea and select the app renders is listed; desktop keeps 12px. */
+   input, textarea and select the app renders lives in the form or the sheet,
+   so both containers are covered as a whole — A's Budget input (`.plan-bud`,
+   rebased 2026-09-05) and anything a later row adds included; `#sheet`'s id
+   outranks any later per-class size. Desktop keeps 12px. */
 @media (pointer: coarse) {
-  .dp-form input, .dp-form textarea, .dp-form select,
-  .set-cat-lab, .set-cat-hex, .set-cat-cid,
-  input.plan-bud { font-size: 16px; }   /* A's Budget input (rebased 2026-09-05); `input.` outranks its own later 12px rule */
+  .dp-form :is(input, textarea, select),
+  #sheet :is(input, textarea, select) { font-size: 16px; }
 }
 
 /* ---------- keyboard focus ---------- */

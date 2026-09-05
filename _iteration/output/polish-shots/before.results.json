@@ -1,22 +1,68 @@
 {
-  "toast": {
+  "demo": {
+    "light": {
+      "pill": {
+        "h": 50,
+        "w": 95,
+        "oneLine": false,
+        "right": 352
+      },
+      "hdrOverflow": false,
+      "hdrScrollW": 390,
+      "innerWidth": 390,
+      "avatarRight": 378,
+      "rangeText": "Aug – Sep 2026",
+      "isDemo": true,
+      "headerShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-demo-390-light-header.png",
+      "account": {
+        "text": "Google Calendar · Not connected",
+        "buttons": [
+          "signout:Sign out"
+        ]
+      },
+      "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-demo-390-light-sheet.png",
+      "connectHit": "missing",
+      "year390": {
+        "docScrolls": false,
+        "yearScrolls": true,
+        "yearScrollH": 1188,
+        "yearClientH": 724,
+        "stripH": 40,
+        "rows": 27
+      },
+      "yearShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-demo-390-light-year.png"
+    },
     "dark": {
-      "toast": [
-        142,
-        786,
-        248,
-        820
-      ],
-      "fab": [
-        326,
-        780,
-        374,
-        828
-      ],
-      "overlapsFab": false,
-      "bottom": "24px",
-      "gapBelow": 24,
-      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-toast-390-dark.png"
+      "pill": {
+        "h": 50,
+        "w": 95,
+        "oneLine": false,
+        "right": 352
+      },
+      "hdrOverflow": false,
+      "hdrScrollW": 390,
+      "innerWidth": 390,
+      "avatarRight": 378,
+      "rangeText": "Aug – Sep 2026",
+      "isDemo": true,
+      "headerShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-demo-390-dark-header.png",
+      "account": {
+        "text": "Google Calendar · Not connected",
+        "buttons": [
+          "signout:Sign out"
+        ]
+      },
+      "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-demo-390-dark-sheet.png",
+      "connectHit": "missing",
+      "year390": {
+        "docScrolls": false,
+        "yearScrolls": true,
+        "yearScrollH": 1188,
+        "yearClientH": 724,
+        "stripH": 40,
+        "rows": 27
+      },
+      "yearShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-demo-390-dark-year.png"
     }
   },
   "exceptions": []
