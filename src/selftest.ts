@@ -3,14 +3,14 @@
 // gcal wire mapping and transport, auth token handling, and state's cache, lazy loading,
 // 401 retry and optimistic writes. Cases share module state, so each restores what it stubs
 // (fetch, localStorage, GIS), the anchor it pins, and any token it acquired.
-import type { DayNumber, EventDraft, StoredCategory, MoodId, CalendarEvent, EventSpan } from './types.ts'
+import type { DayNumber, EventDraft, StoredCategory, MoodId, CalendarEvent, EventSpan, StoredEvent } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
 import {
   today, weekOf, dayAt, _setAnchorForTest, _resetForTest, _flushForTest,
   prefs, savePrefs, monthState, eventsForMonth, spansForWeek,
   ensureMonthsFor, onCacheChange, _settleForTest, clearAuthGate,
   createEvent, updateEvent, deleteEvent,
-  DemoError, enableDemo, exitDemo, isDemo,
+  DemoError, enableDemo, exitDemo, isDemo, _demoSeedForTest,
 } from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, mintName, sanitize, themeCss } from './categories.ts'
 import { getToken, isSignedIn, signIn, signOut } from './auth.ts'
@@ -1778,6 +1778,73 @@ const cases: Case[] = [
       Object.defineProperty(globalThis, 'localStorage', { value: inner, configurable: true, writable: true })
       exitDemo(); await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor)
     }
+    return null
+  }],
+
+  ['demo: the seed is deterministic, spans 17 months, keeps the cache invariant, and exercises every render path', () => {
+    const savedAnchor = today()
+    try {
+      _resetForTest(); configure({})
+      const anchor = civilToDay(2026, 9, 5)   // a Saturday, so the week maths is exercised off-Monday
+      _setAnchorForTest(anchor)
+      const a = _demoSeedForTest(anchor, 1000), b = _demoSeedForTest(anchor, 1000)
+      if (JSON.stringify(a) !== JSON.stringify(b)) return 'two seeds for one anchor differ'
+      const keys = Object.keys(a).sort()
+      if (keys.length !== 17 || keys[0] !== '2026-01' || keys[16] !== '2027-05') return `months: ${keys.length} (${keys[0]}..${keys[keys.length - 1]})`
+      const lo = keys[0] ?? '', hi = keys[16] ?? ''
+      const all = new Map<string, StoredEvent>()
+      for (const [k, m] of Object.entries(a)) {
+        if (m.state !== 'ready') return `${k} is ${m.state}`
+        if (m.fetchedAt !== 1000) return `${k} fetchedAt ${m.fetchedAt}`
+        const [y, mo] = k.split('-').map(Number) as [number, number]
+        const first = civilToDay(y, mo, 1), last = addDays(civilToDay(y, mo + 1, 1), -1)
+        for (const e of m.events) {
+          if (!e.id.startsWith('demo:')) return `${e.id} lacks the demo: prefix`
+          if (e.end < e.start) return `${e.id} ends before it starts`
+          if (!e.allDay && (e.endMin <= e.startMin || e.startMin < 0 || e.endMin > 1439)) return `${e.id} has bad minutes`
+          if ('category' in e) return `${e.id} carries a resolved category in the stored shape`
+          // The cache invariant: stored in every month it touches (inside the window), and only those.
+          if (e.end < first || e.start > last) return `${e.id} stored in ${k} but does not touch it`
+          for (let d = e.start; d <= e.end; d = addDays(d, 1)) {
+            const mk = monthKey(d)
+            if (mk >= lo && mk <= hi && a[mk]?.events.some(x => x.id === e.id) !== true) return `${e.id} missing from ${mk}`
+          }
+          const prior = all.get(e.id)
+          if (prior !== undefined && JSON.stringify(prior) !== JSON.stringify(e)) return `${e.id} differs between months`
+          all.set(e.id, e)
+        }
+      }
+      const evs = [...all.values()]
+      // 1. the 21-day span: Monday of week +2 through Sunday of week +4, exactly three rows.
+      const long = evs.find(e => e.allDay && e.end - e.start === 20)
+      if (long === undefined) return 'no 21-day span'
+      if (long.start !== dayAt(asWeek(2), asOffset(0))) return `the long span starts on ${dayToCivil(long.start).m}/${dayToCivil(long.start).d}, not Monday of week +2`
+      // 2. weekly recurring timed chips carrying recurringEventId, on their weekday, across the window.
+      const chips = evs.filter(e => !e.allDay && e.recurringEventId !== undefined)
+      if (chips.length < 60) return `recurring timed chips: ${chips.length}`
+      if (!chips.every(e => offsetOf(e.start) === 1 || offsetOf(e.start) === 3)) return 'a recurring chip is off its weekday'
+      if (new Set(chips.map(e => e.recurringEventId)).size < 2) return 'fewer than two series'
+      // 3. monthly and quarterly financial all-days.
+      const rent = evs.filter(e => e.title === 'Rent' && e.allDay)
+      if (rent.length !== 17) return `Rent: ${rent.length}`
+      if (!rent.every(e => dayToCivil(e.start).d === 1 && e.end === e.start)) return 'Rent is not a one-day event on the 1st'
+      const tax = evs.filter(e => e.title === 'Quarterly taxes')
+      if (tax.length < 5) return `Quarterly taxes: ${tax.length}`
+      // 4. weekend spans.
+      if (!evs.some(e => e.allDay && offsetOf(e.start) === 5 && offsetOf(e.end) === 6 && e.end - e.start === 1)) return 'no Sat..Sun weekend span'
+      // 5. one day that overflows the year cell's 3 bars.
+      const overflow = addDays(anchor, 3)
+      const onOverflow = evs.filter(e => e.allDay && e.start <= overflow && e.end >= overflow)
+      if (onOverflow.length < 4) return `the overflow day carries ${onOverflow.length} all-day events`
+      // 6. every seed category, by colorId.
+      const colorIds = new Set(evs.map(e => e.colorId))
+      for (const c of ['9', '10', '5', '8']) if (!colorIds.has(c)) return `seed colorId ${c} unused`
+      // 7. enableDemo() installs exactly this seed for today().
+      enableDemo()
+      const installed = eventsForMonth('2026-09')
+      if (installed.length !== a['2026-09']?.events.length) return `enableDemo installed ${installed.length} events for 2026-09, seed has ${a['2026-09']?.events.length}`
+      if (!installed.some(e => e.category === 'work')) return 'installed events did not resolve a category'
+    } finally { exitDemo(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
 ]

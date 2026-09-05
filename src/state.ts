@@ -10,7 +10,7 @@ import type {
   DayNumber, WeekIndex, DayOffset, MonthKey, MonthLoadState, MonthEntry, CalendarEvent,
   EventDraft, EventSpan, EventCache, StoredEvent, PendingWrite, Prefs, WriteScope,
 } from './types.ts'
-import { asDay, asOffset, asWeek, addDays, civilToDay, monthKey, offsetOf } from './dates.ts'
+import { asDay, asOffset, asWeek, addDays, civilToDay, dayToCivil, monthKey, offsetOf } from './dates.ts'
 import { all as allCategories, categoryFor } from './categories.ts'
 import { getToken, invalidateToken } from './auth.ts'
 import {
@@ -507,6 +507,118 @@ export async function deleteEvent(id: string, scope: WriteScope): Promise<void> 
   }
 }
 
+// ---------- Demo seed (stage 06) ----------
+
+/** mulberry32: a 32-bit seeded generator, enough to lay a calendar out the same way on
+ *  every run. Uniform in [0, 1). */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const DEMO_SEED = 0x5EED
+/** ~17 months: this many each side of the anchor's month, plus the month itself. */
+const DEMO_MONTHS_EACH_WAY = 8
+
+const DEMO_TITLES: Record<'work' | 'personal' | 'other', readonly string[]> = {
+  work: ['Design review', '1:1 with Sam', 'Sprint planning', 'Client call', 'Roadmap sync', 'Interview loop', 'Ship review', 'Retro'],
+  personal: ['Dentist', 'Yoga', 'Dinner with Ana', 'Haircut', 'Football', 'Book club', 'Parents visit', 'Swim'],
+  other: ['Boiler service', 'Parcel pickup', 'Vet', 'Recycling day', 'Car MOT', 'Library books due', 'Bins out'],
+}
+
+/** SPEC "Demo mode": deterministic, anchored to the given day, every render path — a 21-day
+ *  span across three rows, weekly recurring timed chips with recurringEventId, monthly and
+ *  quarterly financial all-days, weekend spans, one day that overflows the year cell's three
+ *  bars, every seed category. Category names resolve to colorIds through the configured set,
+ *  so the seed never hard-codes a colorId. Pure: `fetchedAt` is a parameter so two calls for
+ *  one anchor are byte-identical. An event lives in every in-window month it touches — the
+ *  cache invariant spansForWeek's dedupe depends on. */
+function demoSeed(anchor: DayNumber, fetchedAt: number): Record<MonthKey, MonthEntry> {
+  const rnd = mulberry32(DEMO_SEED)
+  const int = (lo: number, hi: number): number => lo + Math.floor(rnd() * (hi - lo + 1))
+  const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rnd() * xs.length)] as T
+  const events: StoredEvent[] = []
+  const allDay = (id: string, title: string, cat: string, start: DayNumber, end: DayNumber): void => {
+    events.push({ id, title, allDay: true, colorId: colorIdFor(cat), start, end })
+  }
+  const timed = (id: string, title: string, cat: string, day: DayNumber, startMin: number, endMin: number, series?: string): void => {
+    const ev: StoredEvent = { id, title, allDay: false, colorId: colorIdFor(cat), start: day, end: day, startMin, endMin }
+    if (series !== undefined) ev.recurringEventId = series
+    events.push(ev)
+  }
+
+  // The window, as civil months around the anchor's.
+  const { y: ay, m: am } = dayToCivil(anchor)
+  const months: { y: number; m: number; key: MonthKey; first: DayNumber; last: DayNumber }[] = []
+  for (let i = -DEMO_MONTHS_EACH_WAY; i <= DEMO_MONTHS_EACH_WAY; i++) {
+    const first = civilToDay(ay, am + i, 1)   // Date.UTC normalises an out-of-range month
+    const { y, m } = dayToCivil(first)
+    months.push({ y, m, key: monthKey(first), first, last: addDays(civilToDay(y, m + 1, 1), -1) })
+  }
+  const windowFirst = months[0]?.first ?? anchor
+  const windowLast = months[months.length - 1]?.last ?? anchor
+  const monday = asDay(anchor - offsetOf(anchor))
+  const at = (week: number, offset: number): DayNumber => asDay(monday + week * 7 + offset)
+
+  // 1. A 21-day span, Monday of week +2 through Sunday of week +4: three full rows.
+  allDay('demo:offsite', 'Product offsite', 'work', at(2, 0), at(4, 6))
+  // 2. Two weekly series of timed chips, every Tuesday and Thursday in the window.
+  for (let d = windowFirst; d <= windowLast; d = addDays(d, 1)) {
+    const o = offsetOf(d)
+    if (o === 1) timed(`demo:sync:${d}`, 'Team sync', 'work', d, 9 * 60 + 15, 10 * 60, 'demo:sync')
+    if (o === 3) timed(`demo:run:${d}`, 'Run club', 'personal', d, 18 * 60 + 30, 19 * 60 + 30, 'demo:run')
+  }
+  // 3. Financial: Rent on the 1st of every month; Quarterly taxes on the 15th of Jan/Apr/Jul/Oct.
+  for (const mo of months) {
+    allDay(`demo:rent:${mo.key}`, 'Rent', 'financial', mo.first, mo.first)
+    if (mo.m % 3 === 1) {
+      const fifteenth = civilToDay(mo.y, mo.m, 15)
+      allDay(`demo:tax:${mo.key}`, 'Quarterly taxes', 'financial', fifteenth, fifteenth)
+    }
+  }
+  // 4. Weekend spans: a Sat..Sun next week, and a Fri..Mon three weeks back.
+  allDay('demo:cabin', 'Cabin weekend', 'personal', at(1, 5), at(1, 6))
+  allDay('demo:longweekend', 'Long weekend away', 'personal', at(-3, 4), at(-2, 0))
+  // 5. One day, three days out, that overflows the year cell's three bars.
+  const stackDay = addDays(anchor, 3)
+  const stack: [string, string][] = [['Dentist', 'personal'], ['Car service', 'other'], ['Parcel arrives', 'other'], ['Call Mum', 'personal'], ['Library books due', 'other']]
+  stack.forEach(([title, cat], i) => allDay(`demo:stack:${i}`, title, cat, stackDay, stackDay))
+  // 6. Filler, 6–10 per month, mostly timed, drawn from the generator so the layout is fixed.
+  for (const mo of months) {
+    const n = int(6, 10)
+    for (let j = 0; j < n; j++) {
+      const cat = pick(['work', 'work', 'personal', 'personal', 'other'] as const)
+      const title = pick(DEMO_TITLES[cat])
+      const day = addDays(mo.first, int(0, mo.last - mo.first))
+      const id = `demo:${mo.key}:${j}`
+      if (rnd() < 0.7) {
+        const startMin = int(8, 17) * 60 + pick([0, 30])
+        timed(id, title, cat, day, startMin, startMin + pick([30, 60, 90]))
+      } else {
+        const end = addDays(day, int(0, 2))
+        allDay(id, title, cat, day, end > windowLast ? windowLast : end)
+      }
+    }
+  }
+
+  // Bucket: every in-window month an event touches holds it (the cache invariant).
+  const out: Record<MonthKey, MonthEntry> = {}
+  for (const mo of months) out[mo.key] = { state: 'ready', events: [], fetchedAt }
+  for (const ev of events) {
+    for (const key of monthsSpanned(ev.start, ev.end)) out[key]?.events.push(ev)
+  }
+  return out
+}
+
+/** Test-only (extends stage-01 ruling 2). */
+export const _demoSeedForTest = demoSeed
+
 // ---------- Demo (stage 06) ----------
 
 /** SPEC "Demo mode": thrown by every write verb BEFORE the optimistic apply, so nothing
@@ -535,7 +647,7 @@ export function enableDemo(): void {
   inflight.clear()
   authGate = false
   prefsValue = {}
-  cache = { v: 1, months: {} }
+  cache = { v: 1, months: demoSeed(anchor, Date.now()) }
 }
 
 /** Drops every demo byte and re-reads storage. A no-op when not in demo. */
