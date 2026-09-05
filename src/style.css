@@ -335,7 +335,10 @@ html, body {
 
 /* ---------- toasts ---------- */
 #toasts {
-  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  /* Above the strip #app reserves for the FAB — safe area included — so a
+     toast never sits under the FAB (measured overlapping it at 390) or the
+     home indicator. One rule at every width, not a phone breakpoint. */
+  position: fixed; left: 50%; bottom: calc(var(--fab-inset) + 8px); transform: translateX(-50%);
   z-index: 30; /* the error surface of last resort: must outrank #firstrun (20), the scrim (14) and the sheet (15) */
   display: flex; flex-direction: column; gap: 6px; align-items: center;
   pointer-events: none;
