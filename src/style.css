@@ -489,7 +489,7 @@ html, body {
 @media (pointer: coarse) {
   .dp-form input, .dp-form textarea, .dp-form select,
   .set-cat-lab, .set-cat-hex, .set-cat-cid,
-  .plan-bud { font-size: 16px; }   /* the Budget number input A's row added (rebased 2026-09-05) */
+  input.plan-bud { font-size: 16px; }   /* A's Budget input (rebased 2026-09-05); `input.` outranks its own later 12px rule */
 }
 
 /* ---------- keyboard focus ---------- */
