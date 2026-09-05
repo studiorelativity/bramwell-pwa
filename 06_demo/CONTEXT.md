@@ -1,6 +1,6 @@
 # Stage 06 — Demo mode, README, open-source prep
 
-**Status: BLOCKED** until 05's gate is closed.
+**Status: BUILT 2026-09-05 (run early as iteration B on branch `demo`; 05's gate was not waited for).** Gate not run; see output/verification.md.
 
 ## Inputs
 - L3: `SPEC.md` — "Demo mode"; `DECISIONS.md` — demo rulings
