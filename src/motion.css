@@ -135,6 +135,15 @@
 }
 .toast { animation: toast-life var(--t-toast) var(--ease-out) both; }
 
+/* Press feedback (iteration C, 2026-09-05): the 1px press style.css declares
+   on :active eases in and out over --t-fast. Compositor-only. The selector
+   list mirrors style.css's; keep the two together. Under reduced motion the
+   press still lands (transform is not transitioned, so it snaps). */
+:is(.hdr button, .set-fab, .set-avatar, .set-pill, .set-btn, .set-segb, .set-cat-del,
+    .set-fr-connect, .set-fr-demo, .dp-chip, .dp-add, .dp-ev, .dp-actions button) {
+  transition: transform var(--t-fast) var(--ease-out);
+}
+
 /* Year-cell hover lift, mirroring the .day pattern above: compositor
    properties only (opacity + transform), never box-shadow, which repaints
    every frame. Only event days lift — an empty cell has nothing to inspect,

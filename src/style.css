@@ -506,6 +506,15 @@ html, body {
    :is() resolves it to (0,2,1) and a plain class pair would lose to it. */
 button.set-fr-connect:focus-visible, button.set-fab:focus-visible { outline-color: var(--surface); }
 
+/* ---------- press feedback ---------- */
+/* Every button family presses down 1px while held: compositor-only, and its
+   transition lives in motion.css. A disabled control does not press. The
+   list mirrors motion.css's; keep the two together. */
+:is(.hdr button, .set-fab, .set-avatar, .set-pill, .set-btn, .set-segb, .set-cat-del,
+    .set-fr-connect, .set-fr-demo, .dp-chip, .dp-add, .dp-ev, .dp-actions button):active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 /* ---------- year view ---------- */
 .yearview { flex: 1; overflow: auto; position: relative; }
 .yr { display: flex; flex-direction: column; gap: 2px; padding: 8px; }
