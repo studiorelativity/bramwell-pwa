@@ -1,0 +1,610 @@
+{
+  "firstrun": {
+    "390-light": {
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-firstrun-390-light.png",
+      "lines": [
+        "Scroll forever — no month boundaries and no paging.",
+        "Tap a day to open it in place. No drawer, no overlay.",
+        "Your own categories, colours and moods."
+      ],
+      "desc": "A perpetual calendar over your Google Calendar.",
+      "connectHit": true,
+      "cardInView": true
+    },
+    "390-dark": {
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-firstrun-390-dark.png",
+      "lines": [
+        "Scroll forever — no month boundaries and no paging.",
+        "Tap a day to open it in place. No drawer, no overlay.",
+        "Your own categories, colours and moods."
+      ],
+      "desc": "A perpetual calendar over your Google Calendar.",
+      "connectHit": true,
+      "cardInView": true
+    },
+    "1440-light": {
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-firstrun-1440-light.png",
+      "lines": [
+        "Scroll forever — no month boundaries and no paging.",
+        "Tap a day to open it in place. No drawer, no overlay.",
+        "Your own categories, colours and moods."
+      ],
+      "desc": "A perpetual calendar over your Google Calendar.",
+      "connectHit": true,
+      "cardInView": true
+    },
+    "1440-dark": {
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-firstrun-1440-dark.png",
+      "lines": [
+        "Scroll forever — no month boundaries and no paging.",
+        "Tap a day to open it in place. No drawer, no overlay.",
+        "Your own categories, colours and moods."
+      ],
+      "desc": "A perpetual calendar over your Google Calendar.",
+      "connectHit": true,
+      "cardInView": true
+    }
+  },
+  "switch": {
+    "no-preference": {
+      "early": {
+        "op": "1",
+        "tr": "none",
+        "ms": 16,
+        "hidden": false,
+        "hasEnter": false,
+        "dataIn": false
+      },
+      "transitionProperty": "all",
+      "transitionDuration": "0s",
+      "late": {
+        "op": "1",
+        "tr": "none",
+        "hidden": false
+      },
+      "back": {
+        "op": "1",
+        "hidden": false,
+        "yearHidden": true
+      },
+      "backLate": {
+        "op": "1",
+        "hidden": false
+      },
+      "midShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-switch-no-preference-mid.png",
+      "endShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-switch-no-preference-end.png"
+    },
+    "reduce": {
+      "early": {
+        "op": "1",
+        "tr": "none",
+        "ms": 11,
+        "hidden": false,
+        "hasEnter": false,
+        "dataIn": false
+      },
+      "transitionProperty": "opacity",
+      "transitionDuration": "0.08s",
+      "late": {
+        "op": "1",
+        "tr": "none",
+        "hidden": false
+      },
+      "back": {
+        "op": "1",
+        "hidden": false,
+        "yearHidden": true
+      },
+      "backLate": {
+        "op": "1",
+        "hidden": false
+      },
+      "midShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-switch-reduce-mid.png",
+      "endShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-switch-reduce-end.png"
+    }
+  },
+  "yrnote": {
+    "390-light": {
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-yrnote-390-light.png",
+      "note": null,
+      "tokens": {
+        "dim": "#6B6B6B",
+        "today": "#0D9488",
+        "past": "rgba(180, 35, 24, .5)"
+      }
+    },
+    "390-dark": {
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-yrnote-390-dark.png",
+      "note": null,
+      "tokens": {
+        "dim": "#9A978F",
+        "today": "#2DD4BF",
+        "past": "rgba(248, 113, 113, .55)"
+      }
+    },
+    "1440-light": {
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-yrnote-1440-light.png",
+      "note": null,
+      "tokens": {
+        "dim": "#6B6B6B",
+        "today": "#0D9488",
+        "past": "rgba(180, 35, 24, .5)"
+      }
+    },
+    "1440-dark": {
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-yrnote-1440-dark.png",
+      "note": null,
+      "tokens": {
+        "dim": "#9A978F",
+        "today": "#2DD4BF",
+        "past": "rgba(248, 113, 113, .55)"
+      }
+    },
+    "whileLoading": {
+      "present": false,
+      "text": null
+    },
+    "whenLoaded": {
+      "present": false,
+      "text": null,
+      "fetched": 12
+    }
+  },
+  "focus": {
+    "firstrun": [
+      {
+        "tag": "BUTTON",
+        "id": "btn-mode",
+        "cls": "",
+        "text": "Year",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "btn-today",
+        "cls": "",
+        "text": "Today",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "fr-connect",
+        "cls": "set-fr-connect",
+        "text": "Connect Google Calendar",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      },
+      {
+        "tag": "A",
+        "id": "",
+        "cls": "set-fr-support",
+        "text": "Something wrong? Get in ",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=1px",
+        "boxShadow": "none"
+      }
+    ],
+    "header": [
+      {
+        "tag": "BUTTON",
+        "id": "btn-mode",
+        "cls": "",
+        "text": "Year",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "btn-today",
+        "cls": "",
+        "text": "Today",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "reconnect",
+        "cls": "set-pill",
+        "text": "Reconnect",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      }
+    ],
+    "sheet": [
+      {
+        "tag": "BUTTON",
+        "id": "signout",
+        "cls": "set-btn",
+        "text": "Sign out",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "cls": "set-segb",
+        "text": "15",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "cls": "set-segb",
+        "text": "30",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      },
+      {
+        "tag": "INPUT",
+        "id": "",
+        "cls": "set-cat-hex",
+        "text": "#3056d3",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      }
+    ],
+    "form": [
+      {
+        "tag": "INPUT",
+        "id": "",
+        "cls": "dp-title",
+        "text": "",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      },
+      {
+        "tag": "BUTTON",
+        "id": "",
+        "cls": "dp-chip",
+        "text": "Work",
+        "focusVisible": true,
+        "outline": "auto 1px rgb(153, 200, 255) off=0px",
+        "boxShadow": "none"
+      }
+    ],
+    "firstrunShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-focus-firstrun-connect.png",
+    "headerShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-focus-header.png",
+    "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-focus-sheet.png",
+    "sheetCatShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-focus-sheet-cat.png",
+    "formShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-focus-form.png"
+  },
+  "sheet11": {
+    "light": {
+      "top": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-sheet11-390-light-top.png",
+      "bottom": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-sheet11-390-light-bottom.png",
+      "rows": 11,
+      "clipped": 0,
+      "overflowX": 0,
+      "sheetScrolls": true,
+      "sheetH": 692.078125,
+      "innerH": 844,
+      "docScrolls": false,
+      "removeInView": null,
+      "removeHit": null,
+      "rowHeights": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ]
+    },
+    "dark": {
+      "top": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-sheet11-390-dark-top.png",
+      "bottom": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-sheet11-390-dark-bottom.png",
+      "rows": 11,
+      "clipped": 0,
+      "overflowX": 0,
+      "sheetScrolls": true,
+      "sheetH": 692.078125,
+      "innerH": 844,
+      "docScrolls": false,
+      "removeInView": null,
+      "removeHit": null,
+      "rowHeights": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44
+      ]
+    }
+  },
+  "light": {
+    "390-light": {
+      "month": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-390-light-month.png",
+      "year": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-390-light-year.png",
+      "sheet": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-390-light-sheet.png",
+      "form": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-390-light-form.png"
+    },
+    "390-dark": {
+      "month": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-390-dark-month.png",
+      "year": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-390-dark-year.png",
+      "sheet": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-390-dark-sheet.png",
+      "form": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-390-dark-form.png"
+    },
+    "1440-light": {
+      "month": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1440-light-month.png",
+      "year": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1440-light-year.png",
+      "sheet": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1440-light-sheet.png",
+      "form": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1440-light-form.png"
+    },
+    "1440-dark": {
+      "month": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1440-dark-month.png",
+      "year": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1440-dark-year.png",
+      "sheet": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1440-dark-sheet.png",
+      "form": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1440-dark-form.png"
+    },
+    "1920-light": {
+      "month": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1920-light-month.png",
+      "year": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1920-light-year.png",
+      "sheet": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1920-light-sheet.png",
+      "form": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1920-light-form.png"
+    },
+    "1920-dark": {
+      "month": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1920-dark-month.png",
+      "year": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1920-dark-year.png",
+      "sheet": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1920-dark-sheet.png",
+      "form": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-light-1920-dark-form.png"
+    }
+  },
+  "toast": {},
+  "hdrpointer": {
+    "mouseYear": {
+      "log": [
+        "btn-mode:pointerdown:mouse",
+        "btn-mode:mousedown:",
+        "btn-mode:pointerup:mouse",
+        "btn-mode:mouseup:",
+        "btn-mode:click:mouse"
+      ],
+      "inYear": true,
+      "under": [
+        "BUTTON#btn-mode.",
+        "DIV.hdr",
+        "DIV#app.",
+        "BODY."
+      ]
+    },
+    "mouseToday": {
+      "log": [
+        "btn-today:pointerdown:mouse",
+        "btn-today:mousedown:",
+        "btn-today:pointerup:mouse",
+        "btn-today:mouseup:",
+        "btn-today:click:mouse"
+      ],
+      "range": "2026"
+    },
+    "touchYear": {
+      "log": [
+        "btn-mode:pointerdown:touch",
+        "btn-mode:touchstart:",
+        "btn-mode:pointerup:touch",
+        "btn-mode:touchend:",
+        "btn-mode:mousedown:",
+        "btn-mode:mouseup:",
+        "btn-mode:click:touch"
+      ],
+      "inYear": true
+    },
+    "touchToday": {
+      "log": [
+        "btn-today:pointerdown:touch",
+        "btn-today:touchstart:",
+        "btn-today:pointerup:touch",
+        "btn-today:touchend:",
+        "btn-today:mousedown:",
+        "btn-today:mouseup:",
+        "btn-today:click:touch"
+      ],
+      "range": "2026"
+    }
+  },
+  "active": {
+    "no-preference": {
+      "held": {
+        "active": true,
+        "transform": "none",
+        "transitionProperty": "all",
+        "transitionDuration": "0s"
+      },
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-active-today-no-preference.png",
+      "released": "none",
+      "fabDisabledHeld": {
+        "disabled": true,
+        "transform": "none"
+      }
+    },
+    "reduce": {
+      "held": {
+        "active": true,
+        "transform": "none",
+        "transitionProperty": "opacity",
+        "transitionDuration": "0.08s"
+      },
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-active-today-reduce.png",
+      "released": "none",
+      "fabDisabledHeld": {
+        "disabled": true,
+        "transform": "none"
+      }
+    }
+  },
+  "lastview": {
+    "launch1": {
+      "inYear": false,
+      "prefs": "{\"lastDockedDay\":20696}"
+    },
+    "afterSwitch": {
+      "inYear": true,
+      "prefs": "{\"lastDockedDay\":20696}"
+    },
+    "reload1": {
+      "inYear": false,
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-lastview-reload-year.png"
+    },
+    "segment": 2,
+    "segmentLabels": [
+      "Month:true",
+      "Year:false"
+    ],
+    "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-lastview-sheet.png",
+    "afterPickMonth": "{\"lastDockedDay\":20696,\"defaultView\":\"cal\"}",
+    "reload2": {
+      "inYear": false,
+      "shot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-lastview-reload-month.png"
+    }
+  },
+  "coarse": {
+    "fine": {
+      "matches": {
+        "coarse": false,
+        "hoverNone": false
+      },
+      "form": {
+        ".dp-title": "12px",
+        ".dp-allday": "12px",
+        ".dp-start": "12px",
+        ".dp-startt": "12px",
+        ".dp-repeat": "12px",
+        ".dp-notes": "12px"
+      },
+      "formFits": {
+        "right": 381,
+        "innerWidth": 390,
+        "docScrollW": 390
+      },
+      "formShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-coarse-fine-form.png",
+      "sheet": {
+        ".set-cat-lab": "13px",
+        ".set-cat-cid": "12px",
+        ".set-cat-hex": "13.3333px"
+      },
+      "sheetFits": {
+        "clipped": 0,
+        "rows": 4
+      },
+      "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-coarse-fine-sheet.png",
+      "yearFits": {
+        "docScrollW": 390,
+        "innerWidth": 390
+      }
+    },
+    "coarse": {
+      "matches": {
+        "coarse": true,
+        "hoverNone": true
+      },
+      "form": {
+        ".dp-title": "12px",
+        ".dp-allday": "12px",
+        ".dp-start": "12px",
+        ".dp-startt": "12px",
+        ".dp-repeat": "12px",
+        ".dp-notes": "12px"
+      },
+      "formFits": {
+        "right": 381,
+        "innerWidth": 390,
+        "docScrollW": 390
+      },
+      "formShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-coarse-coarse-form.png",
+      "sheet": {
+        ".set-cat-lab": "13px",
+        ".set-cat-cid": "12px",
+        ".set-cat-hex": "13.3333px"
+      },
+      "sheetFits": {
+        "clipped": 0,
+        "rows": 4
+      },
+      "sheetShot": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-coarse-coarse-sheet.png",
+      "yearFits": {
+        "docScrollW": 390,
+        "innerWidth": 390
+      }
+    }
+  },
+  "foreground": {
+    "bootFetches": 6,
+    "bootMonths": [
+      "2026-07",
+      "2026-10",
+      "2026-11",
+      "2026-12",
+      "2027-01",
+      "2026-06"
+    ],
+    "formOpen": true,
+    "visibleFresh": {
+      "fetches": 0,
+      "months": [],
+      "formAlive": true,
+      "titleKept": "typed-while-open",
+      "sheetOpen": false
+    },
+    "focusFresh": {
+      "fetches": 0,
+      "months": [],
+      "formAlive": true,
+      "titleKept": "typed-while-open",
+      "sheetOpen": false
+    },
+    "onlineFresh": {
+      "fetches": 0,
+      "months": [],
+      "formAlive": true,
+      "titleKept": "typed-while-open",
+      "sheetOpen": false
+    },
+    "visibleStale": {
+      "fetches": 0,
+      "months": [],
+      "formAlive": true,
+      "titleKept": "typed-while-open",
+      "sheetOpen": false
+    },
+    "formShotAfter": "/Users/admin/_git/repos/bramwell-C/_iteration/output/polish-shots/before-foreground-form-after-refresh.png",
+    "hiddenStale": {
+      "fetches": 0,
+      "months": [],
+      "formAlive": true,
+      "titleKept": "typed-while-open",
+      "sheetOpen": false
+    },
+    "hiddenState": "hidden",
+    "afterActive": {
+      "fetches": 6,
+      "state": "hidden",
+      "formAlive": false
+    }
+  },
+  "exceptions": []
+}
