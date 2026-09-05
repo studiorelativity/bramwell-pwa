@@ -3,7 +3,9 @@
 // month reads (eventsForMonth / spansForWeek), lazy month loading with staleness and
 // coalescing, the 401 re-auth retry, and optimistic create/update/delete with rollback.
 // DOM-free: it notifies through onCacheChange and rethrows rather than toasting.
-// Only enableDemo() is still unimplemented (stage 06).
+// STAGE 06 adds demo: a module flag under which the cache is a deterministic in-memory
+// seed, storage is neither read nor written, no path reaches gcal.ts, and every write
+// verb throws DemoError before its optimistic apply.
 import type {
   DayNumber, WeekIndex, DayOffset, MonthKey, MonthLoadState, MonthEntry, CalendarEvent,
   EventDraft, EventSpan, EventCache, StoredEvent, PendingWrite, Prefs, WriteScope,
@@ -61,6 +63,9 @@ let prefsValue: Prefs = {}
 let loaded = false
 /** Optimistic overlay, keyed by event id (tempId for creates). Never serialized. */
 const pending = new Map<string, PendingWrite>()
+/** Stage 06. Set by enableDemo(); read by every storage writer, the fetch path and the
+ *  write verbs. See the Demo section at the bottom. */
+let demo = false
 
 /** Inside a function, never at module scope: node has none, and a locked-down browser throws. */
 function storage(): Storage | null {
@@ -108,6 +113,7 @@ function ensureLoaded(): void {
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 function writeCacheNow(): void {
+  if (demo) return   // guarded at the writer, not only at saveCache: _flushForTest reaches here too
   const s = storage()
   if (s === null) return
   const months: Record<MonthKey, MonthEntry> = {}
@@ -121,7 +127,7 @@ function writeCacheNow(): void {
 
 /** Debounced: an optimistic write must not re-serialize the whole blob synchronously. */
 function saveCache(): void {
-  if (saveTimer !== null) return
+  if (demo || saveTimer !== null) return
   saveTimer = setTimeout(() => {
     saveTimer = null
     writeCacheNow()
@@ -138,6 +144,7 @@ export function prefs(): Prefs {
 export function savePrefs(p: Prefs): void {
   ensureLoaded()
   prefsValue = { ...p }
+  if (demo) return   // SPEC "Demo mode": customization works in memory and persists nothing
   const s = storage()
   if (s === null) return
   try {
@@ -221,6 +228,7 @@ export function _resetForTest(): void {
   loaded = false
   inflight.clear()
   authGate = false
+  demo = false
 }
 
 export function _flushForTest(): void {
@@ -264,6 +272,9 @@ export function clearAuthGate(): void {
 
 /** The one place the 401 rule lives. gcal.ts owns the transport retry; this owns identity. */
 async function withToken<T>(fn: (t: string) => Promise<T>): Promise<T> {
+  // Belt and braces at the identity boundary: every path into gcal.ts passes here, so no
+  // future caller can reach the wire in demo even if it forgets its own guard.
+  if (demo) throw new DemoError()
   let t: string
   try {
     t = await getToken()
@@ -342,6 +353,9 @@ function startFetch(key: MonthKey): Promise<void> {
  *  recurses — once the awaited promise settles its `finally` has cleared `inflight`, so it
  *  either starts a fetch or joins one that was itself issued after the write. */
 function fetchMonth(key: MonthKey, force = false): Promise<void> {
+  // Inert in demo (SPEC): unseeded months stay `absent`, seeded ones never go stale.
+  // A forced post-write refetch cannot arise — the write verbs throw first.
+  if (demo) return Promise.resolve()
   const running = inflight.get(key)
   if (running !== undefined) {
     if (!force) return running
@@ -406,6 +420,7 @@ function assertOnline(): void {
 
 export async function createEvent(draft: EventDraft): Promise<CalendarEvent> {
   ensureLoaded()
+  if (demo) throw new DemoError()   // BEFORE the optimistic apply (DECISIONS); offline fires after it
   const colorId = colorIdFor(draft.category)
   const tempId = `tmp:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
   const event = build(tempId, draft, colorId, undefined)
@@ -427,6 +442,7 @@ export async function createEvent(draft: EventDraft): Promise<CalendarEvent> {
 
 export async function updateEvent(id: string, draft: EventDraft, scope: WriteScope): Promise<CalendarEvent> {
   ensureLoaded()
+  if (demo) throw new DemoError()   // before the lookup too: the refusal is unconditional
   const prior = findEvent(id)
   if (prior === null) throw new Error(`unknown event ${id}`)
   const colorId = colorIdFor(draft.category)
@@ -468,6 +484,7 @@ export async function updateEvent(id: string, draft: EventDraft, scope: WriteSco
 
 export async function deleteEvent(id: string, scope: WriteScope): Promise<void> {
   ensureLoaded()
+  if (demo) throw new DemoError()
   const prior = findEvent(id)
   if (prior === null) throw new Error(`unknown event ${id}`)
   const touched = monthsSpanned(prior.start, prior.end)
@@ -490,4 +507,43 @@ export async function deleteEvent(id: string, scope: WriteScope): Promise<void> 
   }
 }
 
-export function enableDemo(): void { throw new Error('STAGE 06: not implemented') }
+// ---------- Demo (stage 06) ----------
+
+/** SPEC "Demo mode": thrown by every write verb BEFORE the optimistic apply, so nothing
+ *  is ever notified, overlaid or rolled back. The caller toasts the message verbatim. */
+export class DemoError extends Error {
+  constructor() {
+    super('Demo — connect your Google Calendar to save.')
+    this.name = 'DemoError'
+  }
+}
+
+export function isDemo(): boolean {
+  return demo
+}
+
+/** Swaps the in-memory cache and prefs for the demo seed. Storage is neither read nor
+ *  written again until exitDemo(); the flag lives in memory only, so a reload lands
+ *  wherever storage says (SPEC: demo never survives a reload). main.ts re-runs
+ *  configure() from prefs() afterwards, which is how the demo category set reaches
+ *  categories.ts without state.ts becoming a second writer of it. */
+export function enableDemo(): void {
+  if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null }
+  demo = true
+  loaded = true          // never read storage under the flag
+  pending.clear()
+  inflight.clear()
+  authGate = false
+  prefsValue = {}
+  cache = { v: 1, months: {} }
+}
+
+/** Drops every demo byte and re-reads storage. A no-op when not in demo. */
+export function exitDemo(): void {
+  if (!demo) return
+  demo = false
+  pending.clear()
+  inflight.clear()
+  loaded = false
+  ensureLoaded()
+}

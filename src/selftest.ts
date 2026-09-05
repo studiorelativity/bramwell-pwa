@@ -10,6 +10,7 @@ import {
   prefs, savePrefs, monthState, eventsForMonth, spansForWeek,
   ensureMonthsFor, onCacheChange, _settleForTest, clearAuthGate,
   createEvent, updateEvent, deleteEvent,
+  DemoError, enableDemo, exitDemo, isDemo,
 } from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, mintName, sanitize, themeCss } from './categories.ts'
 import { getToken, isSignedIn, signIn, signOut } from './auth.ts'
@@ -1677,6 +1678,106 @@ const cases: Case[] = [
       if (f.calls.length === beforeCalls) return 'the gate never cleared: no wire request for February after a successful write'
       if (monthState('2026-02') === 'error') return 'February is still `error` after the gate should have cleared'
     } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
+    return null
+  }],
+
+  // ---------- Stage 06: demo ----------
+
+  ['demo: writes throw DemoError BEFORE the optimistic apply; offline errors fire AFTER it', async () => {
+    const savedAnchor = today()
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    const f = stubFetch([{ status: 500 }])
+    const navDesc = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+    try {
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      const draft: EventDraft = { title: 'Nope', category: 'work', allDay: true, start: civilToDay(2026, 2, 20), end: civilToDay(2026, 2, 20), repeat: 'none' }
+      // Demo: DECISIONS "DemoError before the optimistic apply" — no notification at all,
+      // no overlay at any moment, nothing on the wire.
+      enableDemo()
+      const seen: string[][] = []
+      const off = onCacheChange(k => { seen.push(k) })
+      try { await createEvent(draft); return 'a demo create resolved' } catch (e) {
+        if (!(e instanceof DemoError)) return `wrong error: ${(e as Error).message}`
+        if (e.message !== 'Demo — connect your Google Calendar to save.') return `message: ${e.message}`
+      }
+      off()
+      if (seen.length !== 0) return `demo create notified ${seen.length} time(s); the apply ran`
+      if (eventsForMonth('2026-02').some(e => e.title === 'Nope')) return 'demo create left an overlay'
+      if (f.calls.length !== 0) return 'demo create reached the wire'
+      // update/delete on an id the cache lacks: demo must refuse BEFORE the lookup, or the
+      // "unknown event" path would fire first and the ordering claim would be untested.
+      try { await updateEvent('demo:absent', draft, 'instance'); return 'a demo update resolved' } catch (e) {
+        if (!(e instanceof DemoError)) return `update: wrong error: ${(e as Error).message}`
+      }
+      try { await deleteEvent('demo:absent', 'instance'); return 'a demo delete resolved' } catch (e) {
+        if (!(e instanceof DemoError)) return `delete: wrong error: ${(e as Error).message}`
+      }
+      exitDemo()
+      // Offline: the apply runs (one notify with the overlay visible), then the rollback
+      // (a second notify with it gone) — "offline errors fire after it, to prove rollback".
+      Object.defineProperty(globalThis, 'navigator', { value: { onLine: false }, configurable: true, writable: true })
+      const seenOff: number[] = []
+      const off2 = onCacheChange(() => { seenOff.push(eventsForMonth('2026-02').filter(e => e.title === 'Nope').length) })
+      try { await createEvent(draft); return 'an offline create resolved' } catch (e) {
+        if (e instanceof DemoError) return 'offline threw DemoError'
+        if (!/Offline/.test((e as Error).message)) return `wrong offline error: ${(e as Error).message}`
+      }
+      off2()
+      if (seenOff.length !== 2) return `offline notified ${seenOff.length} time(s), expected apply + rollback`
+      if (seenOff[0] !== 1 || seenOff[1] !== 0) return `offline overlay sequence: ${seenOff.join(',')}`
+    } finally {
+      if (navDesc !== undefined) Object.defineProperty(globalThis, 'navigator', navDesc)
+      else Reflect.deleteProperty(globalThis as object, 'navigator')
+      exitDemo(); await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor)
+    }
+    return null
+  }],
+
+  ['demo: a whole demo session writes localStorage zero times and reaches the wire zero times', async () => {
+    const savedAnchor = today()
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    const f = stubFetch([{ body: { items: [] } }])
+    const inner = globalThis.localStorage
+    let writes = 0
+    const counting = {
+      getItem: (k: string) => inner.getItem(k),
+      setItem: (k: string, v: string) => { writes++; inner.setItem(k, v) },
+      removeItem: (k: string) => { writes++; inner.removeItem(k) },
+      clear: () => { writes++; inner.clear() },
+      key: (i: number) => inner.key(i),
+      get length() { return inner.length },
+    }
+    // why: the counting shim implements the Storage surface state.ts uses, not its index signature
+    Object.defineProperty(globalThis, 'localStorage', { value: counting as unknown as Storage, configurable: true, writable: true })
+    try {
+      _resetForTest(); configure({}); _setAnchorForTest(civilToDay(2026, 2, 11))
+      enableDemo()
+      if (!isDemo()) return 'isDemo() false after enableDemo()'
+      // Range moves, well outside anything seeded: inert, and unseeded months stay absent.
+      ensureMonthsFor([asWeek(-400), asWeek(0), asWeek(400)])
+      await _settleForTest()
+      if (monthState('2018-06') !== 'absent') return `an unseeded month is ${monthState('2018-06')}, not absent`
+      // Customisation and the dock write both go through savePrefs; memory only.
+      savePrefs({ ...prefs(), mood: 'dusk', lastDockedDay: civilToDay(2026, 3, 2) })
+      if (prefs().mood !== 'dusk') return 'demo prefs did not update in memory'
+      const d: EventDraft = { title: 'x', category: 'work', allDay: true, start: civilToDay(2026, 2, 20), end: civilToDay(2026, 2, 20), repeat: 'none' }
+      const first = eventsForMonth(monthKey(today()))[0]?.id ?? 'none'
+      for (const run of [
+        () => createEvent(d),
+        () => updateEvent(first, d, 'instance'),
+        () => deleteEvent(first, 'instance'),
+      ]) { try { await run() } catch (e) { if (!(e instanceof DemoError)) return `wrong error: ${(e as Error).message}` } }
+      _flushForTest()   // the debounced cache writer, forced: must still write nothing
+      if (writes !== 0) return `${writes} localStorage write(s) during demo`
+      if (f.calls.length !== 0) return `${f.calls.length} wire call(s) during demo`
+      exitDemo()
+      if (isDemo()) return 'isDemo() true after exitDemo()'
+      if (prefs().mood !== undefined) return 'exitDemo kept the demo prefs'
+      if (writes !== 0) return `${writes} localStorage write(s) on exit`
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { value: inner, configurable: true, writable: true })
+      exitDemo(); await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor)
+    }
     return null
   }],
 ]
