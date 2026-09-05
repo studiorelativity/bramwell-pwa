@@ -815,3 +815,16 @@ drafted it; the human chose to ship first and edit later.
   erased; a budget is an allowance, not a rule. The count uses only the days
   the run newly adds, so a repaint over an existing run is silent. Probed
   both ways (budget 2 over three days warns "5 of 2"; budget 10 is silent).
+- **The landing page replaces the splash, and covers every signed-out state
+  (2026-09-05, evening).** The human: the first screen should be a landing
+  page, and nobody who has not signed in should see the calendar. Chosen:
+  cover always, accepting that an offline open shows the landing until the
+  token survives a reload. Rejected: cover only when online — a stranger
+  flips airplane mode and sees everything, so the privacy gain is cosmetic.
+  Designed from SPEC "Visual direction — Night Depth", not from a DESIGN.md:
+  the earlier ruling stands (one source of truth), and the page reuses the
+  grid's own tokens down to a mini year drawn as tiles and runs. The
+  harness keeps the old read-only state through a dev-only `uncover()`
+  seam; production cannot uncover. Privacy and About are static pages in
+  `public/`, linked from the landing footer, written to Google's
+  verification requirements (SPEC "MANUAL SETUP — Publishing the OAuth app").

@@ -502,6 +502,21 @@ Ported behaviour (content contract unchanged from the drawer):
 - Cached months but stale auth: calendar renders read-only from cache
   with a reconnect pill in the header (after a 2.5s grace so quiet renewal
   does not cry wolf). The first-run screen never covers a warm cache.
+  **Superseded 2026-09-05 — the landing page.** Not connected and not in
+  demo means the landing page, for a cold visitor and a returning one
+  alike; the calendar is never painted for anyone who has not signed in
+  (the human: "maybe people don't want people seeing the calendar"). The
+  first-run screen IS the landing page: mark and wordmark, a headline, the
+  pitch, the primary action ("Connect Google Calendar" cold, "Go" over a
+  warm cache — one word, because a returning visitor has a calendar
+  waiting), "Try the demo", the privacy line, a mini year drawn from the
+  grid's own tokens, three points, and a footer with About, Privacy and
+  support. Night Depth only. The quiet renewal runs behind the landing;
+  success replaces it with the calendar. Consequence, accepted: an offline
+  open with a warm cache shows the landing, not the calendar, until the
+  token survives a reload (OPEN.md "One Reconnect tap per phone visit").
+  The read-only-behind-a-pill state survives only for the headless harness,
+  through the dev-only `uncover()` seam, which production builds strip.
 - Signed in: a generic avatar with a connection dot bound to auth state
   (no profile scope — `calendar.events` carries no name). Avatar opens
   Settings.
@@ -1156,6 +1171,25 @@ Habits and journal: see `HABITS.md` and `JOURNAL.md`.
 ---
 
 ## MANUAL SETUP (human-only)
+
+### Publishing the OAuth app (2026-09-05)
+Google's verification for a sensitive scope (`calendar.events`) wants, in
+Cloud Console → Google Auth Platform (OAuth consent screen):
+- **Branding:** app name "Bramwell", user support email, a 120×120 logo
+  (`public/icon-512.png` scaled), **app homepage** `https://bramwell.no.fail`,
+  **privacy policy** `https://bramwell.no.fail/privacy.html`, terms optional,
+  **authorized domain** `no.fail` — which must be verified for the same
+  Google account in Search Console first — and a developer contact email.
+- **Scopes:** `calendar.events` only, with a one-paragraph justification
+  (the app reads the months you view and writes the events you paint or
+  save; nothing else). Sensitive scopes go through a review: expect a
+  request for a short screen recording of the sign-in and the feature that
+  uses the scope, and a few days' turnaround.
+- **Audience:** switch from Testing to Production to lift the 100-tester
+  cap; until verification completes, users see the "unverified app"
+  interstitial and must click through.
+The privacy page carries the Limited Use disclosure Google checks for.
+
 
 Google Cloud Console — the v3 client carries over:
 

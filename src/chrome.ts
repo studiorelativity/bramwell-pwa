@@ -69,6 +69,13 @@ export type ChromeController = {
   /** True only in the connected state. The FAB disables itself on this; `n` is
    *  the FAB's keyboard twin and must gate on the same fact. */
   isConnected(): boolean
+  /** The harness's way past the landing page (2026-09-05). The landing covers
+   *  every signed-out state, and headless Chrome cannot sign in, so the
+   *  stage-03/04/05 probes would otherwise never reach a day cell. Restores the
+   *  pre-landing read-only state over a warm cache for this session only.
+   *  Reachable only through the dev-only `window.bramwell` seam, which is
+   *  stripped from production builds — production has no way to uncover. */
+  uncover(): void
 }
 
 /** Created on first use, so this module stays free of DOM at module scope. */
@@ -102,47 +109,112 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return n
 }
 
-function buildFirstRun(onConnect: () => void, onDemo: () => void): HTMLElement {
+type Landing = { root: HTMLElement; setWarm(warm: boolean): void }
+
+/** The mini year: six rows of fourteen tiles with a few painted runs, built from
+ *  the same tokens the real grid uses ([data-cat] resolves through themeCss, the
+ *  today ring is today's own reserved hue). An illustration of the product in
+ *  the product's own material — no image, no second palette. */
+function buildArt(): HTMLElement {
+  const art = el('div', 'ld-art')
+  art.setAttribute('aria-hidden', 'true')
+  const strip = el('div', 'ld-strip')
+  for (const [cat, label, fig] of [['vacation', 'Vacation', '12 / 30'], ['blackout', 'Blackout', '5'], ['work', 'Work', '9']] as const) {
+    const chip = el('span', 'ld-chip')
+    chip.dataset['cat'] = cat
+    chip.append(el('span', 'ld-dot'), el('span', undefined, label), el('span', 'ld-fig', fig))
+    strip.append(chip)
+  }
+  art.append(strip)
+  // [row, startCol (1-based), span, cat]
+  const runs: readonly (readonly [number, number, number, string])[] = [
+    [0, 3, 5, 'vacation'], [1, 9, 1, 'blackout'], [2, 2, 3, 'work'], [2, 11, 4, 'vacation'],
+    [3, 6, 2, 'work'], [4, 1, 4, 'vacation'], [4, 12, 1, 'blackout'], [5, 8, 3, 'work'],
+  ]
+  for (let r = 0; r < 6; r++) {
+    const row = el('div', 'ld-row')
+    for (let c = 0; c < 14; c++) {
+      const cell = el('span', 'ld-cell')
+      cell.style.gridColumn = String(c + 1)      // explicit, so the runs overlay instead of displacing
+      if (c >= 12) cell.dataset['weekend'] = ''
+      if (r === 3 && c === 9) cell.dataset['today'] = ''
+      row.append(cell)
+    }
+    for (const [rr, col, span, cat] of runs) {
+      if (rr !== r) continue
+      const bar = el('span', 'ld-run')
+      bar.dataset['cat'] = cat
+      bar.style.gridColumn = `${col} / span ${span}`
+      row.append(bar)
+    }
+    art.append(row)
+  }
+  return art
+}
+
+/** The landing page. Shown whenever the app is not connected and not in demo —
+ *  a cold visitor and a returning one alike (2026-09-05: the calendar is never
+ *  painted for anyone who has not signed in; the old read-only-behind-a-pill
+ *  state is gone). Layout follows SPEC "Visual direction — Night Depth": the
+ *  ground, three elevations, two reserved hues, nothing new. */
+function buildLanding(onConnect: () => void, onDemo: () => void): Landing {
   const root = el('div')
   root.id = 'firstrun'
-  const card = el('div', 'set-fr-card')
+  const page = el('div', 'ld')
 
+  const top = el('header', 'ld-top')
   const mark = el('div', 'set-fr-mark', 'B')
   mark.setAttribute('aria-hidden', 'true')
-  const name = el('h1', 'set-fr-name', 'Bramwell')
-  // The pitch is the year, not the scroll (SPEC "Planning layer", iteration C
-  // 2026-09-05): one screen, painted by hand, counted against a budget. The
-  // fourth point — events live in Google Calendar — is the privacy note below.
-  const desc = el('p', 'set-fr-desc', 'A year planner over your Google Calendar.')
+  top.append(mark, el('span', 'ld-word', 'Bramwell'))
 
-  const lines = el('ul', 'set-fr-lines')
-  for (const t of [
-    'Your whole year on one screen — what is planned, and what is still open.',
-    'Paint vacations, blackouts and commitments straight onto the days.',
-    'Every category counts its days against the budget you give it.',
-  ]) lines.append(el('li', undefined, t))
-
+  const hero = el('section', 'ld-hero')
+  const copy = el('div', 'ld-copy')
+  const h1 = el('h1', 'ld-h1')
+  h1.append('Your whole year.', el('br'), 'One screen.')
+  const lede = el('p', 'ld-lede',
+    'A year planner over your Google Calendar. Paint vacations, blackouts and commitments straight onto the days, and watch each one count against the budget you gave it.')
+  const cta = el('div', 'ld-cta')
   const connect = el('button', 'set-fr-connect', 'Connect Google Calendar')
   connect.id = 'fr-connect'
   connect.type = 'button'
   connect.addEventListener('click', onConnect)
-
   // SPEC "Demo mode": the no-sign-in path. Nothing is persisted, so a reload
   // lands right back here.
   const demo = el('button', 'set-fr-demo', 'Try the demo')
   demo.id = 'fr-demo'
   demo.type = 'button'
   demo.addEventListener('click', onDemo)
+  cta.append(connect, demo)
+  const note = el('p', 'set-fr-note', 'Events live only in your Google Calendar. Bramwell keeps no copy of its own.')
+  copy.append(h1, lede, cta, note)
+  hero.append(copy, buildArt())
 
-  const privacy = el('p', 'set-fr-note',
-    'Events live only in your Google Calendar. Bramwell keeps no copy of its own.')
+  const points = el('section', 'ld-points')
+  for (const [head, body] of [
+    ['Paint, don’t type.', 'Pick a category and drag across the days. One run is one event, in your own Google Calendar.'],
+    ['Budgets that count.', 'Give Vacation thirty days. The strip keeps the score all year and says so the moment you go past it.'],
+    ['Blackouts hold.', 'Mark the days nothing may be planned over. A run that touches one is refused before it is written.'],
+  ]) {
+    const tile = el('div', 'ld-point')
+    tile.append(el('h2', 'ld-h2', head), el('p', 'ld-p', body))
+    points.append(tile)
+  }
 
+  const foot = el('footer', 'ld-foot')
   const support = el('a', 'set-fr-support', 'Something wrong? Get in touch.')
   support.href = `mailto:${SUPPORT_EMAIL}`
+  const about = el('a', 'ld-link', 'About'); about.href = '/about.html'
+  const privacy = el('a', 'ld-link', 'Privacy'); privacy.href = '/privacy.html'
+  const links = el('nav', 'ld-links'); links.append(about, privacy, support)
+  foot.append(links, el('span', 'ld-made', 'Studio Relativity · MIT'))
 
-  card.append(mark, name, desc, lines, connect, demo, privacy, support)
-  root.append(card)
-  return root
+  page.append(top, hero, points, foot)
+  root.append(page)
+  return {
+    root,
+    /** A returning visitor has a calendar waiting; the button says so in one word. */
+    setWarm(warm) { connect.textContent = warm ? 'Go' : 'Connect Google Calendar' },
+  }
 }
 
 let sheet: HTMLElement | null = null
@@ -557,7 +629,8 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
   connectRef = () => { connect() }
   markLeftRef = () => { leftDeliberately = true }
 
-  let firstRun: HTMLElement | null = null
+  let firstRun: Landing | null = null
+  let uncovered = false
 
   /** SPEC "Demo mode": the pill, "or Connect anywhere", exits demo and starts
    *  sign-in. Done here, at the one place every Connect funnels through, so the
@@ -640,21 +713,29 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
           graceTimer = setTimeout(() => { graceTimer = null; graced = true; paintSlot() }, RECONNECT_GRACE_MS)
         }
       }
-      // The first-run screen never covers a warm cache (SPEC).
-      if (conn === 'first-run') {
+      // The landing covers every signed-out state (2026-09-05): a cold visitor
+      // and a returning one alike see the page, never the calendar. `uncovered`
+      // is the harness seam only (see ChromeController.uncover).
+      const covered = conn === 'first-run' || (conn === 'stale' && !uncovered)
+      if (covered) {
         if (firstRun === null) {
-          firstRun = buildFirstRun(connect, () => { host.enterDemo(); api.syncConnection() })
-          root.append(firstRun)
+          firstRun = buildLanding(connect, () => { host.enterDemo(); api.syncConnection() })
+          root.append(firstRun.root)
+          // The shared enter utility: .enter, reflow, [data-in] (motion.css).
+          firstRun.root.classList.add('enter')
+          void firstRun.root.offsetWidth
+          firstRun.root.dataset['in'] = ''
         }
-        firstRun.hidden = false
+        firstRun.setWarm(conn === 'stale')
+        firstRun.root.hidden = false
       } else if (firstRun !== null) {
-        firstRun.hidden = true
+        firstRun.root.hidden = true
       }
       // It covers the header visually but not in the tab order: from the body,
       // Tab reached Year and Today behind it (ticket 4 probe, 2026-09-05).
       // Every other child of the root is inert while it shows — a sibling
       // rule, so chrome.ts learns nothing about what main.ts put there.
-      for (const c of root.children) if (c !== firstRun) c.toggleAttribute('inert', conn === 'first-run')
+      for (const c of root.children) if (c !== firstRun?.root) c.toggleAttribute('inert', covered)
       // Read-only while stale: the FAB is the one write entry point chrome owns.
       // Live in demo: the write is refused with the demo message (SPEC), which is
       // the point. `n` in main.ts gates on the same two facts.
@@ -662,6 +743,7 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
       paintSlot()
     },
     isSheetOpen(): boolean { return sheet !== null && !sheet.hidden },
+    uncover(): void { uncovered = true; api.syncConnection() },
     openSheet(): void { if (!api.isSheetOpen()) toggleSheet() },
     isConnected(): boolean { return conn === 'connected' },
   }

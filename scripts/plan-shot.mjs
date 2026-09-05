@@ -89,7 +89,7 @@ async function evalJs(expression) {
 await send('Page.enable'); await send('Runtime.enable')
 await send('Page.addScriptToEvaluateOnNewDocument', { source:
   `localStorage.setItem('bramwell.cache.v1', ${JSON.stringify(SEED_CACHE)});` +
-  `localStorage.setItem('bramwell.prefs.v1', ${JSON.stringify(SEED_PREFS)})` })
+  `localStorage.setItem('bramwell.prefs.v1', ${JSON.stringify(SEED_PREFS)}); (function uncover(){ const b = window.bramwell; if (b && b.chrome && b.chrome.uncover) b.chrome.uncover(); else setTimeout(uncover, 20) })()` })
 
 async function navigate(w, h, mobile, media) {
   await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile })

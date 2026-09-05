@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>About · Bramwell</title>
+<link rel="icon" href="/icon-192.png">
+<style>
+  :root { color-scheme: light dark; --surface:#F2EFEA; --ink:#1A1A1A; --ink-strong:#000; --ink-dim:#6B6B6B; --band:#FFFFFF; --rule:rgba(0,0,0,.08); }
+  @media (prefers-color-scheme: dark) { :root { --surface:#141210; --ink:#E8E6E1; --ink-strong:#FFF; --ink-dim:#9A978F; --band:#1C1A17; --rule:rgba(255,255,255,.09); } }
+  html { background: var(--surface); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { margin: 0; padding: calc(24px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom)); }
+  main { max-width: 680px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; }
+  .mark { width: 32px; height: 32px; border-radius: 9px; background: var(--band); display: grid; place-items: center; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.12); text-decoration: none; color: var(--ink); }
+  header a.word { font-weight: 620; color: var(--ink); text-decoration: none; }
+  h1 { font-size: 30px; line-height: 1.15; letter-spacing: -.01em; margin: 0 0 6px; color: var(--ink-strong); }
+  .date { color: var(--ink-dim); font-size: 13px; margin: 0 0 28px; }
+  h2 { font-size: 17px; margin: 28px 0 8px; color: var(--ink-strong); }
+  p, li { color: var(--ink); }
+  a { color: inherit; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--rule); color: var(--ink-dim); font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+  footer a { color: var(--ink-dim); }
+</style>
+</head>
+<body>
+<main>
+<header><a class="mark" href="/" aria-hidden="true">B</a><a class="word" href="/">Bramwell</a></header>
+<h1>About Bramwell</h1>
+<p class="date">A year planner over your Google Calendar</p>
+
+<p>The reference is the wall-sized year calendar: every day visible at once, marked by hand, so what is planned and what is still open can be read in one glance. Bramwell puts that on a screen and wires it to the calendar you already keep.</p>
+
+<h2>What it does</h2>
+<ul>
+  <li><strong>A year on one screen.</strong> Twelve months as one grid, with a month view that scrolls without page boundaries when you need the detail.</li>
+  <li><strong>Paint, don't type.</strong> Pick a category and drag across the days. One run is one all-day event, written straight to your Google Calendar.</li>
+  <li><strong>Budgets that count.</strong> Give a category a number of days for the year. The strip keeps the score and tells you the moment you go past it.</li>
+  <li><strong>Blackouts hold.</strong> Mark days nothing may be planned over. A run that touches one is refused before it is written.</li>
+</ul>
+
+<h2>How it is built</h2>
+<p>Bramwell is a small, open-source web app with no backend. It is static files on a content delivery network, talking to Google Calendar from your browser with one permission. Your events live in Google; a cache on your device makes it open instantly and work offline. See the <a href="/privacy.html">privacy page</a> for the full account.</p>
+<p>The source is on <a href="https://github.com/studiorelativity/bramwell-pwa">GitHub</a> under the MIT licence, so you can read it, run it, or deploy your own.</p>
+
+<h2>Who makes it</h2>
+<p>Studio Relativity. Something wrong, or something you wish it did? <a href="mailto:studiorelativity@gmail.com">Get in touch</a>.</p>
+<footer>
+  <a href="/">Bramwell</a>
+  <a href="/about.html">About</a>
+  <a href="/privacy.html">Privacy</a>
+  <a href="mailto:studiorelativity@gmail.com">studiorelativity@gmail.com</a>
+</footer>
+</main>
+</body>
+</html>

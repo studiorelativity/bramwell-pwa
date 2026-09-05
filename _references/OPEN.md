@@ -240,7 +240,7 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   real content change to move the asset hashes.
 
 ## Opened at the 05 gate on the phone (2026-09-05)
-- **One Reconnect tap per phone visit.** The token lives in memory (SPEC
+- **One Reconnect tap per phone visit — and, since the landing page (2026-09-05), no calendar at all offline until this is decided.** The token lives in memory (SPEC
   "Auth") and the quiet renewal at launch is blocked by Safari's tracking
   prevention on iPhone, so every fresh load lands on the Reconnect pill and
   a read-only calendar. Desktop never sees it (the tab stays open). Options

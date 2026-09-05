@@ -361,36 +361,84 @@ html, body {
 [hidden] { display: none !important; }
 
 /* ---------- shell chrome (stage 05) ---------- */
-/* `place-items: safe center` + overflow-y so Connect stays reachable on the
-   shortest phone: plain `center` clips the top of an over-tall card (SPEC). */
+/* ---------- the landing page (2026-09-05) ----------
+   Shown to anyone not signed in; the calendar is never painted beneath it.
+   Night Depth only: the ground, band surfaces, the three elevations, --today
+   for the one today tile in the illustration. Nothing new. `overflow-y` so the
+   CTA is reachable on the shortest phone (SPEC). */
 #firstrun {
   position: fixed; inset: 0; z-index: 20;
   background: var(--surface); color: var(--ink);
-  display: grid; place-items: safe center; overflow-y: auto;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
   padding:
-    calc(24px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right))
-    calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
+    calc(16px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+    calc(32px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
 }
-.set-fr-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; max-width: 340px; }
+.ld { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; min-height: 100%; }
+.ld-top { display: flex; align-items: center; gap: 10px; }
+.ld-word { font-weight: 620; font-size: 15px; letter-spacing: .01em; }
 .set-fr-mark {
-  width: 44px; height: 44px; border-radius: 12px;
+  width: 36px; height: 36px; border-radius: 10px;
   background: var(--band-b); box-shadow: var(--el-rest);
-  display: grid; place-items: center; font-size: 22px; font-weight: 700;
+  display: grid; place-items: center; font-size: 18px; font-weight: 700;
 }
-.set-fr-name { margin: 4px 0 0; font-size: 22px; font-weight: 620; }
-.set-fr-desc { margin: 0; color: var(--ink-dim); }
-.set-fr-lines { margin: 6px 0 10px; padding-left: 0; list-style: none; color: var(--ink-dim); display: flex; flex-direction: column; gap: 4px; }
+.ld-hero { display: grid; grid-template-columns: 1fr; gap: 32px; align-items: center; }
+.ld-copy { display: flex; flex-direction: column; gap: 16px; max-width: 520px; }
+.ld-h1 { margin: 0; font-size: 34px; line-height: 1.08; font-weight: 620; letter-spacing: -.015em; color: var(--ink-strong); }
+.ld-lede { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink-dim); }
+.ld-cta { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 .set-fr-connect {
-  font: inherit; font-weight: 620; color: var(--surface); background: var(--ink);
-  border: 0; border-radius: 10px; padding: 11px 18px; width: 100%;
+  font: inherit; font-weight: 620; font-size: 15px; color: var(--surface); background: var(--ink);
+  border: 0; border-radius: 10px; padding: 12px 20px; width: 100%;
 }
 .set-fr-demo {
-  font: inherit; color: var(--ink); background: var(--band-b-end);
-  border: 0; border-radius: 10px; padding: 11px 18px; width: 100%;
+  font: inherit; font-size: 15px; color: var(--ink); background: var(--band-b-end);
+  border: 0; border-radius: 10px; padding: 12px 20px; width: 100%;
 }
 .set-fr-demo:disabled { opacity: .45; }
 .set-fr-note { margin: 0; font-size: 12px; color: var(--ink-dim); }
-.set-fr-support { margin-top: 8px; font-size: 12px; color: var(--ink-dim); }
+
+/* The mini year. Tiles and runs are the grid's own shapes at a smaller scale. */
+.ld-art { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: var(--tile-r); background: var(--band-a); box-shadow: var(--el-rest); }
+.ld-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.ld-chip {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 1;
+  padding: 5px 8px; border-radius: 999px; background: var(--band-b); color: var(--ink);
+}
+.ld-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cat, var(--ink-dim)); }
+.ld-fig { color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.ld-row { display: grid; grid-template-columns: repeat(14, 1fr); gap: var(--gap); }
+.ld-cell {
+  grid-row: 1; aspect-ratio: 1 / 1.35; border-radius: 6px;
+  background: var(--band-b); box-shadow: var(--el-rest);
+}
+.ld-cell[data-weekend] { background: var(--band-b-end); }
+.ld-cell[data-today] { box-shadow: var(--el-rest), inset 0 0 0 2px var(--today); }
+.ld-run {
+  grid-row: 1; align-self: end; margin: 0 2px 5px; height: 5px; border-radius: var(--bar-r);
+  background: var(--cat, var(--ink-dim)); z-index: 1;
+}
+
+.ld-points { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.ld-point { padding: 16px 18px; border-radius: var(--tile-r); background: var(--band-a); box-shadow: var(--el-rest); }
+.ld-h2 { margin: 0 0 6px; font-size: 15px; font-weight: 620; color: var(--ink-strong); }
+.ld-p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-dim); }
+
+.ld-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin-top: auto; font-size: 12px; color: var(--ink-dim); }
+.ld-links { display: flex; flex-wrap: wrap; gap: 14px; }
+.ld-link, .set-fr-support { color: var(--ink-dim); }
+.ld-made { color: var(--ink-dim); }
+
+@media (min-width: 900px) {
+  #firstrun { padding-top: calc(28px + env(safe-area-inset-top)); }
+  .ld { gap: 56px; }
+  .ld-hero { grid-template-columns: minmax(0, 11fr) minmax(0, 10fr); gap: 56px; }
+  .ld-h1 { font-size: 56px; }
+  .ld-lede { font-size: 18px; }
+  .ld-cta { flex-direction: row; }
+  .set-fr-connect, .set-fr-demo { width: auto; min-width: 200px; }
+  .ld-points { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+}
 
 .set-avatar {
   position: relative; width: 28px; height: 28px; border-radius: 50%;

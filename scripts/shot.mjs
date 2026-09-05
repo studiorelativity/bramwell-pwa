@@ -97,7 +97,11 @@ async function evalJs(expression) {
 await send('Page.enable'); await send('Runtime.enable')
 // Kept as its own const (not inlined) so probeFirstRunCold below can remove and
 // re-add exactly this script around the one navigation that must NOT see it.
-const SEED_SCRIPT = `localStorage.setItem('bramwell.cache.v1', ${JSON.stringify(SEED)})`
+// The landing page covers every signed-out state (2026-09-05), so the seeded
+// warm cache alone no longer shows a calendar; the dev-only uncover seam
+// restores the read-only state this harness was written against. Lives in
+// the SAME script as the seed so probeFirstRunCold's remove/re-add drops both.
+const SEED_SCRIPT = `localStorage.setItem('bramwell.cache.v1', ${JSON.stringify(SEED)}); (function uncover(){ const b = window.bramwell; if (b && b.chrome && b.chrome.uncover) b.chrome.uncover(); else setTimeout(uncover, 20) })()`
 let seedScriptId = (await send('Page.addScriptToEvaluateOnNewDocument', { source: SEED_SCRIPT })).result.identifier
 
 // The positive jump-stamp case (Important 4): jumpDuringSteadyState/
