@@ -1,6 +1,6 @@
 # Stage 06 — Demo mode, README, open-source prep
 
-**Status: BUILT 2026-09-05 (run early as iteration B on branch `demo`; 05's gate was not waited for).** Gate not run; see output/verification.md.
+**Status: CLOSED 2026-09-05.** Built early as iteration B on branch `demo`; the human passed the gate on the dev server (`?demo`) the same day; merged to `main` and deployed. Rulings promoted to DECISIONS "Gate close — the three parallel iterations".
 
 ## Inputs
 - L3: `SPEC.md` — "Demo mode"; `DECISIONS.md` — demo rulings
@@ -11,7 +11,7 @@ any, are listed here by the human at the previous gate close — not read
 from the previous `verification.md`.
 
 ## Outputs
-- `enterDemo` / `exitDemo` / `isDemo` in `state.ts`; deterministic seed
+- `enableDemo` / `exitDemo` / `isDemo` in `state.ts`; deterministic seed
   covering every render path; `DemoError` before the optimistic apply;
   demo pill in the avatar slot; `?demo` entry; demo customization in
   memory only; `onDemoExit` re-runs `configure()`.

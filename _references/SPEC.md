@@ -167,12 +167,11 @@ live on the category in prefs.
   means to spend on it — "Vacation: 30") and `blocks?: true` (days carrying an
   event of this category may not be planned over — "Blackout"). `sanitize()`
   drops an invalid `budgetDays` (non-integer, out of range) and any `blocks`
-  that is not literally `true`, keeping the row. The seed is unchanged: no
-  seed category has either field. Settings' category row gains a Budget
+  that is not literally `true`, keeping the row. Seed (amended 2026-09-05, gate close): Vacation carries no budget, Blackout carries `blocks: true`; seed order is work, personal, financial, vacation, blackout, other. Settings' category row gains a Budget
   number input (blank = none) and a Blocks toggle; both are structural edits
   for the row-rebuild rule.
 - **The plan strip.** A row of category chips inside the year view, between
-  the header and the grid, always visible in the year view. Each chip: the
+  the header and the grid, always visible in the year view. **Gate close 2026-09-05:** the strip is sticky at the top of the year view on `--surface` (z-index 3), so \"always visible\" holds where the view scrolls; an un-budgeted, non-blocking category shows its used count, and a count of 0 with no budget is omitted so a fresh install is not a row of zeros. Each chip: the
   category dot and label; when the category has a budget, "used / budget"
   in tabular figures; when it `blocks`, its day count alone. **Used** = the
   number of distinct days in the DISPLAYED year covered by at least one
@@ -205,7 +204,7 @@ live on the category in prefs.
   existing plans; v1 does not warn in that direction (`OPEN.md`).
 - **Erase.** The strip's last chip is Erase, category-agnostic. In erase
   mode a click on a day removes the ONE all-day event under it — the
-  topmost bar in that cell (lane 0) — as a whole run, via
+  topmost bar in that cell (lane 0) — read at the gate close 2026-09-05 as the lowest-lane ALL-DAY bar among the drawn lanes, since a timed event can hold lane 0 in the year grid and a cell whose only bars are timed erases nothing — as a whole run, via
   `deleteEvent(id, 'instance')`, optimistic like any other write. A day with
   no all-day event does nothing; a recurring instance is refused with a
   toast ("Recurring — edit it from the month view"). Trimming a run by a day
@@ -566,6 +565,8 @@ prefs.mood             — mood id            (absent -> "warm")
   | work | Work | 9 | #3056D3 | #7B96FF |
   | personal | Personal | 10 | #17925A | #4FC48D |
   | financial | Financial | 5 | #D97706 | #F0A13C |
+  | vacation | Vacation | 7 | #0E86C4 | #5CC1F2 |
+  | blackout | Blackout | 11 | #B3261E | #F28B82 |
   | other | Other | 8 | #64748B | #94A3B8 |
 
   Display hexes are explicit overrides — Google's own hexes for 9/10/5/8
@@ -659,7 +660,7 @@ Entry: "Try the demo" on first-run, or `?demo`.
   narrows DECISIONS' "demo does not seed prefs": it still writes no prefs;
   it configures memory, which leaving demo already resets. A paint in demo
   hits `DemoError` like any other write.
-- Header shows a "Demo · Connect" pill in the avatar's slot; clicking it
+- Header shows a "Demo · Connect" pill in the avatar's slot; the slot also keeps a dot-less avatar, because the avatar is the only door to Settings and customization works in memory in demo; `?demo` is scrubbed from the URL at entry so a reload lands on first-run (gate close 2026-09-05); clicking it
   (or Connect anywhere) exits demo and starts sign-in. Demo never survives
   a reload.
 
@@ -1016,6 +1017,8 @@ field, not by spreading the draft.
 ```
 ensureMonthsFor(weeks: WeekIndex[]): void   — lazy month loading
 monthState(key: MonthKey): MonthLoadState   — render reads load state
+monthsNotLoaded(year: number): number[] | null — displayed months absent/error while none loads (iteration C, 2026-09-05)
+resolveLaunchView(p: Prefs): 'cal' | 'year'   — the launch table for defaultView/lastView (iteration C, 2026-09-05)
 eventsForMonth(key: MonthKey): CalendarEvent[]
 spansForWeek(week: WeekIndex): EventSpan[]
 prefs(): Prefs / savePrefs(p: Prefs): void
@@ -1107,7 +1110,7 @@ Calendar (carried forward, all still binding):
   to first-run.
 - `?demo`: populated, zero googleapis.com requests, saves reject with the
   demo message, Connect exits into real sign-in, nothing persisted.
-- Category rules: fresh install renders the four seed categories in the
+- Category rules: fresh install renders the six seed categories in the
   seed colours; two categories can never share a colorId; add is dead at
   11; delete leaves Google untouched and renders the fallback; rename
   keeps the key; display hex overrides on screen while Google shows the

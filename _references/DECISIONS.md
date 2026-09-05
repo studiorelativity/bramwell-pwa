@@ -736,3 +736,67 @@ any code; three parallel iteration sessions run from these.
   copy and sheet). `chrome.ts` is shared by demo and polish: demo owns the
   first-run buttons and the pill; polish owns copy, layout and the sheet.
   Merge order when they land: planning, demo, polish.
+
+## Gate close — the three parallel iterations (2026-09-05)
+
+A (planning layer), B (demo + beta on-ramp) and C (beta polish) ran on
+worktrees from one amended spec, merged A → B → C as a fast-forward onto
+`main` (a1adfd1) and deployed. The human passed A on the real wire (paint,
+blocked paint, erase reached Google) and B on the dev server. Rulings each
+session made against its contract, promoted here; the contract changes are
+in `SPEC.md` under the same date.
+
+**A — planning layer**
+- `daysUsed` absorbs the cross-month duplicate (a Set of days); no caller
+  dedupes. Un-budgeted categories show their used count, 0-with-no-budget is
+  omitted. Erase takes the lowest-lane all-day bar, not literally lane 0.
+- The strip rebuilds before `build()`'s hidden-root guard, so a budget set
+  while the year is hidden lands on the next show; the strip is sticky.
+- Seed twins: Vacation `#0E86C4`/`#5CC1F2`, Blackout `#B3261E`/`#F28B82`
+  (crimson, apart from `--past` and `--cat-err`). The planning fields sit on
+  a second line under each category row; Blocks reuses the segment control.
+- The paint tint is a `background-image` layer using the bars' exact
+  `color-mix`; the cell carries `data-cat` so `--cat` resolves through the
+  bars' rule. `PlanHost` = root, surface, cellAt, cellsIn, dayOf, laneZeroId,
+  eventsIn, bounds, createEvent, deleteEvent, toast, onModeChange; category
+  label and the blocks set come from `categories.ts`, never a `year.ts`
+  closure. `TAP_SLOP` is copied by value with a comment naming `main.ts`.
+- Escape mid-drag releases capture, clears the paint, writes nothing, exits
+  the mode; `exitMode()` is the same path. A chip click selects, the selected
+  chip deselects, another chip switches directly. Over budget marks the
+  figure only. The blocked-day toast is locale-formatted at the display
+  boundary.
+
+**B — demo**
+- Demo is a fourth connection state in `chrome.ts`, checked before auth:
+  seeded months are `ready`, so `warmCache()` would otherwise read demo as
+  stale. Demo shows its pill at once and keeps the FAB live — a refused save
+  is the demo's lesson. `isConnected()` keeps its meaning (false in demo);
+  the FAB and `n` check demo explicitly.
+- The avatar slot holds the pill AND a dot-less avatar. `?demo` is scrubbed
+  at entry. The quiet token renewal at boot is skipped in demo, so a quietly
+  signed-in browser cannot flip to connected mid-demo. `savePrefs` writes
+  memory only in demo; `exitDemo()` re-reads storage. The seed hard-codes the
+  frozen seed colorIds. The Vacation budget is written from `main.ts` through
+  the one writer; `state.ts` never learns the seed list.
+- Supersedes "demo does not seed prefs" above: demo writes no prefs and
+  configures memory.
+
+**C — polish**
+- The "not loaded" note is `main.ts`'s, under the grid; `state.monthsNotLoaded`
+  is the query. `--surface` is the ring colour on ink-filled controls; the
+  first-run screen makes its root siblings `inert`. `#toasts` sits above the
+  FAB strip at every width. The launch table is `state.resolveLaunchView`.
+  A's Budget input is a field and gets 16px under coarse pointers. The demo
+  account row reads "Demo" with a Connect on the pill's path. The phone
+  header tightens (6px gaps, 8px padding, range `nowrap`) rather than the
+  pill changing copy. Tickets 5, 6 and 8 verified with no change shipped.
+
+**Gate fix on the integration tip.** The year view stayed stale after a
+write made in the month view — since stage 03, `onCacheChange` cleared
+`yearDirty` while the year was hidden and `year.ts` bails on a hidden root.
+Only a visible year consumes the flag now; `openYear()` invalidates when it
+finds it set. Found by the human at A's gate; probed both ways.
+
+**Copy.** The first-run card pitches the year (C ticket 1), shipped as C
+drafted it; the human chose to ship first and edit later.

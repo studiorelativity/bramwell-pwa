@@ -24,10 +24,10 @@ not apply to them. Open exactly one per session, by name:
 
 | Session | File | Branch |
 |---|---|---|
-| A — planning layer | `_iteration/planning-layer.md` | `planning-layer` |
-| B — demo + beta on-ramp (06 run early) | `_iteration/beta-demo.md` | `demo` |
-| C — beta polish | `_iteration/polish.md` | `polish` |
-| D — month-view planning (opens after A merges) | `_iteration/month-plan.md` | `month-plan` |
+| A — planning layer — MERGED 2026-09-05 | `_iteration/planning-layer.md` | `planning-layer` |
+| B — demo + beta on-ramp (06 run early) — MERGED 2026-09-05 | `_iteration/beta-demo.md` | `demo` |
+| C — beta polish — MERGED 2026-09-05 | `_iteration/polish.md` | `polish` |
+| D — month-view planning (A has merged; D may open) | `_iteration/month-plan.md` | `month-plan` |
 
 Merge order A, B, C. Their upstream edits are already in `_references/`
 (DECISIONS "Planning layer rulings"); an iteration file that asks you to

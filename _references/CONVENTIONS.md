@@ -166,3 +166,20 @@ twice, the rule goes here.
   suspiciously uniform 1px — not by the instrument itself. Neither is a
   reason to trust screenshots over probes; it is a reason to make every probe
   demonstrate that it can return both answers before its answer is quoted.
+- **A "storage untouched" claim carries a cold-visit control beside it.** The
+  app writes `lastDockedDay` on its own at boot; without a control run that
+  key reads as a leak (it did, for one demo run, 2026-09-05).
+- **Coarse-pointer emulation is touch emulation, not a media feature.**
+  `(hover: none)` / `(pointer: coarse)` are not honoured by
+  `Emulation.setEmulatedMedia`; `Emulation.setTouchEmulationEnabled` is what
+  flips them. A first attempt failed silently with hover still `hover`.
+- **Derive the port after EVERY dev-server restart, and prove the served
+  tree.** A vite that dies leaves its port to whichever vite starts next;
+  twice on 2026-09-05 a probe ran against another worktree's tree (5173
+  answered from B's, 5174 from A's) and read a stale build as a regression.
+  Before trusting a run, check the served `main.ts` carries a marker of the
+  tree under test.
+- **WebDriver's iOS touch actions do not deliver a finger-up until the next
+  touch, and the automation window blocks real fingers.** Real-device touch
+  evidence comes from an instrumented build on a Pages preview branch and
+  the human's finger (the `evlog` method, 2026-09-05), not from safaridriver.

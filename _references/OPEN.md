@@ -249,6 +249,25 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   reload, not a closed tab; changes a stage-02 ruling); or the code flow with
   a backend, which the store rule rejects. Owner: the human.
 
+## Opened at the gate close of the three iterations (2026-09-05)
+- **The year grid bails on a hidden root**, so a category RENAME made from the
+  month view reaches the grid's inline titles only on the next repaint; the
+  strip is fresh. Pre-existing; the write case was fixed at this gate close
+  (DECISIONS), the rename case is cosmetic and waits.
+- **SPEC "Event form" says validation errors surface in the form AND as a
+  toast; `day.ts` toasts write errors only.** One of them is wrong; C's
+  finding, not C's file. Decide at the next day.ts session.
+- **Demo header between 390 and 560px with a longer range label** ("Dec 2026
+  – Jan 2027"): C measured 389/390 for "Aug – Sep 2026" only.
+- **Emulated clicks on header buttons (2026-09-05 line):** CDP mouse and
+  touch both fire the full pointerdown → click chain and toggle the view; a
+  real trackpad and touch screen are still untested, so this stays open.
+- **2026-09-05 — CLOSED: the settings sheet with 11 categories on a small
+  phone.** Measured at 390×844, both schemes, with A's Budget/Blocks rows: no
+  clipped row, the sheet scrolls inside itself, the last Remove is hittable.
+- **2026-09-05 — CLOSED: the year view says nothing about unloaded months.**
+  C ticket 3: a `--ink-dim` line under the grid names the absent range.
+
 ## Opened at the planning layer (2026-09-05)
 - **Blackout painted over an existing plan does not warn.** The conflict
   rule refuses a plan over a block, not the reverse. The strip could count
@@ -261,6 +280,7 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
 - **Holidays.** No holiday calendar is read. A `blocks` category painted by
   hand is the workaround; reading Google's holiday calendar needs the
   broader scope rejected in DECISIONS.
+- **2026-09-05 — CLOSED, superseded the same day:** `defaultView` gained `\"last\"` (the default) and `lastView`; C shipped it. Original text follows.
 - **`defaultView` for a fresh install stays `cal`.** The year is the
   product now; the month view is the more finished screen. Flip after the
   polish session lands, or leave to the user. Human's call.
