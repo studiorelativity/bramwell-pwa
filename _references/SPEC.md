@@ -132,6 +132,14 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   hidden, unless the displayed year changes).
 - **Touch**: first tap raises the panel, second tap on the same day opens
   that day in the calendar view, a tap elsewhere dismisses.
+  **Amended 2026-09-05:** the second tap must be visible. On touch the panel
+  carries a last line, "Tap again to open", in `--ink-dim`, and the panel
+  itself is tappable: a tap on it opens the day, the same as the second tap
+  on the cell. On hover devices the panel stays `pointer-events: none` and
+  carries no line. Found at the 05 gate: the person who wrote this rule
+  tapped once on the phone, read the panel, and concluded the year view
+  could not open a day. Editing still lives in the calendar view's open day;
+  the panel's job is to hand you there and say so.
 - `<` `>` step the year. **Clicking a day returns to the calendar view on that
   day — positioned at its week AND expanded (amended 2026-08-31).** "On that
   day" previously delivered only the scroll: you landed on the right week with

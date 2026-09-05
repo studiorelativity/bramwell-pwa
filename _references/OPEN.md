@@ -239,6 +239,16 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   Shipped as the payload for the gate-row-10 two-deploy test, which needed a
   real content change to move the asset hashes.
 
+## Opened at the 05 gate on the phone (2026-09-05)
+- **One Reconnect tap per phone visit.** The token lives in memory (SPEC
+  "Auth") and the quiet renewal at launch is blocked by Safari's tracking
+  prevention on iPhone, so every fresh load lands on the Reconnect pill and
+  a read-only calendar. Desktop never sees it (the tab stays open). Options
+  when it is decided: accept it for beta and say so in the first-run copy;
+  keep the token in `sessionStorage` for its remaining lifetime (survives a
+  reload, not a closed tab; changes a stage-02 ruling); or the code flow with
+  a backend, which the store rule rejects. Owner: the human.
+
 ## Opened at the planning layer (2026-09-05)
 - **Blackout painted over an existing plan does not warn.** The conflict
   rule refuses a plan over a block, not the reverse. The strip could count

@@ -703,6 +703,21 @@ any code; three parallel iteration sessions run from these.
   Foreground events now re-run it; the 5-minute rule is unchanged and no
   polling timer is added (a timer would fetch for nobody). The landscape
   address bar is Safari's, not ours: judged in the installed PWA.
+- **05 gate on the phone, 2026-09-05, second pass: the "phone can't edit"
+  report was two things, neither a touch bug.** Instrumented on the real
+  iPhone (a throwaway `evlog` branch on a Pages preview, since WebDriver's
+  iOS touch actions never deliver a finger-up and the automation window
+  blocks real fingers): day open, event edit, Add after a zoom, and Year all
+  fire a full touch → click chain. (1) The phone was in the signed-out-over-
+  warm-cache state — Reconnect pill, dimmed FAB — because the quiet token
+  renewal at launch runs in a hidden Google frame that Safari's tracking
+  prevention blocks; one Reconnect tap fixes a visit. Whether that is
+  acceptable per visit is an `OPEN.md` item, not decided here. (2) In the
+  year view the first tap raises the panel and the second opens the day, as
+  SPEC said; nothing on screen said so. Ruled: the panel says "Tap again to
+  open" and is itself tappable on touch (SPEC amended, A's step 9).
+  Rejected: first tap opens directly on touch — a phone would lose the only
+  way to peek at a day without leaving the year.
 - **The 14-column stretch is 1.35fr, from a measurement.** At 375px a busy
   row at 2.2fr compressed its plain days to an unreadable strip (screenshot,
   2026-09-05, signed-out cache). Closes the `OPEN.md` item opened at the

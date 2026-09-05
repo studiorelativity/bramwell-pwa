@@ -92,6 +92,13 @@ is a new directory — create it.
    the existing bar-fill rule and use the same mechanism it uses),
    `.yearview[data-mode] .yr { touch-action: none; cursor: crosshair }`.
    No transition anywhere in these rules (CONVENTIONS).
+9. **Touch panel affordance** (SPEC "Year view — Touch", amended
+   2026-09-05). Under `(hover: none)`: append a `.yrpanel-open` line "Tap
+   again to open" (`--ink-dim`, 12px) to the panel, set the panel
+   `pointer-events: auto`, and treat a click on the panel as
+   `host.onPickDay(shown)`. Under hover the panel is unchanged. Paint mode
+   already suppresses the panel, so the two do not meet. Hit-test the panel
+   line with `elementFromPoint` at 390 in the coarse-pointer emulation.
 
 ## Verification (write it up; the human runs the gate)
 - `npm run selftest` green with the new cases, and `npm run build` clean.
