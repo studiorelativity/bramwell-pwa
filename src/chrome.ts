@@ -110,13 +110,16 @@ function buildFirstRun(onConnect: () => void, onDemo: () => void): HTMLElement {
   const mark = el('div', 'set-fr-mark', 'B')
   mark.setAttribute('aria-hidden', 'true')
   const name = el('h1', 'set-fr-name', 'Bramwell')
-  const desc = el('p', 'set-fr-desc', 'A perpetual calendar over your Google Calendar.')
+  // The pitch is the year, not the scroll (SPEC "Planning layer", iteration C
+  // 2026-09-05): one screen, painted by hand, counted against a budget. The
+  // fourth point — events live in Google Calendar — is the privacy note below.
+  const desc = el('p', 'set-fr-desc', 'A year planner over your Google Calendar.')
 
   const lines = el('ul', 'set-fr-lines')
   for (const t of [
-    'Scroll forever — no month boundaries and no paging.',
-    'Tap a day to open it in place. No drawer, no overlay.',
-    'Your own categories, colours and moods.',
+    'Your whole year on one screen — what is planned, and what is still open.',
+    'Paint vacations, blackouts and commitments straight onto the days.',
+    'Every category counts its days against the budget you give it.',
   ]) lines.append(el('li', undefined, t))
 
   const connect = el('button', 'set-fr-connect', 'Connect Google Calendar')
