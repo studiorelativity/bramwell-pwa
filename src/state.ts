@@ -154,11 +154,36 @@ export function savePrefs(p: Prefs): void {
   }
 }
 
+/** The view a session opens in (SPEC "Settings", amended 2026-09-05). "cal" and
+ *  "year" open that view; "last" — the default for new installs, and what an
+ *  absent field means — opens the view the previous session ended in, which
+ *  main.ts writes to `lastView` on every switch. Absent `lastView` is the
+ *  month. Pure over the prefs it is handed, so the selftest covers the table. */
+export function resolveLaunchView(p: Prefs): 'cal' | 'year' {
+  if (p.defaultView === 'cal' || p.defaultView === 'year') return p.defaultView
+  return p.lastView ?? 'cal'
+}
+
 // ---------- Reads ----------
 
 export function monthState(key: MonthKey): MonthLoadState {
   ensureLoaded()
   return cache.months[key]?.state ?? 'absent'
+}
+
+/** The year view's "not loaded" line reads this (iteration C, 2026-09-05): the
+ *  months of `year` that are `absent` or `error`, as 1-based month numbers —
+ *  or null while ANY month of that year is still `loading`, because "not
+ *  loaded" would be wrong a moment later. Empty when the whole year is ready. */
+export function monthsNotLoaded(year: number): number[] | null {
+  ensureLoaded()
+  const out: number[] = []
+  for (let m = 1; m <= 12; m++) {
+    const s = monthState(monthKey(civilToDay(year, m, 1)))
+    if (s === 'loading') return null
+    if (s !== 'ready') out.push(m)
+  }
+  return out
 }
 
 /** category is derived here and nowhere else, on every read, against current prefs. */

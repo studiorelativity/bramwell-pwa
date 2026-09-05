@@ -3,13 +3,13 @@
 // gcal wire mapping and transport, auth token handling, and state's cache, lazy loading,
 // 401 retry and optimistic writes. Cases share module state, so each restores what it stubs
 // (fetch, localStorage, GIS), the anchor it pins, and any token it acquired.
-import type { DayNumber, EventDraft, StoredCategory, MoodId, CalendarEvent, EventSpan, StoredEvent } from './types.ts'
+import type { DayNumber, EventDraft, StoredCategory, MoodId, CalendarEvent, EventSpan, StoredEvent, Prefs } from './types.ts'
 import { asDay, asWeek, asOffset, civilToDay, dayToCivil, addDays, offsetOf, monthKey } from './dates.ts'
 import {
   today, weekOf, dayAt, _setAnchorForTest, _resetForTest, _flushForTest,
   prefs, savePrefs, monthState, eventsForMonth, spansForWeek,
   ensureMonthsFor, onCacheChange, _settleForTest, clearAuthGate,
-  createEvent, updateEvent, deleteEvent,
+  createEvent, updateEvent, deleteEvent, resolveLaunchView, monthsNotLoaded,
   DemoError, enableDemo, exitDemo, isDemo, _demoSeedForTest,
 } from './state.ts'
 import { all, brighten, categoryFor, configure, fallback, mintName, sanitize, themeCss } from './categories.ts'
@@ -823,6 +823,56 @@ const cases: Case[] = [
       if (monthState('2026-02') !== 'absent') return 'unparseable cache did not discard'
       if (eventsForMonth('2026-02').length !== 0) return 'unparseable cache yielded events'
     } finally { s.restore(); _resetForTest() }
+    return null
+  }],
+
+  // Iteration C (2026-09-05), SPEC "Settings" amended: the view a session opens in.
+  ['state: resolveLaunchView — cal/year open that view; last or absent reads lastView; absent lastView is the month', () => {
+    const table: [Prefs, 'cal' | 'year'][] = [
+      [{}, 'cal'],
+      [{ lastView: 'year' }, 'year'],
+      [{ lastView: 'cal' }, 'cal'],
+      [{ defaultView: 'last' }, 'cal'],
+      [{ defaultView: 'last', lastView: 'year' }, 'year'],
+      [{ defaultView: 'cal', lastView: 'year' }, 'cal'],
+      [{ defaultView: 'year', lastView: 'cal' }, 'year'],
+      [{ defaultView: 'year' }, 'year'],
+    ]
+    for (const [p, want] of table) {
+      const got = resolveLaunchView(p)
+      if (got !== want) return `${JSON.stringify(p)} -> ${got}, wanted ${want}`
+    }
+    return null
+  }],
+
+  // Iteration C (2026-09-05): the year view's "not loaded" line reads this.
+  ['state: monthsNotLoaded lists absent and error months, is null while any loads, empty when the year is ready', async () => {
+    const savedAnchor = today()
+    const s = stubStorage(), g = stubGis([{ access_token: 'tk', expires_in: 3600 }])
+    // A 500 twice over: gcal retries a 5xx once, then the month lands in `error`.
+    const f = stubFetch([{ status: 500, delayMs: 20 }])
+    try {
+      const ready = (k: string): [string, unknown] => [k, { state: 'ready', events: [], fetchedAt: 1 }]
+      localStorage.setItem('bramwell.cache.v1', JSON.stringify({ v: 1, months: Object.fromEntries(['2026-07', '2026-08', '2026-09'].map(ready)) }))
+      _resetForTest(); configure({})
+      const partial = monthsNotLoaded(2026)
+      if (partial === null || partial.join() !== '1,2,3,4,5,6,10,11,12') return `partial: ${JSON.stringify(partial)}`
+      const other = monthsNotLoaded(2025)
+      if (other === null || other.length !== 12) return `an unloaded year: ${JSON.stringify(other)}`
+      _setAnchorForTest(civilToDay(2026, 1, 14))       // week 0 sits wholly in 2026-01
+      ensureMonthsFor([asWeek(0)])                       // 2026-01 -> loading, synchronously
+      if (monthState('2026-01') !== 'loading') return `not loading: ${monthState('2026-01')}`
+      if (monthsNotLoaded(2026) !== null) return 'not null while a month is loading'
+      await _settleForTest()
+      if (monthState('2026-01') !== 'error') return `after the 500s: ${monthState('2026-01')}`
+      const after = monthsNotLoaded(2026)
+      if (after === null || after.join() !== '1,2,3,4,5,6,10,11,12') return `error month not listed: ${JSON.stringify(after)}`
+      const all = Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, '0')}`)
+      localStorage.setItem('bramwell.cache.v1', JSON.stringify({ v: 1, months: Object.fromEntries(all.map(ready)) }))
+      _resetForTest(); configure({})
+      const full = monthsNotLoaded(2026)
+      if (full === null || full.length !== 0) return `ready year: ${JSON.stringify(full)}`
+    } finally { await signOut(); f.restore(); g.restore(); s.restore(); _resetForTest(); _setAnchorForTest(savedAnchor) }
     return null
   }],
 
