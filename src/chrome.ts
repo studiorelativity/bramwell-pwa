@@ -633,6 +633,11 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
       } else if (firstRun !== null) {
         firstRun.hidden = true
       }
+      // It covers the header visually but not in the tab order: from the body,
+      // Tab reached Year and Today behind it (ticket 4 probe, 2026-09-05).
+      // Every other child of the root is inert while it shows — a sibling
+      // rule, so chrome.ts learns nothing about what main.ts put there.
+      for (const c of root.children) if (c !== firstRun) c.toggleAttribute('inert', conn === 'first-run')
       // Read-only while stale: the FAB is the one write entry point chrome owns.
       // Live in demo: the write is refused with the demo message (SPEC), which is
       // the point. `n` in main.ts gates on the same two facts.

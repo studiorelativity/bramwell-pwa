@@ -502,7 +502,9 @@ html, body {
 }
 /* The two ink-filled controls would carry ink on ink: the surface token draws
    the same 1px inset ring there — still an existing token, nothing new. */
-:is(.set-fr-connect, .set-fab):focus-visible { outline-color: var(--surface); }
+/* `button.` for specificity: the list above carries `.dp-actions button`, so
+   :is() resolves it to (0,2,1) and a plain class pair would lose to it. */
+button.set-fr-connect:focus-visible, button.set-fab:focus-visible { outline-color: var(--surface); }
 
 /* ---------- year view ---------- */
 .yearview { flex: 1; overflow: auto; position: relative; }
