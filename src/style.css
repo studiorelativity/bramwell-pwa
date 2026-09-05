@@ -476,6 +476,18 @@ html, body {
 .set-cat-del[data-confirm] { background: color-mix(in srgb, var(--cat-err) 18%, transparent); }
 .set-cat-add { display: flex; align-items: center; gap: 8px; padding: 6px; }
 
+/* ---------- form fields under a finger ---------- */
+/* iOS Safari zooms the page to 16/12 = 1.33x when a field smaller than 16px
+   takes focus, and never zooms back (05 gate on the phone, 2026-09-05: both
+   views ran off the screen and the header title was cut at the left). 16px
+   under a coarse pointer is the cure; `maximum-scale=1` in the viewport meta
+   is not — Android honours it and kills pinch zoom (WCAG 1.4.4). Every
+   input, textarea and select the app renders is listed; desktop keeps 12px. */
+@media (pointer: coarse) {
+  .dp-form input, .dp-form textarea, .dp-form select,
+  .set-cat-lab, .set-cat-hex, .set-cat-cid { font-size: 16px; }
+}
+
 /* ---------- year view ---------- */
 .yearview { flex: 1; overflow: auto; position: relative; }
 .yr { display: flex; flex-direction: column; gap: 2px; padding: 8px; }
