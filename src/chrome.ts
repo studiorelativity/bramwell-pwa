@@ -203,8 +203,8 @@ function buildLanding(onConnect: () => void, onDemo: () => void): Landing {
   const foot = el('footer', 'ld-foot')
   const support = el('a', 'set-fr-support', 'Something wrong? Get in touch.')
   support.href = `mailto:${SUPPORT_EMAIL}`
-  const about = el('a', 'ld-link', 'About'); about.href = '/about.html'
-  const privacy = el('a', 'ld-link', 'Privacy'); privacy.href = '/privacy.html'
+  const about = el('a', 'ld-link', 'About'); about.href = '/about'
+  const privacy = el('a', 'ld-link', 'Privacy'); privacy.href = '/privacy'
   const links = el('nav', 'ld-links'); links.append(about, privacy, support)
   foot.append(links, el('span', 'ld-made', 'Studio Relativity · MIT'))
 

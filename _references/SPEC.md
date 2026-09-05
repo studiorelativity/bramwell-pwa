@@ -1177,7 +1177,7 @@ Google's verification for a sensitive scope (`calendar.events`) wants, in
 Cloud Console → Google Auth Platform (OAuth consent screen):
 - **Branding:** app name "Bramwell", user support email, a 120×120 logo
   (`public/icon-512.png` scaled), **app homepage** `https://bramwell.no.fail`,
-  **privacy policy** `https://bramwell.no.fail/privacy.html`, terms optional,
+  **privacy policy** `https://bramwell.no.fail/privacy`, terms optional,
   **authorized domain** `no.fail` — which must be verified for the same
   Google account in Search Console first — and a developer contact email.
 - **Scopes:** `calendar.events` only, with a one-paragraph justification
