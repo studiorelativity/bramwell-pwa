@@ -1,15 +1,207 @@
 // STAGE 03 — year view. 365/366 cells in one pass; no virtualization.
-import type { CalendarEvent, DayNumber, MonthKey } from './types.ts'
+// PLANNING LAYER (2026-09-05) — the plan strip, paint and erase modes. The
+// drag/paint/erase controller below is written against a host interface so
+// iteration D can mount it on the month grid (SPEC "Planning layer — Both
+// views"); it reads nothing from mount()'s closures.
+import type { CalendarEvent, DayNumber, EventDraft, MonthKey, WriteScope } from './types.ts'
 import { asDay, civilToDay, dayToCivil, monthKey, offsetOf } from './dates.ts'
 import { assignLanes, tline } from './render.ts'
-import { ensureMonthsFor, eventsForMonth, today, weekOf } from './state.ts'
+import { createEvent, deleteEvent, ensureMonthsFor, eventsForMonth, today, weekOf } from './state.ts'
+import { all as allCategories } from './categories.ts'
+import { daysUsed, firstBlocked, runOf } from './plan.ts'
+import type { Run } from './plan.ts'
 
-export type YearHost = { onPickDay(day: DayNumber): void }
+/** toast: write errors and refusals surface here, so year.ts never imports chrome.ts (SPEC). */
+export type YearHost = { onPickDay(day: DayNumber): void; toast(message: string): void }
 export type YearController = {
   setYear(y: number): void
   /** Repaint for a cache change; the caller filters by year first (SPEC). */
   invalidate(): void
+  /** Leave paint/erase mode, abandoning a run in progress. main.ts calls it
+   *  from showYear(false): leaving the year view exits the mode (SPEC). */
+  exitMode(): void
   destroy(): void
+}
+
+// ---- the planning controller: mode, pointer capture, run highlight, the
+// conflict check, the write, Escape. Host-agnostic by ruling (SPEC "Both views").
+
+export type PlanMode = { kind: 'paint'; cat: string } | { kind: 'erase' } | null
+
+export type PlanHost = {
+  /** Carries `data-mode` and the listeners. */
+  root: HTMLElement
+  /** Captures the pointer for the drag (the year grid host; D: the scroller). */
+  surface: HTMLElement
+  /** Pointer position -> the day cell under it, via elementFromPoint. */
+  cellAt(x: number, y: number): Element | null
+  /** Every mounted cell of the run, for the highlight. */
+  cellsIn(run: Run): Element[]
+  dayOf(cell: Element): DayNumber | null
+  /** The all-day event erase would remove from this cell, or null. */
+  laneZeroId(cell: Element): string | null
+  /** Events touching the run — duplicates across months are harmless (plan.ts). */
+  eventsIn(run: Run): CalendarEvent[]
+  /** Clipping range for a run (the displayed year here). */
+  bounds(): Run
+  createEvent(draft: EventDraft): Promise<unknown>
+  deleteEvent(id: string, scope: WriteScope): Promise<void>
+  toast(message: string): void
+  /** Fired after every mode change, including exit; the host suppresses its
+   *  hover panel and syncs its chips here. */
+  onModeChange(mode: PlanMode): void
+}
+
+export type PlanController = {
+  mode(): PlanMode
+  /** Select a mode, or deselect it when it is already the current one (the
+   *  strip is the mode switch: click a chip to paint, click it again to stop). */
+  toggle(mode: NonNullable<PlanMode>): void
+  exit(): void
+  destroy(): void
+}
+
+/** A pointer that travels further than this was a drag, not a tap. main.ts's
+ *  own TAP_SLOP, copied by value — main.ts is not importable from here. */
+const TAP_SLOP = 6
+
+/** "Aug 14" — the toast's day, locale-formatted at a display boundary (CONVENTIONS). */
+function shortDate(day: DayNumber): string {
+  return new Date(day * 86_400_000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+export function mountPlanner(host: PlanHost): PlanController {
+  let mode: PlanMode = null
+  let drag: { id: number; startDay: DayNumber; lastDay: DayNumber; x: number; y: number; cell: Element } | null = null
+  let painted = new Set<Element>()
+
+  function unpaint(cell: Element): void {
+    cell.removeAttribute('data-paint')
+    cell.removeAttribute('data-cat')
+  }
+  function clearPaint(): void {
+    for (const c of painted) unpaint(c)
+    painted = new Set()
+  }
+  /** Re-marks the run: cells leaving it are cleared, cells entering it are set.
+   *  `data-cat` rides along so the cell's `--cat` resolves through the same
+   *  `[data-cat]` rule the bars use (SPEC: the highlight is the bar fill). */
+  function highlight(run: Run, cat: string): void {
+    const next = new Set(host.cellsIn(run))
+    for (const c of painted) if (!next.has(c)) unpaint(c)
+    for (const c of next) {
+      c.setAttribute('data-paint', '')
+      c.setAttribute('data-cat', cat)
+    }
+    painted = next
+  }
+  function release(): void {
+    if (drag === null) return
+    try { host.surface.releasePointerCapture(drag.id) } catch { /* already released */ }
+    drag = null
+  }
+  function abandon(): void {
+    release()
+    clearPaint()
+  }
+  function set(m: PlanMode): void {
+    abandon()
+    mode = m
+    if (m === null) delete host.root.dataset['mode']
+    else host.root.dataset['mode'] = m.kind
+    host.onModeChange(m)
+  }
+  const same = (a: NonNullable<PlanMode>, b: NonNullable<PlanMode>): boolean =>
+    a.kind === b.kind && (a.kind !== 'paint' || b.kind !== 'paint' || a.cat === b.cat)
+
+  function onDown(e: PointerEvent): void {
+    if (mode === null || !e.isPrimary) return
+    const cell = host.cellAt(e.clientX, e.clientY)
+    if (cell === null) return
+    const day = host.dayOf(cell)
+    if (day === null) return
+    e.preventDefault()
+    abandon()
+    drag = { id: e.pointerId, startDay: day, lastDay: day, x: e.clientX, y: e.clientY, cell }
+    try { host.surface.setPointerCapture(e.pointerId) } catch { /* a synthetic pointer has no capture */ }
+    if (mode.kind === 'paint') {
+      const b = host.bounds()
+      highlight(runOf(day, day, b.start, b.end), mode.cat)
+    }
+  }
+  function onMove(e: PointerEvent): void {
+    if (drag === null || mode?.kind !== 'paint' || e.pointerId !== drag.id) return
+    // elementFromPoint on every move: after capture the event's own target is
+    // the surface, not the cell (SPEC "Paint mode").
+    const cell = host.cellAt(e.clientX, e.clientY)
+    if (cell === null) return
+    const day = host.dayOf(cell)
+    if (day === null) return
+    drag.lastDay = day
+    const b = host.bounds()
+    highlight(runOf(drag.startDay, day, b.start, b.end), mode.cat)
+  }
+  function onUp(e: PointerEvent): void {
+    if (drag === null || e.pointerId !== drag.id) return
+    const d = drag
+    release()
+    clearPaint()
+    if (mode === null) return
+    if (mode.kind === 'erase') {
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > TAP_SLOP) return   // a drag, not a click
+      const id = host.laneZeroId(d.cell)
+      if (id === null) return                                                // nothing under it: nothing happens
+      const one = { start: d.startDay, end: d.startDay }
+      const ev = host.eventsIn(one).find(x => x.id === id)
+      if (ev?.recurringEventId !== undefined) { host.toast('Recurring — edit it from the month view'); return }
+      void host.deleteEvent(id, 'instance').catch(err => host.toast(errorMessage(err)))
+      return
+    }
+    const cat = allCategories().find(c => c.name === (mode as { cat: string }).cat)
+    if (cat === undefined) return                                            // deleted mid-mode; the strip exits it on repaint
+    const b = host.bounds()
+    const run = runOf(d.startDay, d.lastDay, b.start, b.end)
+    // The conflict rule: refused BEFORE the optimistic apply, unless the chip
+    // itself blocks — that is how blackouts are laid down (SPEC).
+    if (cat.blocks !== true) {
+      const blocking = new Set(allCategories().filter(c => c.blocks === true).map(c => c.name))
+      const hit = firstBlocked(run, host.eventsIn(run), blocking)
+      if (hit !== null) { host.toast(`${shortDate(hit)} is blocked`); return }
+    }
+    void host.createEvent({
+      title: cat.label, category: cat.name, allDay: true, start: run.start, end: run.end, repeat: 'none',
+    }).catch(err => host.toast(errorMessage(err)))
+  }
+  function onCancel(e: PointerEvent): void {
+    if (drag !== null && e.pointerId === drag.id) abandon()
+  }
+  function onKey(e: KeyboardEvent): void {
+    if (e.key === 'Escape' && mode !== null) set(null)    // mid-drag: abandon() inside set()
+  }
+
+  host.root.addEventListener('pointerdown', onDown)
+  host.root.addEventListener('pointermove', onMove)
+  host.root.addEventListener('pointerup', onUp)
+  host.root.addEventListener('pointercancel', onCancel)
+  document.addEventListener('keydown', onKey)
+
+  return {
+    mode: () => mode,
+    toggle(m) { set(mode !== null && same(mode, m) ? null : m) },
+    exit() { if (mode !== null) set(null) },
+    destroy() {
+      set(null)
+      host.root.removeEventListener('pointerdown', onDown)
+      host.root.removeEventListener('pointermove', onMove)
+      host.root.removeEventListener('pointerup', onUp)
+      host.root.removeEventListener('pointercancel', onCancel)
+      document.removeEventListener('keydown', onKey)
+    },
+  }
 }
 
 const WDAY = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
@@ -37,8 +229,16 @@ function eventsOn(day: DayNumber): CalendarEvent[] {
     .sort((a, b) => Number(!a.allDay) - Number(!b.allDay) || (a.startMin ?? 0) - (b.startMin ?? 0) || (a.id < b.id ? -1 : 1))
 }
 
+/** Coarse pointer: the panel carries "Tap again to open" and is itself tappable
+ *  (SPEC "Year view — Touch", amended 2026-09-05). */
+const coarse = (): boolean => window.matchMedia('(hover: none)').matches
+
 export function mount(root: HTMLElement, host: YearHost): YearController {
   let year = dayToCivil(today()).y
+  // The strip sits between the header and the grid, always visible in the year
+  // view (SPEC "The plan strip"). Its own child so a grid rebuild never touches it.
+  const strip = document.createElement('div')
+  strip.className = 'planstrip'
   // The grid is rebuilt as a whole, but only THIS child is replaced, so the
   // panel beside it survives a repaint (SPEC "Year view").
   const gridHost = document.createElement('div')
@@ -46,11 +246,114 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
   const panel = document.createElement('div')
   panel.className = 'yrpanel'
   panel.hidden = true
-  root.append(gridHost, panel)
+  root.append(strip, gridHost, panel)
   /** Day the panel currently shows; null when hidden. */
   let shown: DayNumber | null = null
 
+  const yearBounds = (): Run => ({ start: civilToDay(year, 1, 1), end: civilToDay(year, 12, 31) })
+  /** Every event of the displayed year, months concatenated. A boundary
+   *  crosser appears twice; plan.ts's counts are distinct-day sets, so that
+   *  is harmless and no dedupe is done here (documented on daysUsed). */
+  function eventsIn(run: Run): CalendarEvent[] {
+    const out: CalendarEvent[] = []
+    let key: MonthKey | null = null
+    for (let d = run.start; d <= run.end; d = asDay(d + 1)) {
+      const k = monthKey(d)
+      if (k === key) continue
+      key = k
+      out.push(...eventsForMonth(k))
+    }
+    return out
+  }
+
+  const planner = mountPlanner({
+    root,
+    surface: gridHost,
+    cellAt: (x, y) => document.elementFromPoint(x, y)?.closest('.yrcell[data-day]') ?? null,
+    cellsIn: run => {
+      const out: Element[] = []
+      for (let d = run.start; d <= run.end; d = asDay(d + 1)) {
+        const c = cellFor(d)
+        if (c !== null) out.push(c)
+      }
+      return out
+    },
+    dayOf: cell => {
+      const d = (cell as HTMLElement).dataset['day']
+      return d === undefined ? null : asDay(Number(d))
+    },
+    laneZeroId: cell => (cell as HTMLElement).dataset['lane0'] ?? null,
+    eventsIn,
+    bounds: yearBounds,
+    createEvent,
+    deleteEvent,
+    toast: m => host.toast(m),
+    onModeChange: m => {
+      hidePanel()          // suppressed for the whole mode: it would flicker under a drag (SPEC)
+      syncChips(m)
+    },
+  })
+
+  function syncChips(m: PlanMode): void {
+    for (const chip of strip.querySelectorAll<HTMLElement>('.planchip')) {
+      const on = m !== null && (m.kind === 'erase'
+        ? chip.dataset['erase'] !== undefined
+        : chip.dataset['cat'] === m.cat)
+      chip.setAttribute('aria-pressed', String(on))
+    }
+  }
+
+  /** One chip per category plus Erase; figures from daysUsed over the displayed
+   *  year (SPEC "The plan strip"). Rebuilt on every build() — 365 days × 11
+   *  categories is cheap — and BEFORE build()'s width guard, so a budget set
+   *  in Settings while the year view is hidden still lands on the next show. */
+  function buildStrip(): void {
+    const b = yearBounds()
+    const events = eventsIn(b)
+    const frag = document.createDocumentFragment()
+    const cats = allCategories()
+    for (const c of cats) {
+      const chip = document.createElement('button')
+      chip.type = 'button'
+      chip.className = 'planchip'
+      chip.dataset['cat'] = c.name
+      chip.setAttribute('aria-pressed', 'false')
+      const dot = document.createElement('span'); dot.className = 'planchip-dot'
+      const lbl = document.createElement('span'); lbl.className = 'planchip-lbl'; lbl.textContent = c.label
+      chip.append(dot, lbl)
+      const used = daysUsed(events, c.name, b.start, b.end)
+      // Budgeted: "used / budget". Otherwise the count alone, omitted at zero
+      // so a fresh install is not a row of zeros (ruling, iteration A).
+      if (c.budgetDays !== undefined || used > 0) {
+        const fig = document.createElement('span')
+        fig.className = 'planchip-fig'
+        fig.textContent = c.budgetDays === undefined ? String(used) : `${used} / ${c.budgetDays}`
+        // Over budget: --ink-strong at 620 and nothing else (SPEC).
+        if (c.budgetDays !== undefined && used > c.budgetDays) fig.dataset['over'] = ''
+        chip.append(fig)
+      }
+      chip.addEventListener('click', () => planner.toggle({ kind: 'paint', cat: c.name }))
+      frag.append(chip)
+    }
+    const erase = document.createElement('button')
+    erase.type = 'button'
+    erase.className = 'planchip'
+    erase.dataset['erase'] = ''
+    erase.setAttribute('aria-pressed', 'false')
+    const elbl = document.createElement('span'); elbl.className = 'planchip-lbl'; elbl.textContent = 'Erase'
+    erase.append(elbl)
+    erase.addEventListener('click', () => planner.toggle({ kind: 'erase' }))
+    frag.append(erase)
+    strip.replaceChildren(frag)
+    // A category deleted in Settings while it was the paint chip: exit rather
+    // than paint with a name nothing resolves.
+    const m = planner.mode()
+    if (m?.kind === 'paint' && !cats.some(c => c.name === m.cat)) planner.exit()
+    syncChips(planner.mode())
+  }
+
   function build(): void {
+    buildStrip()
     // A hidden root (main.ts hides the year view under the calendar) reads
     // clientWidth 0, and columnsFor(0) maps to a real column count (7) —
     // not an error, so nothing downstream would notice it is wrong. A
@@ -165,7 +468,7 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
       })
       const lastDay = trackOfDay.size > 0 ? Math.max(...trackOfDay.keys()) : 0
 
-      const items: { from: number; to: number; id: string; cat: string }[] = []
+      const items: { from: number; to: number; id: string; cat: string; allDay: boolean }[] = []
       const seen = new Set<string>()
       const titles = new Map<number, { title: string; cat: string }[]>()
       rowCells.forEach((cell, i) => {
@@ -186,7 +489,7 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
           if (seen.has(ev.id)) continue
           seen.add(ev.id)
           const endDay = ev.allDay ? Math.min(ev.end, lastDay) : day
-          items.push({ from: i, to: trackOfDay.get(endDay) ?? i, id: ev.id, cat: ev.category })
+          items.push({ from: i, to: trackOfDay.get(endDay) ?? i, id: ev.id, cat: ev.category, allDay: ev.allDay })
         }
       })
 
@@ -194,9 +497,13 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
       // grid-template-columns is the recorded KNOWN LIMITATION (SPEC "Scroll
       // engine API"), which is why the stretch is static and hover feedback is
       // the compositor-only lift instead.
+      // 2.2fr at 28 columns; 1.35fr at 14 — measured on a 375px device, where
+      // a busy row at 2.2fr crushed its plain days (SPEC "Planning layer",
+      // retuned 2026-09-05). Still off at 7.
+      const STRETCH = wide ? '2.2fr' : '1.35fr'
       row.style.setProperty('--yr-cols', rowCells.map(el =>
         el.classList.contains('yrspine') ? SPINE_W
-          : stretchOn && el.dataset['hasEv'] !== undefined ? '2.2fr'
+          : stretchOn && el.dataset['hasEv'] !== undefined ? STRETCH
             : '1fr').join(' '))
 
       // Inline titles only where a stretched cell is actually wide enough.
@@ -235,8 +542,22 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
         if (pf >= 0) layer.append(tline('tline-past', pf, pt))
         if (ff >= 0) layer.append(tline('tline-future', ff, ft))
       }
+      // Erase's target per cell: the lowest-lane ALL-DAY bar among the drawn
+      // lanes (SPEC "Erase": "the ONE all-day event under it"; a timed event
+      // can hold lane 0 in this grid, and erase does not touch those).
+      const laneOf = new Map<HTMLElement, number>()
       for (const it of assignLanes(items)) {
         if (it.lane >= MAX_LANES) continue
+        if (it.allDay) {
+          for (let i = it.from; i <= it.to; i++) {
+            const c = rowCells[i]
+            if (c === undefined || c.dataset['day'] === undefined) continue
+            const have = laneOf.get(c)
+            if (have !== undefined && have <= it.lane) continue
+            laneOf.set(c, it.lane)
+            c.dataset['lane0'] = it.id
+          }
+        }
         const bar = document.createElement('div')
         bar.className = 'yrbar'
         bar.dataset['cat'] = it.cat
@@ -298,6 +619,12 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
         frag.append(row)
       }
     }
+    if (coarse()) {
+      const open = document.createElement('div')
+      open.className = 'yrpanel-open'
+      open.textContent = 'Tap again to open'
+      frag.append(open)
+    }
     panel.replaceChildren(frag)
   }
 
@@ -326,6 +653,7 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
   }
 
   function onOver(e: PointerEvent): void {
+    if (planner.mode() !== null) return    // paint/erase: no panel under a drag (SPEC)
     // Touch raises the panel from the click flow below, not from the
     // pointerover that precedes a tap — otherwise the first tap would count
     // as the second.
@@ -338,10 +666,19 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
   /** Touch: first tap raises the panel, a second tap on the SAME day opens
    *  it, a tap elsewhere dismisses. Pointer: a click opens. (SPEC) */
   function onClick(e: Event): void {
+    // In a mode the pointer sequence owns the cell; the strip's chips have
+    // their own listeners and their clicks land here afterwards.
+    if (planner.mode() !== null) return
+    // Touch: the panel is tappable and opens the shown day — the same as the
+    // second tap on the cell (SPEC, amended 2026-09-05). Under hover it is
+    // pointer-events: none and this branch is unreachable.
+    if (panel.contains(e.target as Node)) {
+      if (shown !== null) host.onPickDay(shown)
+      return
+    }
     const hit = cellOf(e)
     if (hit === null) { hidePanel(); return }
-    const coarse = window.matchMedia('(hover: none)').matches
-    if (coarse && shown !== hit.day) { showPanel(hit.cell, hit.day); return }
+    if (coarse() && shown !== hit.day) { showPanel(hit.cell, hit.day); return }
     host.onPickDay(hit.day)
   }
 
@@ -358,7 +695,9 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
       build()
     },
     invalidate() { build() },
+    exitMode() { planner.exit() },
     destroy() {
+      planner.destroy()
       root.removeEventListener('click', onClick)
       root.removeEventListener('pointerover', onOver)
       root.removeEventListener('pointerleave', onLeave)

@@ -594,3 +594,54 @@ html, body {
 .yrp-ev .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cat); flex: none; }
 .yrp-ev .at { color: var(--ink-dim); font-variant-numeric: tabular-nums; flex: none; }
 .yrp-ev .ttl { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* ---------- planning layer (2026-09-05) ---------- */
+/* The strip: one row of chips between the header and the grid. On a phone it
+   scrolls sideways with no scrollbar chrome; the grid below is untouched. */
+.planstrip {
+  display: flex; gap: 6px; padding: 8px 8px 0; flex: none;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.planstrip::-webkit-scrollbar { display: none; }
+/* A chip is a resting tile: legend, ledger and palette in one (DECISIONS "The
+   strip is the mode switch"). --cat resolves through the [data-cat] rule the
+   bars use; Erase has none and falls back to the neutral ink. */
+.planchip {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  font: inherit; font-size: 12px; color: var(--ink);
+  background: var(--band-a); border: 1px solid transparent; border-radius: 999px;
+  padding: 4px 10px; box-shadow: var(--el-rest); white-space: nowrap;
+}
+.planchip[aria-pressed="true"] {
+  border-color: var(--cat, var(--ink-dim)); font-weight: 620;
+  background: color-mix(in srgb, var(--cat, var(--ink-dim)) 14%, var(--band-a));
+}
+.planchip[data-erase] { color: var(--ink-dim); }
+.planchip[data-erase][aria-pressed="true"] { color: var(--ink); }
+.planchip-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cat); flex: none; }
+.planchip-fig { color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+/* Over budget: --ink-strong at 620 and nothing else — no reserved hue (SPEC). */
+.planchip-fig[data-over] { color: var(--ink-strong); font-weight: 620; }
+/* The run highlight: the category's bar fill (16%) laid OVER the tile as an
+   image layer, so the band colour stays under it — the same color-mix the
+   .bar/.yrbar fills use. It snaps by ruling; no transition here or in motion.css. */
+.yrcell[data-paint] {
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--cat) 16%, transparent),
+    color-mix(in srgb, var(--cat) 16%, transparent));
+}
+/* Only while a mode is on: a finger paints instead of scrolling; exiting
+   restores scrolling (SPEC "Paint mode"). */
+.yearview[data-mode] .yr { touch-action: none; cursor: crosshair; }
+/* Settings: the planning line under each category row (chrome.ts buildColors). */
+.plan-row { display: flex; align-items: center; gap: 8px; padding: 0 6px 8px 12px; font-size: 12px; color: var(--ink-dim); }
+.plan-bud {
+  font: inherit; font-size: 12px; color: var(--ink); background: var(--band-b-end);
+  border: 0; border-radius: 8px; padding: 5px 8px; width: 56px;
+}
+.plan-unit { flex: 1; }
+/* Touch (SPEC "Year view — Touch", amended 2026-09-05): the panel says so and
+   is tappable. Under hover it stays pointer-events: none (the rule above). */
+.yrpanel-open { color: var(--ink-dim); font-size: 12px; margin-top: 6px; }
+@media (hover: none) { .yrpanel { pointer-events: auto; } }

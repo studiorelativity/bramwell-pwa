@@ -522,6 +522,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // collapses, scrolling does not force-collapse) are silent on view
     // switches; a day expanded in a view you have left is not one of them.
     if (on) closeDay()
+    if (!on) yearCtl?.exitMode()   // leaving the year view exits paint/erase mode (SPEC "Planning layer")
     yearRoot.hidden = !on
     scroller.hidden = on
     modeBtn.textContent = on ? 'Month' : 'Year'
@@ -562,7 +563,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
         showYear(false)
         ctl.goToWeek(state.weekOf(d), false)   // onDock restores the range label
         openDayAt(d)
-      } })
+      }, toast: chrome.toast })
     }
   }
   modeBtn.addEventListener('click', () => {
