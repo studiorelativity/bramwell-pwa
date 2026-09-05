@@ -603,8 +603,22 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // (SPEC "Settings", amended 2026-09-05). Written before the DOM flips:
     // nothing below can throw, but the pref is the durable fact.
     state.savePrefs({ ...state.prefs(), lastView: on ? 'year' : 'cal' })
-    yearRoot.hidden = !on
-    scroller.hidden = on
+    // The incoming view enters through motion.css's shared utility (SPEC
+    // "Motion"): `.enter` (hidden at rest), a forced reflow so the browser
+    // commits that style, then [data-in] — --t-base, no stagger, because
+    // nothing here sets --i. The outgoing view is simply hidden; its enter
+    // state is cleared so the next switch back starts from rest again.
+    // Under reduced motion the utility collapses to 80ms of opacity and the
+    // switch still happens: visibility is `hidden`, never the transition.
+    const incoming = on ? yearRoot : scroller
+    const outgoing = on ? scroller : yearRoot
+    outgoing.hidden = true
+    outgoing.classList.remove('enter')
+    outgoing.removeAttribute('data-in')
+    incoming.hidden = false
+    incoming.classList.add('enter')
+    void incoming.offsetWidth
+    incoming.dataset['in'] = ''
     modeBtn.textContent = on ? 'Month' : 'Year'
     modeBtn.setAttribute('aria-pressed', String(on))
     prevY.hidden = !on
