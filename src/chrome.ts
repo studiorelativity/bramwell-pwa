@@ -18,8 +18,12 @@ const RECONNECT_GRACE_MS = 2500
 const SUPPORT_EMAIL = 'studiorelativity@gmail.com'
 
 /** first-run = signed out AND cold. stale = signed out over a warm cache: the
- *  calendar renders read-only and the pill offers the way back. connected = avatar. */
-type Conn = 'first-run' | 'stale' | 'connected'
+ *  calendar renders read-only and the pill offers the way back. connected = avatar.
+ *  demo (stage 06) = the in-memory seed: checked FIRST, because seeded months are
+ *  `ready` and would otherwise read as `stale` — a Reconnect pill after the grace
+ *  and a dead FAB, when the demo wants its own pill at once and a live FAB (a
+ *  rejected save is the demo's whole lesson). */
+type Conn = 'first-run' | 'stale' | 'connected' | 'demo'
 
 export type ChromeHost = {
   /** The `.hdr-avatar` span main.ts reserves. Chrome fills it and nothing else does. */
@@ -41,6 +45,14 @@ export type ChromeHost = {
    *  and needs a moment to release it. Without this the held repaint never
    *  runs and syncConnection never re-checks auth. */
   onSheetClosed(): void
+  /** "Try the demo" was pressed. main.ts calls state.enableDemo(), re-runs
+   *  configure() from the demo prefs, and repaints both views; chrome then
+   *  re-syncs itself. One direction only: chrome never calls enableDemo. */
+  enterDemo(): void
+  /** state.exitDemo() has just run (the pill, or Connect anywhere). main.ts
+   *  re-runs configure() from the real prefs and repaints (SPEC "Demo mode":
+   *  leaving demo re-runs configure()). */
+  onDemoExit(): void
 }
 
 export type ChromeController = {
@@ -90,7 +102,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return n
 }
 
-function buildFirstRun(onConnect: () => void): HTMLElement {
+function buildFirstRun(onConnect: () => void, onDemo: () => void): HTMLElement {
   const root = el('div')
   root.id = 'firstrun'
   const card = el('div', 'set-fr-card')
@@ -112,12 +124,12 @@ function buildFirstRun(onConnect: () => void): HTMLElement {
   connect.type = 'button'
   connect.addEventListener('click', onConnect)
 
-  // Stage 06 owns demo mode; state.enableDemo() throws today. Shipped visibly
-  // disabled rather than omitted, so the gate judges the real composition.
+  // SPEC "Demo mode": the no-sign-in path. Nothing is persisted, so a reload
+  // lands right back here.
   const demo = el('button', 'set-fr-demo', 'Try the demo')
+  demo.id = 'fr-demo'
   demo.type = 'button'
-  demo.disabled = true
-  const demoNote = el('p', 'set-fr-note', 'Demo mode arrives in a later release.')
+  demo.addEventListener('click', onDemo)
 
   const privacy = el('p', 'set-fr-note',
     'Events live only in your Google Calendar. Bramwell keeps no copy of its own.')
@@ -125,7 +137,7 @@ function buildFirstRun(onConnect: () => void): HTMLElement {
   const support = el('a', 'set-fr-support', 'Something wrong? Get in touch.')
   support.href = `mailto:${SUPPORT_EMAIL}`
 
-  card.append(mark, name, desc, lines, connect, demo, demoNote, privacy, support)
+  card.append(mark, name, desc, lines, connect, demo, privacy, support)
   root.append(card)
   return root
 }
@@ -523,7 +535,17 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
 
   let firstRun: HTMLElement | null = null
 
+  /** SPEC "Demo mode": the pill, "or Connect anywhere", exits demo and starts
+   *  sign-in. Done here, at the one place every Connect funnels through, so the
+   *  first-run button and the reconnect pill need no demo knowledge of their own.
+   *  The resync lands the shell on first-run (cold) or stale (warm) behind the
+   *  popup, rather than leaving the demo pill up while sign-in is pending. */
   function connect(): void {
+    if (state.isDemo()) {
+      state.exitDemo()
+      host.onDemoExit()
+      api.syncConnection()
+    }
     void auth.signIn().then(
       () => {
         leftDeliberately = false   // a session began; outrank nothing now.
@@ -537,6 +559,26 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
     const slot = host.avatarSlot
     slot.replaceChildren()
     if (conn === 'first-run') return
+    if (conn === 'demo') {
+      // The pill in the avatar's slot (SPEC). It reuses .set-pill and carries
+      // data-demo for session C to colour; today it inherits Reconnect's paint,
+      // which reads as "not connected" — true. Settings stays reachable through
+      // a dot-less avatar beside it: SPEC says customization works in memory,
+      // and the avatar is the only door to the sheet. No dot — the dot "exists
+      // only in the connected state" (style.css).
+      const pill = el('button', 'set-pill', 'Demo · Connect')
+      pill.id = 'demo-pill'
+      pill.type = 'button'
+      pill.dataset['demo'] = ''
+      pill.addEventListener('click', connect)
+      const av = el('button', 'set-avatar')
+      av.id = 'avatar'
+      av.type = 'button'
+      av.setAttribute('aria-label', 'Settings')
+      av.addEventListener('click', () => toggleSheet())
+      slot.append(pill, av)
+      return
+    }
     if (conn === 'stale') {
       if (!graced) return                       // the 2.5s grace: do not cry wolf
       const pill = el('button', 'set-pill', 'Reconnect')
@@ -561,7 +603,8 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
     syncConnection(): void {
       // leftDeliberately outranks warmCache(): SPEC "Settings" — sign-out returns
       // to first-run, even though the cache the user leaves behind is still warm.
-      const next: Conn = auth.isSignedIn() ? 'connected'
+      const next: Conn = state.isDemo() ? 'demo'
+        : auth.isSignedIn() ? 'connected'
         : leftDeliberately ? 'first-run'
         : host.warmCache() ? 'stale'
         : 'first-run'
@@ -575,13 +618,18 @@ export function mount(root: HTMLElement, host: ChromeHost): ChromeController {
       }
       // The first-run screen never covers a warm cache (SPEC).
       if (conn === 'first-run') {
-        if (firstRun === null) { firstRun = buildFirstRun(connect); root.append(firstRun) }
+        if (firstRun === null) {
+          firstRun = buildFirstRun(connect, () => { host.enterDemo(); api.syncConnection() })
+          root.append(firstRun)
+        }
         firstRun.hidden = false
       } else if (firstRun !== null) {
         firstRun.hidden = true
       }
       // Read-only while stale: the FAB is the one write entry point chrome owns.
-      fab.disabled = conn !== 'connected'
+      // Live in demo: the write is refused with the demo message (SPEC), which is
+      // the point. `n` in main.ts gates on the same two facts.
+      fab.disabled = conn !== 'connected' && conn !== 'demo'
       paintSlot()
     },
     isSheetOpen(): boolean { return sheet !== null && !sheet.hidden },

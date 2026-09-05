@@ -40,6 +40,20 @@ if (new URLSearchParams(location.search).has('selftest')) {
   pre.dataset['selftest'] = passed === results.length ? 'pass' : 'fail'
   app.replaceChildren(pre)
 } else {
+  // SPEC "Demo mode": `?demo` is an entry, not a state. The flag lives in memory
+  // (state.ts) and the URL is scrubbed here, so a reload of what began as /?demo
+  // lands wherever storage says — on first-run, in a private window — rather than
+  // re-entering the demo. Before scroll.mount: its first range change calls
+  // ensureMonthsFor, which must already be inert.
+  const params = new URLSearchParams(location.search)
+  if (params.has('demo')) {
+    state.enableDemo()
+    applyTheme()                              // configure() from the demo prefs
+    params.delete('demo')
+    const rest = params.toString()
+    history.replaceState(null, '', location.pathname + (rest === '' ? '' : `?${rest}`) + location.hash)
+  }
+
   const hdr = document.createElement('div')
   hdr.className = 'hdr'
   const range = document.createElement('span')
@@ -441,6 +455,26 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // no-op when nothing is held, and re-runs syncConnection so auth checked
     // behind a closed sheet is not lost.
     onSheetClosed: () => releaseHeldRepaint(),
+    // Demo entry from the first-run button. The same three moves as the ?demo
+    // path above plus a repaint: the seed replaced the cache underneath a
+    // window that has already rendered, and lastRange is reset so the (inert)
+    // month loading and the range label re-run over the seeded months.
+    enterDemo: () => {
+      state.enableDemo()
+      applyTheme()
+      lastRange = { first: NaN, last: NaN }
+      ctl.invalidate()
+      yearCtl?.invalidate()
+    },
+    // Leaving demo re-runs configure() from prefs (SPEC "Demo mode") — the real
+    // ones again, now that state.exitDemo() has re-read storage — and repaints
+    // from the real cache. Same re-arm as onConnected, for the same reason.
+    onDemoExit: () => {
+      applyTheme()
+      lastRange = { first: NaN, last: NaN }
+      ctl.invalidate()
+      yearCtl?.invalidate()
+    },
   })
 
   day.configure({
@@ -493,7 +527,9 @@ if (new URLSearchParams(location.search).has('selftest')) {
     if (t instanceof HTMLElement && (t.isContentEditable || /^(?:INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
     if (openDay !== null) return
     if (chromeCtl.isSheetOpen()) return   // the sheet is transient UI; n must not fire behind it
-    if (!chromeCtl.isConnected()) return  // n is the FAB's keyboard twin; gate on the same fact
+    // n is the FAB's keyboard twin; gate on the same facts (chrome.ts: live when
+    // connected, and live in demo where the save is refused with the demo message).
+    if (!chromeCtl.isConnected() && !state.isDemo()) return
     e.preventDefault()
     addHere()
   })
@@ -633,7 +669,10 @@ if (new URLSearchParams(location.search).has('selftest')) {
   // decides first-run vs the reconnect pill, and its failure is what arms
   // state.ts's auth gate. A signed-out phone cannot recover from here — the
   // popup needs a gesture — so the pill and Connect are the only ways back.
-  void auth.getToken().then(
+  // Skipped in demo: a browser that IS quietly signed in would otherwise flip
+  // to `connected` mid-demo and pull the real calendar over the seed. Leaving
+  // demo goes through connect(), which is its own gesture.
+  if (!state.isDemo()) void auth.getToken().then(
     () => {
       state.clearAuthGate()
       chromeCtl.syncConnection()
@@ -662,6 +701,8 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // reach once signed in. Same justification as `openSheet()` on
     // ChromeController. Stripped from production builds.
     // why: augmenting window for a dev-only test seam, without widening the global type
-    ;(window as unknown as { bramwell: unknown }).bramwell = { ctl, day, chrome: chromeCtl, addHere }
+    // `state` joins the seam for stage 06: the demo probes read isDemo() and the
+    // seeded months directly rather than inferring them from paint.
+    ;(window as unknown as { bramwell: unknown }).bramwell = { ctl, day, chrome: chromeCtl, addHere, state }
   }
 }
