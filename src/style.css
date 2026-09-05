@@ -488,6 +488,22 @@ html, body {
   .set-cat-lab, .set-cat-hex, .set-cat-cid { font-size: 16px; }
 }
 
+/* ---------- keyboard focus ---------- */
+/* The existing hover ring — --ring, 1px, inset — is the focus indicator on
+   every control; nothing new. An outline, not a box-shadow, so a control keeps
+   its own elevation and border underneath, and only under :focus-visible so a
+   pointer press never paints it. The day tiles are not focusable and so not
+   listed. */
+:is(.hdr button, .set-fab, .set-avatar, .set-pill, .set-btn, .set-segb, .set-cat-del,
+    .set-cat-lab, .set-cat-cid, .set-cat-hex, .set-fr-connect, .set-fr-demo, .set-fr-support,
+    .dp-chip, .dp-add, .dp-ev, .dp-actions button,
+    .dp-form input, .dp-form textarea, .dp-form select):focus-visible {
+  outline: 1px solid var(--ring); outline-offset: -1px;
+}
+/* The two ink-filled controls would carry ink on ink: the surface token draws
+   the same 1px inset ring there — still an existing token, nothing new. */
+:is(.set-fr-connect, .set-fab):focus-visible { outline-color: var(--surface); }
+
 /* ---------- year view ---------- */
 .yearview { flex: 1; overflow: auto; position: relative; }
 .yr { display: flex; flex-direction: column; gap: 2px; padding: 8px; }
