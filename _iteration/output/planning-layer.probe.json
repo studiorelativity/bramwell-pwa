@@ -1,0 +1,249 @@
+{
+  "desktop-light": {
+    "modeBtnHit": {
+      "found": true,
+      "sized": true,
+      "hits": true
+    },
+    "chipCount": 7,
+    "chipOrder": [
+      "work",
+      "personal",
+      "financial",
+      "vacation",
+      "blackout",
+      "other",
+      "erase"
+    ],
+    "chipHits": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "figVacation": "5 / 30",
+    "figBlackout": "3",
+    "figWork": "1",
+    "figPersonalAbsent": true,
+    "stripAboveGrid": true,
+    "stretchDesktop": true,
+    "hoverPanelShown": true,
+    "hoverPanelPointerEvents": "none",
+    "hoverPanelHasTapLine": false,
+    "modeAfterChip": "paint",
+    "chipPressed": "true",
+    "touchActionInMode": "none",
+    "cursorInMode": "crosshair",
+    "panelSuppressedInMode": true,
+    "blockedMidDragPainted": 5,
+    "blockedMidDragCats": [
+      "vacation"
+    ],
+    "blockedMidDragTint": true,
+    "blockedToast": [
+      "Aug 13 is blocked"
+    ],
+    "blockedPaintCleared": 0,
+    "blockedNothingWritten": true,
+    "blockedFigUnchanged": true,
+    "allowedMidDragPainted": 5,
+    "allowedPaintCleared": 0,
+    "allowedHasEvOptimistic": true,
+    "allowedFigOptimistic": "10 / 30",
+    "allowedToastBeforeYield": [],
+    "allowedToastAfterFrames": [
+      "VITE_GOOGLE_CLIENT_ID is not set"
+    ],
+    "allowedRollbackFig": "5 / 30",
+    "allowedRollbackToast": [
+      "VITE_GOOGLE_CLIENT_ID is not set"
+    ],
+    "modeAfterEscape": null,
+    "touchActionAfterEscape": "auto",
+    "chipsAllUnpressed": true,
+    "midDragPaintedBeforeEscape": 5,
+    "midDragPaintedAfterEscape": 0,
+    "midDragEscapeMode": null,
+    "midDragEscapeToasts": [],
+    "eraseChipHit": {
+      "found": true,
+      "sized": true,
+      "hits": true
+    },
+    "modeErase": "erase",
+    "recLane0": "rec-1",
+    "eraseRecurringToast": [
+      "Recurring — edit it from the month view"
+    ],
+    "eraseRecurringStillThere": true,
+    "eraseEmptyNoToast": true,
+    "vacLane0": "vac-5",
+    "eraseDragIgnored": true,
+    "eraseRunGoneOptimistic": true,
+    "eraseFigOptimistic": "0 / 30",
+    "eraseRollbackFig": "5 / 30",
+    "blackoutOverPlanToastBeforeYield": [],
+    "blackoutOverPlanFigOptimistic": "8",
+    "blackoutOverPlanToastAfter": [
+      "VITE_GOOGLE_CLIENT_ID is not set"
+    ],
+    "blackoutOverPlanFigAfterRollback": "3",
+    "modeBeforeLeave": "paint",
+    "modeAfterLeave": null,
+    "yearHiddenAfterLeave": true
+  },
+  "desktop-dark": {
+    "modeBtnHit": {
+      "found": true,
+      "sized": true,
+      "hits": true
+    },
+    "chipCount": 7,
+    "chipOrder": [
+      "work",
+      "personal",
+      "financial",
+      "vacation",
+      "blackout",
+      "other",
+      "erase"
+    ],
+    "chipHits": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "figVacation": "5 / 30",
+    "figBlackout": "3",
+    "figWork": "1",
+    "figPersonalAbsent": true,
+    "stripAboveGrid": true,
+    "stretchDesktop": true,
+    "hoverPanelShown": true,
+    "hoverPanelPointerEvents": "none",
+    "hoverPanelHasTapLine": false,
+    "modeAfterChip": "paint",
+    "chipPressed": "true",
+    "touchActionInMode": "none",
+    "cursorInMode": "crosshair",
+    "panelSuppressedInMode": true,
+    "blockedMidDragPainted": 5,
+    "blockedMidDragCats": [
+      "vacation"
+    ],
+    "blockedMidDragTint": true,
+    "blockedToast": [
+      "Aug 13 is blocked"
+    ],
+    "blockedPaintCleared": 0,
+    "blockedNothingWritten": true,
+    "blockedFigUnchanged": true,
+    "allowedMidDragPainted": 5,
+    "allowedPaintCleared": 0,
+    "allowedHasEvOptimistic": true,
+    "allowedFigOptimistic": "10 / 30",
+    "allowedToastBeforeYield": [],
+    "allowedToastAfterFrames": [
+      "VITE_GOOGLE_CLIENT_ID is not set"
+    ],
+    "allowedRollbackFig": "5 / 30",
+    "allowedRollbackToast": [
+      "VITE_GOOGLE_CLIENT_ID is not set"
+    ],
+    "modeAfterEscape": null,
+    "touchActionAfterEscape": "auto",
+    "chipsAllUnpressed": true,
+    "midDragPaintedBeforeEscape": 5,
+    "midDragPaintedAfterEscape": 0,
+    "midDragEscapeMode": null,
+    "midDragEscapeToasts": [],
+    "eraseChipHit": {
+      "found": true,
+      "sized": true,
+      "hits": true
+    },
+    "modeErase": "erase",
+    "recLane0": "rec-1",
+    "eraseRecurringToast": [
+      "Recurring — edit it from the month view"
+    ],
+    "eraseRecurringStillThere": true,
+    "eraseEmptyNoToast": true,
+    "vacLane0": "vac-5",
+    "eraseDragIgnored": true,
+    "eraseRunGoneOptimistic": true,
+    "eraseFigOptimistic": "0 / 30",
+    "eraseRollbackFig": "5 / 30",
+    "blackoutOverPlanToastBeforeYield": [],
+    "blackoutOverPlanFigOptimistic": "8",
+    "blackoutOverPlanToastAfter": [
+      "VITE_GOOGLE_CLIENT_ID is not set"
+    ],
+    "blackoutOverPlanFigAfterRollback": "3",
+    "modeBeforeLeave": "paint",
+    "modeAfterLeave": null,
+    "yearHiddenAfterLeave": true
+  },
+  "settings": {
+    "budHit": {
+      "found": true,
+      "sized": true,
+      "hits": true
+    },
+    "blocksHit": {
+      "found": true,
+      "sized": true,
+      "hits": true
+    },
+    "vacBudgetShown": "30",
+    "blackoutPressed": "true",
+    "personalPressedBefore": "false",
+    "personalBlocksInPrefs": true,
+    "personalPressedAfter": "true",
+    "personalBlocksAfterOff": false,
+    "personalBudgetInPrefs": 20,
+    "personalBudgetShown": "20",
+    "outOfRangeRefused": true,
+    "blankDeletes": true,
+    "stripAfterSettingsWork": "1 / 12"
+  },
+  "phone-coarse": {
+    "hoverNone": true,
+    "stretchPhone": {
+      "has135": true,
+      "has22": false
+    },
+    "stripScrollsX": true,
+    "stripTopBeforeScroll": 0,
+    "stripTopAfterScroll": 0,
+    "gridMovedUnderStrip": true,
+    "stripChipHitAfterScroll": {
+      "found": true,
+      "sized": true,
+      "hits": true
+    },
+    "panelShown": true,
+    "panelPointerEvents": "auto",
+    "tapLineText": "Tap again to open",
+    "tapLineHit": {
+      "found": true,
+      "sized": true,
+      "hits": true
+    },
+    "tapLineDim": "rgb(154, 151, 143)",
+    "dimToken": "#9A978F",
+    "yearHiddenAfterPanelTap": true,
+    "dayOpenAfterPanelTap": "20668",
+    "dayOpenIsTapped": true,
+    "phoneTouchActionInMode": "none",
+    "phoneMidDragPainted": 3,
+    "phoneTouchActionAfterExit": "auto"
+  }
+}

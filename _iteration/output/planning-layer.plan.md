@@ -114,3 +114,11 @@ repeated in `planning-layer.verification.md` for the gate.
 ### Task 7 — headless probe + verification
 - [ ] `scripts/plan-shot.mjs`: seeded prefs (Vacation budget 30, Blackout blocks) and cache (a 5-day Vacation run, a 3-day Blackout run, a recurring instance); hit-tests on every chip, the Erase chip, the Budget input, the Blocks toggle, the painted cells, the panel line at 390/coarse; a blocked run (toast text, no `data-has-ev` change, strip unchanged) THEN an allowed run (`data-paint` count mid-drag, `data-has-ev` after, strip 5→10); Escape restores `touch-action`; erase on the run (strip 5→0) and on the recurring day (toast); stretch factor at 390 and 1440.
 - [ ] Write `planning-layer.verification.md`; record `exitMode` in SPEC "Scroll engine API" (the one reference edit the brief authorises); commit; push.
+
+## Added during execution
+13. **The strip is sticky.** SPEC: "always visible in the year view". On a
+    phone the year view IS the scroller (about a row of overflow at 390), and
+    the first phone screenshot showed the strip scrolled away with the grid.
+    `position: sticky; top: 0` on `--surface`, z-index 3 (under the panel's 4,
+    over the spines' 1). Probed: strip top stays at 0 after `scrollTop = 400`,
+    and a chip still hit-tests there.

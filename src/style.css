@@ -596,10 +596,14 @@ html, body {
 .yrp-ev .ttl { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* ---------- planning layer (2026-09-05) ---------- */
-/* The strip: one row of chips between the header and the grid. On a phone it
-   scrolls sideways with no scrollbar chrome; the grid below is untouched. */
+/* The strip: one row of chips between the header and the grid, "always
+   visible in the year view" (SPEC). The year view is the scroller on a phone,
+   so the strip is sticky at its top on the ground colour; z-index sits under
+   the panel (4) and over the spines (1). On a phone it scrolls sideways with
+   no scrollbar chrome; the grid below is untouched. */
 .planstrip {
-  display: flex; gap: 6px; padding: 8px 8px 0; flex: none;
+  position: sticky; top: 0; z-index: 3; background: var(--surface);
+  display: flex; gap: 6px; padding: 8px 8px 6px; flex: none;
   overflow-x: auto; -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }

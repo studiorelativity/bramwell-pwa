@@ -694,6 +694,12 @@ render.columnsFor(offset: DayOffset, full: boolean): string
 render.renderRange(node: HTMLElement, firstWeek: WeekIndex, lastWeek: WeekIndex): void
 year.mount(root: HTMLElement, host: YearHost): YearController
 YearHost        = { onPickDay(day), toast(message) }        — toast: "Planning layer"
+YearController  = { setYear(y), invalidate(), exitMode(), destroy() }
+                  — exitMode (2026-09-05, iteration A): leaves paint/erase mode and
+                    abandons a run in progress; main.ts calls it from showYear(false)
+year.mountPlanner(host: PlanHost): PlanController          — the host-agnostic
+                  drag/paint/erase controller ("Planning layer — Both views");
+                  lives in year.ts until iteration D lifts it out
 plan.runOf(a, b, yearStart, yearEnd): { start, end }         — pure, plan.ts
 plan.daysUsed(events, categoryName, yearStart, yearEnd): number
 plan.firstBlocked(run, events, blockingNames): DayNumber | null
