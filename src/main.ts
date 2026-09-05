@@ -397,19 +397,20 @@ if (new URLSearchParams(location.search).has('selftest')) {
    *  shown. */
   let pendingOpenAdd: DayNumber | null = null
 
-  /** DECISIONS "FAB date": calendar → mid-week day of the docked week; year → today. */
+  /** DECISIONS "FAB date" (amended 2026-09-05): the open day if one is open in
+   *  the calendar view, else today — from anywhere in time, in either view. The
+   *  original mid-week-of-the-docked-week target read as an arbitrary Thursday. */
   function fabDay(): DayNumber {
-    return inYear() ? state.today() : state.dayAt(dockedWeek, asOffset(3))
+    return !inYear() && openDay !== null ? openDay : state.today()
   }
 
   function addHere(): void {
-    // fabDay() is read BEFORE any view switch below: in the year view the anchor
-    // is today, and leaving the year view first would make it read the calendar's
-    // docked week instead (DECISIONS "FAB date").
     const d = fabDay()
     if (inYear()) {
       showYear(false)
       ctl.goToWeek(state.weekOf(d), false)   // the year's anchor is off-screen here
+    } else if (openDay !== d) {
+      ctl.goToWeek(state.weekOf(d), false)   // today may be a year away; the same jump the year view makes
     }
     if (openDay === d) { day.openAdd(d); return }
     openDayAt(d)        // clears pendingOpenAdd as its first act, so...

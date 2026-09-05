@@ -57,3 +57,16 @@ export function firstBlocked(run: Run, events: readonly CalendarEvent[], blockin
   }
   return lowest === null ? null : asDay(lowest)
 }
+
+/** The days of the run NOT already covered by an all-day event of the category —
+ *  what painting it would newly add to the ledger (SPEC "Budget warning",
+ *  2026-09-05). Repainting over an existing run therefore adds nothing. */
+export function daysAdded(run: Run, events: readonly CalendarEvent[], categoryName: string): number {
+  const covered = new Set<number>()
+  for (const ev of events) {
+    if (!ev.allDay || ev.category !== categoryName) continue
+    const from = Math.max(ev.start, run.start), to = Math.min(ev.end, run.end)
+    for (let d = from; d <= to; d++) covered.add(d)
+  }
+  return run.end - run.start + 1 - covered.size
+}

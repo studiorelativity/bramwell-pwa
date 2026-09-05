@@ -8,7 +8,7 @@ import { asDay, civilToDay, dayToCivil, monthKey, offsetOf } from './dates.ts'
 import { assignLanes, tline } from './render.ts'
 import { createEvent, deleteEvent, ensureMonthsFor, eventsForMonth, today, weekOf } from './state.ts'
 import { all as allCategories } from './categories.ts'
-import { daysUsed, firstBlocked, runOf } from './plan.ts'
+import { daysAdded, daysUsed, firstBlocked, runOf } from './plan.ts'
 import type { Run } from './plan.ts'
 
 /** toast: write errors and refusals surface here, so year.ts never imports chrome.ts (SPEC). */
@@ -171,6 +171,14 @@ export function mountPlanner(host: PlanHost): PlanController {
       const blocking = new Set(allCategories().filter(c => c.blocks === true).map(c => c.name))
       const hit = firstBlocked(run, host.eventsIn(run), blocking)
       if (hit !== null) { host.toast(`${shortDate(hit)} is blocked`); return }
+    }
+    // The budget warning (SPEC, 2026-09-05): a run that takes the category past
+    // its budget still paints — a budget is the user's own allowance — but says
+    // so. Counts only the days the run newly adds, so repainting over an
+    // existing run never warns twice.
+    if (cat.budgetDays !== undefined) {
+      const after = daysUsed(host.eventsIn(b), cat.name, b.start, b.end) + daysAdded(run, host.eventsIn(run), cat.name)
+      if (after > cat.budgetDays) host.toast(`${cat.label}: ${after} of ${cat.budgetDays} days`)
     }
     void host.createEvent({
       title: cat.label, category: cat.name, allDay: true, start: run.start, end: run.end, repeat: 'none',

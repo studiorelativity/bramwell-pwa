@@ -800,3 +800,18 @@ finds it set. Found by the human at A's gate; probed both ways.
 
 **Copy.** The first-run card pitches the year (C ticket 1), shipped as C
 drafted it; the human chose to ship first and edit later.
+
+## Follow-ups after the first planning deploy (2026-09-05, evening)
+
+- **FAB date, amended: the open day, else today.** The stage-05 rule (the
+  mid-week day of the docked week) read to the human as an arbitrary
+  Thursday, and the open day's own "+ Add" already covered the open day, so
+  the FAB's target was the least useful one on screen. Chosen over "open day,
+  then today if visible, then the docked week": one rule with no visibility
+  clause. Probed: open day → that day with the form; nothing open a year away
+  → today; from the year view → today.
+- **Over budget warns and still paints.** Rejected: refusing like a blackout
+  — once over, that category could not be painted at all until something was
+  erased; a budget is an allowance, not a rule. The count uses only the days
+  the run newly adds, so a repaint over an existing run is silent. Probed
+  both ways (budget 2 over three days warns "5 of 2"; budget 10 is silent).

@@ -26,7 +26,7 @@ import type { Expanded } from './scroll.ts'
 import { packLanes, visibilityFor, rangeLabel, columnsFor, PHONE_MAX_W } from './render.ts'
 import type { PackedSpan } from './render.ts'
 import { validate } from './day.ts'
-import { daysUsed, firstBlocked, runOf, sanitizePlanning } from './plan.ts'
+import { daysAdded, daysUsed, firstBlocked, runOf, sanitizePlanning } from './plan.ts'
 
 export type SelfTestResult = { name: string; pass: boolean; detail: string }
 
@@ -283,6 +283,23 @@ const cases: Case[] = [
     return null
   }],
 
+  ['plan: daysAdded counts only the days a run would newly give a category', () => {
+    const d = (m: number, dd: number) => civilToDay(2026, m, dd)
+    const allDay = (id: string, category: string, start: DayNumber, end: DayNumber): CalendarEvent =>
+      ({ id, title: id, category, start, end, allDay: true })
+    const events: CalendarEvent[] = [
+      allDay('a', 'vacation', d(8, 3), d(8, 5)),     // covers 3, 4, 5
+      allDay('w', 'work', d(8, 6), d(8, 6)),         // another category never counts as cover
+      { id: 't', title: 't', category: 'vacation', start: d(8, 7), end: d(8, 7), allDay: false, startMin: 60, endMin: 120 },
+    ]
+    const run = { start: d(8, 4), end: d(8, 8) }     // 4, 5 covered; 6, 7, 8 new
+    const got = daysAdded(run, events, 'vacation')
+    if (got !== 3) return `added: ${got} (want 3: the 6th, 7th and 8th)`
+    if (daysAdded({ start: d(8, 3), end: d(8, 5) }, events, 'vacation') !== 0) return 'a fully covered run added days'
+    if (daysAdded(run, [], 'vacation') !== 5) return 'an empty calendar did not add the whole run'
+    if (daysAdded(run, [...events, events[0]!], 'vacation') !== 3) return 'a duplicated event changed the count'
+    return null
+  }],
   ['plan: runOf orders, clips and is inclusive', () => {
     const y0 = civilToDay(2026, 1, 1), y1 = civilToDay(2026, 12, 31)
     const a = civilToDay(2026, 8, 14), b = civilToDay(2026, 8, 10)

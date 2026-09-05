@@ -196,6 +196,12 @@ live on the category in prefs.
   the same repaint. A run clipped to the displayed year at both ends. On
   touch, the grid takes `touch-action: none` only while paint mode is on,
   so a finger paints; exiting restores scrolling.
+- **The budget warning (2026-09-05).** A run that would take its category
+  past `budgetDays` still paints — a budget is the user's own allowance — but
+  the write is preceded by a toast, "Vacation: 32 of 30 days", where the
+  figure is days used plus only the days the run newly adds (`daysAdded` in
+  `plan.ts`), so repainting over an existing run never warns. Blackouts stay
+  the only hard refusal. Applies wherever the controller is mounted.
 - **The conflict rule.** If any day in the run carries an event of a
   `blocks` category, and the chip is not itself a `blocks` category, the
   write is refused before the optimistic apply, with a toast naming the
@@ -1105,7 +1111,7 @@ Calendar (carried forward, all still binding):
   clipped.
 - Cold start signed out → first-run screen; Connect lands on today. Stale
   token over a warm cache → read-only calendar with a reconnect pill.
-- FAB and `n` open the form on the centred date from anywhere in time.
+- FAB and `n` open the form on the open day when one is open in the calendar view, else on today, from anywhere in time and from either view (amended 2026-09-05; was the centred date).
 - Settings (snap, default view, colours, mood) persist; sign-out returns
   to first-run.
 - `?demo`: populated, zero googleapis.com requests, saves reject with the
