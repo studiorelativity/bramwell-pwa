@@ -599,6 +599,10 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // switches; a day expanded in a view you have left is not one of them.
     if (on) closeDay()
     if (!on) yearCtl?.exitMode()   // leaving the year view exits paint/erase mode (SPEC "Planning layer")
+    // Every switch records the view, so a "last"-view launch lands here
+    // (SPEC "Settings", amended 2026-09-05). Written before the DOM flips:
+    // nothing below can throw, but the pref is the durable fact.
+    state.savePrefs({ ...state.prefs(), lastView: on ? 'year' : 'cal' })
     yearRoot.hidden = !on
     scroller.hidden = on
     modeBtn.textContent = on ? 'Month' : 'Year'
@@ -647,8 +651,10 @@ if (new URLSearchParams(location.search).has('selftest')) {
     else openYear()
   })
 
-  // SPEC "Settings": defaultView IS read at launch, unlike lastDockedDay.
-  if (state.prefs().defaultView === 'year') openYear()
+  // SPEC "Settings": defaultView IS read at launch, unlike lastDockedDay —
+  // "cal"/"year" open that view, "last" (or absent) opens the one the previous
+  // session ended in. The table is state.resolveLaunchView's, selftested.
+  if (state.resolveLaunchView(state.prefs()) === 'year') openYear()
 
   // SPEC "Layout details": Today goes to today WITHOUT changing the view —
   // the calendar scrolls and re-snaps; the year view pages back to this year.
