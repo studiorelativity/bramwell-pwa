@@ -102,6 +102,13 @@ if (new URLSearchParams(location.search).has('selftest')) {
   const yearRoot = document.createElement('div')
   yearRoot.className = 'yearview'
   yearRoot.hidden = true
+  // The year view's "not loaded" line (iteration C, 2026-09-05). Owned here
+  // rather than in year.ts because that file belongs to the planning session;
+  // appended into yearRoot AFTER year.mount, under the grid, and year.ts only
+  // ever replaces its own gridHost, so the two never touch.
+  const yrNote = document.createElement('div')
+  yrNote.className = 'yrnote'
+  yrNote.hidden = true
   app.replaceChildren(hdr, scroller, yearRoot)
 
   const MON = asOffset(0)
@@ -635,7 +642,31 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // it already knows how to handle.
     if (!on) window.dispatchEvent(new Event('resize'))
   }
-  const step = (d: number) => { shownYear += d; yearCtl?.setYear(shownYear); range.textContent = String(shownYear) }
+  /** "January – June, October – December not loaded": a quiet line under the
+   *  grid when a displayed month is absent or in error and none is loading.
+   *  Seen 2026-09-05, signed out over a partial cache: half the year was simply
+   *  empty and nothing said so. Reads state.monthsNotLoaded — null while any
+   *  month loads, so the line never contradicts a fetch in flight. */
+  function refreshYearNote(): void {
+    const missing = state.monthsNotLoaded(shownYear)
+    const text = missing === null || missing.length === 0 ? '' : `${monthRuns(missing)} not loaded`
+    yrNote.textContent = text
+    yrNote.hidden = text === ''
+  }
+  /** Consecutive months collapse to a range; singletons stand alone. */
+  function monthRuns(months: number[]): string {
+    const name = (m: number): string =>
+      new Date(Date.UTC(2000, m - 1, 1)).toLocaleString(undefined, { month: 'long', timeZone: 'UTC' })
+    const runs: string[] = []
+    for (let i = 0; i < months.length; i++) {
+      const start = months[i] ?? 0
+      while (i + 1 < months.length && months[i + 1] === (months[i] ?? 0) + 1) i++
+      const end = months[i] ?? start
+      runs.push(start === end ? name(start) : `${name(start)} – ${name(end)}`)
+    }
+    return runs.join(', ')
+  }
+  const step = (d: number) => { shownYear += d; yearCtl?.setYear(shownYear); range.textContent = String(shownYear); refreshYearNote() }
   prevY.addEventListener('click', () => step(-1))
   nextY.addEventListener('click', () => step(1))
   function openYear(): void {
@@ -658,7 +689,9 @@ if (new URLSearchParams(location.search).has('selftest')) {
         ctl.goToWeek(state.weekOf(d), false)   // onDock restores the range label
         openDayAt(d)
       }, toast: chrome.toast })
+      yearRoot.append(yrNote)          // under the grid; year.ts never replaces root's children
     }
+    refreshYearNote()
   }
   modeBtn.addEventListener('click', () => {
     if (inYear()) showYear(false)
@@ -677,6 +710,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
       shownYear = dayToCivil(state.today()).y
       yearCtl?.setYear(shownYear)
       range.textContent = String(shownYear)
+      refreshYearNote()
     } else {
       ctl.goToWeek(state.weekOf(state.today()), true)
     }
@@ -708,7 +742,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
       // reaches the pill: there is no auth event to subscribe to.
       chromeCtl.syncConnection()
       ctl.invalidate()
-      if (inYear() && yearDirty) yearCtl?.invalidate()
+      if (inYear() && yearDirty) { yearCtl?.invalidate(); refreshYearNote() }
       yearDirty = false
     })
   })

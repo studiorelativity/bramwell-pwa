@@ -509,6 +509,10 @@ button.set-fr-connect:focus-visible, button.set-fab:focus-visible { outline-colo
 /* ---------- year view ---------- */
 .yearview { flex: 1; overflow: auto; position: relative; }
 .yr { display: flex; flex-direction: column; gap: 2px; padding: 8px; }
+/* "January – June not loaded": the quiet line under the grid when a displayed
+   month is absent or in error and none is loading (main.ts refreshYearNote).
+   --ink-dim, never --today or --past: it is information, not a mark. */
+.yrnote { padding: 2px 10px 12px; font-size: 12px; color: var(--ink-dim); }
 /* Each row is a grid of cells plus a bar overlay — the week-row shape at year scale. */
 /* The template is built per row in year.ts (spine tracks fixed, event days
    2.2fr, the rest 1fr) and written to --yr-cols. Static by ruling: nothing in
