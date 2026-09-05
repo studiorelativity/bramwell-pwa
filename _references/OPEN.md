@@ -238,3 +238,34 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
   reserved-hue rule now holds repo-wide, not only inside the year view.
   Shipped as the payload for the gate-row-10 two-deploy test, which needed a
   real content change to move the asset hashes.
+
+## Opened at the planning layer (2026-09-05)
+- **Blackout painted over an existing plan does not warn.** The conflict
+  rule refuses a plan over a block, not the reverse. The strip could count
+  "N Vacation days on blocked days"; decide after beta feedback.
+- **Split-on-erase.** Erasing one day out of a run deletes the run. A split
+  is delete + up to two creates, non-atomic. Revisit if beta testers ask.
+- **Budgets are per calendar year and count every day.** No weekday-only
+  accounting, no carry-over, no fiscal year. A vacation policy that counts
+  only working days will read high here.
+- **Holidays.** No holiday calendar is read. A `blocks` category painted by
+  hand is the workaround; reading Google's holiday calendar needs the
+  broader scope rejected in DECISIONS.
+- **`defaultView` for a fresh install stays `cal`.** The year is the
+  product now; the month view is the more finished screen. Flip after the
+  polish session lands, or leave to the user. Human's call.
+- **Pane-emulated clicks on header buttons did not register (2026-09-05).**
+  In the Cowork browser pane at 1440×900, synthetic clicks on "Year" and
+  "Today" did nothing while `elementFromPoint` resolved to the button and
+  `button.click()` toggled the view. Probably the pane's pointer emulation,
+  not the app — but unverified, and `scroll.ts`'s pointer capture is the
+  one thing in the app that touches pointer sequencing. Check once in a
+  real browser with a trackpad and a touch screen before beta.
+- **Year view fetch on a signed-out cache.** Opening the year view with only
+  some months cached leaves the rest empty with no indication (seen
+  2026-09-05). Stage 05's reconnect pill covers auth; the year grid itself
+  says nothing about which months are `absent`/`error`. Polish session.
+
+- **2026-09-05 — CLOSED. The 14-column stretch factor** — measured on a 375px
+  screenshot: 2.2fr crushed ordinary days in a busy row. Now 1.35fr at 14
+  columns. Ruling in `DECISIONS.md` "Planning layer rulings".

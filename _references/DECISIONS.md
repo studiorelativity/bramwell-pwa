@@ -633,3 +633,55 @@ point interacts with the thing it measures (an easing curve, a debounce, a
 retry window), a negative result is not evidence until the instrument is
 checked against a known-good case.** Reasoning about correctness is not a
 substitute for an instrument that cannot lie in this particular way.
+
+## Planning layer rulings (2026-09-05)
+
+The product's reference is the wall-sized year calendar (thebigasscalendar.com):
+one surface, every day, marked by hand. Habits and journal (07/08) stay on
+hold behind it — the habit market is saturated and the year-planning angle is
+the differentiator. Made with the human in a Cowork planning session, before
+any code; three parallel iteration sessions run from these.
+
+- **A planned day is an all-day event in the primary calendar; the planning
+  attributes live on the category.** `budgetDays` and `blocks` are prefs
+  fields on `StoredCategory`. Rejected: one secondary Google calendar per
+  layer ("Vacation", "Blackout") — cleaner in Google's own UI, but it needs
+  the broader `calendar` scope, the calendarList API, and a `gcal.ts` that
+  knows more than one calendar. The store rule ("Google Calendar only,
+  nothing of its own") holds without any of that.
+- **No AI in v1.** Vacation planning here is constraint satisfaction over a
+  small set: a budget, blocked days, and the grid. Paint, count, refuse
+  conflicts. "Suggest long weekends around holidays" is a heuristic for a
+  later pass, not a model; nothing in the layer depends on one.
+- **The strip is the mode switch.** One row of chips serves as legend,
+  ledger and palette: click a chip to paint with it, click it again to
+  stop. Rejected: a separate Paint button plus a palette — two controls for
+  one intent, and the header is already full at phone widths.
+- **The paint highlight snaps.** A selection is feedback, not motion; a
+  transition on `data-paint` would put a per-cell animation on the drag
+  path and a new declaration in `motion.css` for no gain.
+- **Erase removes a whole run.** Splitting a run around the erased day is
+  three non-atomic writes (delete, create, create) with no rollback across
+  them; the month view's form already trims a run's dates. Deferred to
+  `OPEN.md`, not rejected.
+- **The seed is unchanged.** "Vacation" and "Blackout" are not seeded: the
+  seed is frozen for colorId reasons, and not every user plans leave. Demo
+  configures them in memory so the layer is visible without a sign-in.
+- **The 14-column stretch is 1.35fr, from a measurement.** At 375px a busy
+  row at 2.2fr compressed its plain days to an unreadable strip (screenshot,
+  2026-09-05, signed-out cache). Closes the `OPEN.md` item opened at the
+  year-view redesign; 28-column stays 2.2fr, 7-column stays off.
+- **No DESIGN.md.** The awesome-design-md pattern was considered as a way to
+  give parallel sessions one design source. SPEC "Visual direction — Night
+  Depth" plus `motion.css` already are that source, and CLAUDE.md resolves
+  conflicts to the spec; a second file would be a second truth. Polish is
+  driven from the deployed app, not from a token file.
+- **Three iteration sessions in parallel, on worktrees, from one amended
+  spec.** The upstream edits for all three landed in this commit so no
+  session amends `SPEC.md` concurrently. Surfaces are disjoint by file:
+  planning (`plan.ts`, `year.ts`, `categories.ts` sanitize, the Settings
+  row), demo (`state.ts` seed, `chrome.ts` demo pill/first-run button,
+  README/LICENSE), polish (`style.css`, `motion.css`, `chrome.ts` first-run
+  copy and sheet). `chrome.ts` is shared by demo and polish: demo owns the
+  first-run buttons and the pill; polish owns copy, layout and the sheet.
+  Merge order when they land: planning, demo, polish.

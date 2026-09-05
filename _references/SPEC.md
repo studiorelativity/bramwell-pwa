@@ -108,8 +108,9 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   keeps failing in practice, the variable being measured is the wrong one. The spine's own text sets its row's
   minimum height, so a long month name grows its row rather than being cut.
 - **Event-day stretch (2026-08-30), static.** A cell carrying at least one
-  event gets a wider track (2.2fr against 1fr); not applied on 7-column
-  layouts. At 28-column widths a stretched cell also shows up to 2 event
+  event gets a wider track (2.2fr against 1fr at 28 columns; **1.35fr at 14,
+  retuned 2026-09-05 from a device measurement** — see "Planning layer");
+  not applied on 7-column layouts. At 28-column widths a stretched cell also shows up to 2 event
   titles inline — one line each, ellipsised, with a category dot — between
   the day number and the bars. **No track size in the year view is ever
   animated**: interpolating `grid-template-columns` is a recorded KNOWN
@@ -143,6 +144,80 @@ Toggled from the header. One calendar year at once, no scrolling on desktop.
   its months.
 - No virtualization: 365 cells rebuild in one pass. `onCacheChange`
   filters by year before repainting.
+
+## Planning layer (2026-09-05)
+
+The product's reference is the wall-sized year calendar: one surface, every
+day visible, marked by hand, so what is planned and what is still open are
+read in one glance. The year view above is that surface; this section adds the
+verbs it was missing. Nothing here adds a store: a planned day is an ordinary
+all-day event in the user's Google Calendar, and the two planning attributes
+live on the category in prefs.
+
+- **Category planning fields.** `StoredCategory` gains two optional fields:
+  `budgetDays?: number` (integer, 1–366; the days-per-calendar-year the user
+  means to spend on it — "Vacation: 30") and `blocks?: true` (days carrying an
+  event of this category may not be planned over — "Blackout"). `sanitize()`
+  drops an invalid `budgetDays` (non-integer, out of range) and any `blocks`
+  that is not literally `true`, keeping the row. The seed is unchanged: no
+  seed category has either field. Settings' category row gains a Budget
+  number input (blank = none) and a Blocks toggle; both are structural edits
+  for the row-rebuild rule.
+- **The plan strip.** A row of category chips inside the year view, between
+  the header and the grid, always visible in the year view. Each chip: the
+  category dot and label; when the category has a budget, "used / budget"
+  in tabular figures; when it `blocks`, its day count alone. **Used** = the
+  number of distinct days in the DISPLAYED year covered by at least one
+  all-day event of that category — overlapping runs count a day once, timed
+  events never count. Over budget renders the figure at `--ink-strong`
+  weight 620 and nothing else: no reserved hue, no third colour. On phone
+  widths the strip scrolls horizontally. An empty strip is impossible (the
+  fallback category always exists), so it has no empty state.
+- **Paint mode.** Clicking a chip selects it and enters paint mode; clicking
+  the selected chip, Escape, or leaving the year view exits. In paint mode
+  the hover panel is suppressed (it would flicker under a drag) and pointer
+  down on a day cell begins a run: the grid captures the pointer, the cell
+  under the pointer is found with `elementFromPoint` on every move, and the
+  run is `min(startDay, currentDay) .. max(...)` inclusive — a date range,
+  not a rectangle, so dragging across rows selects the days between, like
+  selecting text. Cells in the run carry `data-paint`; its highlight is the
+  category's bar fill (16%) on the cell, and it **snaps, deliberately** — a
+  selection is not motion, and it stays out of `motion.css`. Pointer up
+  writes ONE all-day event: title = the category label, category = the chip,
+  `repeat: 'none'`, the run's start and end. The existing optimistic path
+  repaints the year through `onCacheChange`; the strip's figures update in
+  the same repaint. A run clipped to the displayed year at both ends. On
+  touch, the grid takes `touch-action: none` only while paint mode is on,
+  so a finger paints; exiting restores scrolling.
+- **The conflict rule.** If any day in the run carries an event of a
+  `blocks` category, and the chip is not itself a `blocks` category, the
+  write is refused before the optimistic apply, with a toast naming the
+  first blocked day ("Aug 14 is blocked"). Painting a `blocks` category is
+  always allowed — that is how blackouts are laid down — including over
+  existing plans; v1 does not warn in that direction (`OPEN.md`).
+- **Erase.** The strip's last chip is Erase, category-agnostic. In erase
+  mode a click on a day removes the ONE all-day event under it — the
+  topmost bar in that cell (lane 0) — as a whole run, via
+  `deleteEvent(id, 'instance')`, optimistic like any other write. A day with
+  no all-day event does nothing; a recurring instance is refused with a
+  toast ("Recurring — edit it from the month view"). Trimming a run by a day
+  is done from the month view's form; split-on-erase is an `OPEN.md` item.
+- **Pure core in `src/plan.ts`** (added to the file layout below), DOM-free,
+  imports `types.ts` and `dates.ts` only: `runOf(a, b, yearStart, yearEnd)`,
+  `daysUsed(events, categoryName, yearStart, yearEnd)`, `firstBlocked(run,
+  events, blockingNames)`, `sanitizePlanning(row)`. All four are covered by
+  the node selftest before any DOM is wired. `year.ts` consumes them and
+  owns the strip, the drag, and the writes through `state.ts` (it already
+  imports `state.ts`; it never imports `gcal.ts`). `YearHost` gains
+  `toast(message: string): void` so write errors surface without `year.ts`
+  importing `chrome.ts`.
+- **Year-view stretch is retuned by column count.** The 2.2fr event-day
+  stretch was measured on device (2026-09-05, 375px): a busy 14-column row
+  compresses its ordinary days below legibility. The factor becomes 2.2 at
+  28 columns and **1.35 at 14**; still off at 7. Thirty painted vacation days
+  would otherwise make the phone year unreadable. Closes the `OPEN.md` item.
+- Not in this layer: AI suggestions, holidays, a second Google calendar,
+  weekend/weekday budget accounting. Recorded in `OPEN.md` with the reasons.
 
 ## Layout details
 
@@ -446,7 +521,8 @@ session opens in is a setting, where the scroll position is not.
 Categories are the user's own list, prefs-backed:
 
 ```
-StoredCategory         = { name, label, colorId, displayHex? }
+StoredCategory         = { name, label, colorId, displayHex?, budgetDays?, blocks? }
+                         (budgetDays and blocks: "Planning layer", 2026-09-05)
 prefs.categories       — StoredCategory[]   (absent -> seed)
 prefs.fallbackCategory — name               (absent -> "other")
 prefs.mood             — mood id            (absent -> "warm")
@@ -547,6 +623,14 @@ Entry: "Try the demo" on first-run, or `?demo`.
 - Writes reject with `DemoError` ("Demo — connect your Google Calendar to
   save.") **before** the optimistic apply. Customization works in memory
   and persists nothing; leaving demo re-runs `configure()` from prefs.
+- **Demo shows the planning layer (2026-09-05).** Demo pushes an in-memory
+  category set through `configure()` — the seed plus `vacation` (label
+  "Vacation", colorId 7, `budgetDays: 30`) and `blackout` (label
+  "Blackout", colorId 11, `blocks: true`) — and seeds a few Vacation runs
+  and a Blackout block so the strip reads something like "12 / 30". This
+  narrows DECISIONS' "demo does not seed prefs": it still writes no prefs;
+  it configures memory, which leaving demo already resets. A paint in demo
+  hits `DemoError` like any other write.
 - Header shows a "Demo · Connect" pill in the avatar's slot; clicking it
   (or Connect anywhere) exits demo and starts sign-in. Demo never survives
   a reload.
@@ -581,6 +665,11 @@ render.packLanes(spans: EventSpan[]): PackedSpan[]
 render.columnsFor(offset: DayOffset, full: boolean): string
 render.renderRange(node: HTMLElement, firstWeek: WeekIndex, lastWeek: WeekIndex): void
 year.mount(root: HTMLElement, host: YearHost): YearController
+YearHost        = { onPickDay(day), toast(message) }        — toast: "Planning layer"
+plan.runOf(a, b, yearStart, yearEnd): { start, end }         — pure, plan.ts
+plan.daysUsed(events, categoryName, yearStart, yearEnd): number
+plan.firstBlocked(run, events, blockingNames): DayNumber | null
+plan.sanitizePlanning(row): { budgetDays?, blocks? }
 ```
 
 - **`scroll.ts` knows nothing about calendars.** It imports `types.ts` and
@@ -786,7 +875,8 @@ Expanded = { week: WeekIndex; delta: number } | null
 /src/state.ts             — event cache, today() anchor, DayNumber<->WeekIndex math, persistence, write orchestration, demo
 /src/scroll.ts            — virtualizer, snap physics, the one variable-height row
 /src/render.ts            — week rows, bars, chips, lane packing, month badges, header
-/src/year.ts              — year view
+/src/year.ts              — year view, plan strip, paint/erase modes
+/src/plan.ts              — planning core: run selection, budget usage, conflict check; DOM-free, imports types.ts and dates.ts only (2026-09-05)
 /src/day.ts               — inline day expansion content: event list, form, habits, journal
 /src/categories.ts        — category resolution, Google colour table, moods, themeCss()
 /src/chrome.ts            — first-run, settings sheet, FAB, toasts
@@ -985,6 +1075,24 @@ Calendar (carried forward, all still binding):
   colorId's colour.
 - Every mood keeps month structure readable on a phone at arm's length,
   light and dark.
+
+Planning layer (2026-09-05):
+
+- Give a category a budget of 30 in Settings; the year view's strip shows
+  "0 / 30". Paint a Mon–Fri run: one all-day event arrives in the Google
+  Calendar app with the right colour and dates; the strip reads "5 / 30".
+  Paint a second run overlapping the first by two days: the strip counts
+  each day once.
+- Mark a category Blocks, paint three days with it, then try to paint a
+  budgeted run across them: refused with a toast naming the first blocked
+  day, nothing written to Google.
+- Erase a painted run: gone from Google and from the strip's count. Erase on
+  a recurring event's day: refused with the toast.
+- Phone: paint mode drags paint and do not scroll; exiting paint mode
+  restores scrolling; the strip scrolls horizontally.
+- `npm run selftest` covers `plan.ts` (run clipping, distinct-day counting
+  across overlapping and cross-month runs, blocked-day detection,
+  planning-field sanitize) before any DOM was wired.
 
 Redesign:
 

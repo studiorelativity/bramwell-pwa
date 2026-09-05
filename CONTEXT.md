@@ -18,6 +18,21 @@ Held stages (2026-08-30): 07_habits and 08_journal are ON HOLD until
 by the entry rule even when its own blockers clear; the hold lifts by date, or
 by the human lifting it earlier.
 
+**Parallel iterations (2026-09-05).** Three iteration sessions run beside the
+stage table, on worktrees, from one amended spec — the entry rule below does
+not apply to them. Open exactly one per session, by name:
+
+| Session | File | Branch |
+|---|---|---|
+| A — planning layer | `_iteration/planning-layer.md` | `planning-layer` |
+| B — demo + beta on-ramp (06 run early) | `_iteration/beta-demo.md` | `demo` |
+| C — beta polish | `_iteration/polish.md` | `polish` |
+
+Merge order A, B, C. Their upstream edits are already in `_references/`
+(DECISIONS "Planning layer rulings"); an iteration file that asks you to
+amend a reference is describing what to record at the end, not a
+pre-condition.
+
 Entry rule: find the first stage whose `CONTEXT.md` Status is not CLOSED.
 That is the stage. If its Status is BLOCKED, the previous gate has not
 been closed by the human — stop and say so; do not start it.
