@@ -442,11 +442,35 @@ if (new URLSearchParams(location.search).has('selftest')) {
       // error … — as one unbroken microtask chain that starves the renderer.
       if (first === lastRange.first && last === lastRange.last) return
       lastRange = { first, last }
-      const weeks: WeekIndex[] = []
-      for (let w = first - 8; w <= last + 8; w++) weeks.push(asWeek(w))
-      state.ensureMonthsFor(weeks)
+      state.ensureMonthsFor(weeksAround(first, last))
     },
   })
+
+  /** The week list a range hands to ensureMonthsFor: the visible rows plus
+   *  ~8 weeks either way (SPEC "State API"). One definition, because
+   *  refreshVisible below must ask for exactly what onRangeChange asked for. */
+  function weeksAround(first: number, last: number): WeekIndex[] {
+    const weeks: WeekIndex[] = []
+    for (let w = first - 8; w <= last + 8; w++) weeks.push(asWeek(w))
+    return weeks
+  }
+
+  /** Foreground refresh (SPEC "State API", amended 2026-09-05). ensureMonthsFor
+   *  ran only from onRangeChange, so a desktop tab parked on this week never
+   *  refetched — a write made on the phone showed up only after a sign-out.
+   *  Re-run over the CURRENT range when the app comes back: visibilitychange
+   *  to visible, window focus, and online. state.ts's five-minute rule decides
+   *  whether anything is actually fetched, so a tab switched every few seconds
+   *  costs nothing; there is no timer, because a timer fetches for nobody.
+   *  The transient-UI rule already holds downstream: a refresh that lands
+   *  while a form or the sheet is open is held, never applied over it. */
+  function refreshVisible(): void {
+    if (!Number.isFinite(lastRange.first)) return
+    state.ensureMonthsFor(weeksAround(lastRange.first, lastRange.last))
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshVisible() })
+  window.addEventListener('focus', refreshVisible)
+  window.addEventListener('online', refreshVisible)
 
   ctl.setSnapStep(state.prefs().snapStepDays ?? 30)
   ctl.goToWeek(state.weekOf(state.today()), false)
