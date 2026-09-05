@@ -68,8 +68,8 @@ is a new directory — create it.
    the one `main.ts` line beyond `toast`. Record the API addition in SPEC
    "Scroll engine API" when you write verification (it records what was
    built; that is within an iteration's own bounds per CLAUDE.md).
-5. **Erase.** Click (pointer down/up with < TAP_SLOP movement; reuse
-   `day.ts`'s constant value, do not import `day.ts`) → the lane-0 bar in
+5. **Erase.** Click (pointer down/up with < 6px movement — `main.ts`'s
+   `TAP_SLOP` value; do not import `main.ts`) → the lane-0 bar in
    that cell. You have `items` + `assignLanes` in `build()`; keep a per-cell
    map of lane-0 event id when building rows. `recurringEventId` present →
    toast; else `deleteEvent(id, 'instance')`.
