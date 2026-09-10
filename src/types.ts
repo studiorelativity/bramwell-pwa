@@ -141,7 +141,7 @@ export type Prefs = {
   /** Absent -> 30. */
   snapStepDays?: 15 | 30 | 45
   /** Absent -> "last" (2026-09-05). Read at launch: "cal"/"year" open that view;
-   *  "last" opens whatever lastView holds, falling back to "cal". */
+   *  "last" opens whatever lastView holds, falling back to "year" (2026-09-10). */
   defaultView?: 'cal' | 'year' | 'last'
   /** Written on every Month/Year switch; read at launch only when defaultView
    *  is "last" or absent (SPEC "Settings", amended 2026-09-05). */

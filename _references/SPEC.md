@@ -168,7 +168,7 @@ live on the category in prefs.
   event of this category may not be planned over — "Blackout"). `sanitize()`
   drops an invalid `budgetDays` (non-integer, out of range) and any `blocks`
   that is not literally `true`, keeping the row. Seed (amended 2026-09-05, gate close): Vacation carries no budget, Blackout carries `blocks: true`; seed order is work, personal, financial, vacation, blackout, other. Settings' category row gains a Budget
-  number input (blank = none) and a Blocks toggle; both are structural edits
+  number input (blank = none) and a Blocks toggle labelled "Blocks plans"; both are structural edits
   for the row-rebuild rule.
 - **The plan strip.** A row of category chips inside the year view, between
   the header and the grid, always visible in the year view. **Gate close 2026-09-05:** the strip is sticky at the top of the year view on `--surface` (z-index 3), so \"always visible\" holds where the view scrolls; an un-budgeted, non-blocking category shows its used count, and a count of 0 with no budget is omitted so a fresh install is not a row of zeros. Each chip: the
@@ -180,6 +180,11 @@ live on the category in prefs.
   weight 620 and nothing else: no reserved hue, no third colour. On phone
   widths the strip scrolls horizontally. An empty strip is impossible (the
   fallback category always exists), so it has no empty state.
+  **Amended 2026-09-10:** a `--ink-dim` line under the chips is the mode
+  chrome — "Click a colour, drag days." at rest; "Drag to paint {label}. Esc
+  to stop." in paint; "Click a run to erase it. Esc to stop." in erase. The
+  sticky unit is the chips plus that line (`.planhead`), so the hint does not
+  scroll away on a phone. No banner, no reserved hue: Night Depth still holds.
 - **Paint mode.** Clicking a chip selects it and enters paint mode; clicking
   the selected chip, Escape, or leaving the year view exits. In paint mode
   the hover panel is suppressed (it would flicker under a drag) and pointer
@@ -535,8 +540,11 @@ Ported behaviour (content contract unchanged from the drawer):
 ## Settings
 
 A sheet from the avatar: account row ("Google Calendar · Connected") with
-sign-out; snap 15/30/45; default view (labelled Month/Year, stored as `cal`/`year`); a **Colors** section
-(below); Mood; sound row is a labelled stub. All prefs; no new storage. A
+sign-out; snap 15/30/45 (the segment is still those numbers; a note names
+them as days between 1st / 16th stops); default view (labelled Last used /
+Month / Year, stored as `last`/`cal`/`year`); a **Colors** section
+(below); Mood; sound row is a labelled stub. The Blocks toggle on a
+category row reads "Blocks plans". All prefs; no new storage. A
 background refresh must not close or reset the sheet.
 
 The whole of `prefs` (`bramwell.prefs.v1`). Every field is optional so a
@@ -558,11 +566,14 @@ session opens in is a setting, where the scroll position is not.
 **Amended 2026-09-05:** the setting has three values. `"cal"` and `"year"`
 open that view; `"last"` (the default for new installs, and what an absent
 field means) opens the view the previous session ended in, read from
-`lastView`, which `main.ts` writes on every Month ↔ Year switch. Absent
-`lastView` under `"last"` opens the month. The Settings segment reads
-Last / Month / Year. The view IS a setting and the last-used view IS the
-sensible default: the user switches between them constantly, and a fixed
-default would be wrong half the time.
+`lastView`, which `main.ts` writes on every Month ↔ Year switch.
+**Amended 2026-09-10:** absent `lastView` under `"last"` opens the **year**,
+not the month. The year is the product the landing pitches; the month is
+the editor you reach by picking a day. A returning session that ended in
+the month still opens the month (`lastView: 'cal'`). The Settings segment
+reads Last used / Month / Year. "Try the demo" from the landing also opens
+the year — that path runs after boot, so `resolveLaunchView` alone would
+leave the month that was already mounted.
 
 ## Categories and customization
 
@@ -646,6 +657,9 @@ prefs.mood             — mood id            (absent -> "warm")
   fallback's — two-step "Remove?" button, not `confirm()`), add row
   disabled at 11 with the reason, Mood selector. Label edits do not
   rebuild the row; structural edits do.
+  **Amended 2026-09-10:** each category's planning line is Budget plus a
+  "Blocks plans" toggle; Snap carries the note "Days between 1st / 16th
+  stops"; Default view reads Last used / Month / Year.
 - `categories.ts` stays DOM-free and never imports `state.ts`; `main.ts`
   pushes prefs in via `configure(...)`, at bootstrap and again on any
   prefs change, so there is one writer. The module initialises to the seed
@@ -681,6 +695,11 @@ Entry: "Try the demo" on first-run, or `?demo`.
   narrows DECISIONS' "demo does not seed prefs": it still writes no prefs;
   it configures memory, which leaving demo already resets. A paint in demo
   hits `DemoError` like any other write.
+- **Demo opens the year (2026-09-10).** The landing pitches paint-on-the-year;
+  the month is the editor you reach by picking a day. `?demo` hits the launch
+  table (absent `lastView` → year). "Try the demo" on the landing calls
+  `openYear()` after seeding, because that button runs after boot already
+  chose a view.
 - Header shows a "Demo · Connect" pill in the avatar's slot; the slot also keeps a dot-less avatar, because the avatar is the only door to Settings and customization works in memory in demo; `?demo` is scrubbed from the URL at entry so a reload lands on first-run (gate close 2026-09-05); clicking it
   (or Connect anywhere) exits demo and starts sign-in. Demo never survives
   a reload.
@@ -931,7 +950,7 @@ Expanded = { week: WeekIndex; delta: number } | null
 /src/state.ts             — event cache, today() anchor, DayNumber<->WeekIndex math, persistence, write orchestration, demo
 /src/scroll.ts            — virtualizer, snap physics, the one variable-height row
 /src/render.ts            — week rows, bars, chips, lane packing, month badges, header
-/src/year.ts              — year view, plan strip, paint/erase modes
+/src/year.ts              — year view, plan strip, mode hint, paint/erase modes
 /src/plan.ts              — planning core: run selection, budget usage, conflict check; DOM-free, imports types.ts and dates.ts only (2026-09-05)
 /src/day.ts               — inline day expansion content: event list, form, habits, journal
 /src/categories.ts        — category resolution, Google colour table, moods, themeCss()
@@ -1039,7 +1058,7 @@ field, not by spreading the draft.
 ensureMonthsFor(weeks: WeekIndex[]): void   — lazy month loading
 monthState(key: MonthKey): MonthLoadState   — render reads load state
 monthsNotLoaded(year: number): number[] | null — displayed months absent/error while none loads (iteration C, 2026-09-05)
-resolveLaunchView(p: Prefs): 'cal' | 'year'   — the launch table for defaultView/lastView (iteration C, 2026-09-05)
+resolveLaunchView(p: Prefs): 'cal' | 'year'   — launch table; absent lastView → year (2026-09-10)
 eventsForMonth(key: MonthKey): CalendarEvent[]
 spansForWeek(week: WeekIndex): EventSpan[]
 prefs(): Prefs / savePrefs(p: Prefs): void

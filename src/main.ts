@@ -512,7 +512,11 @@ if (new URLSearchParams(location.search).has('selftest')) {
       enterDemo()
       lastRange = { first: NaN, last: NaN }
       ctl.invalidate()
-      yearCtl?.invalidate()
+      // The landing's demo button runs after boot, so resolveLaunchView already
+      // chose a view (the month, on a cold install before 2026-09-10). The year
+      // is the product the button is demonstrating — open it here, not only at
+      // `?demo` boot where the launch table now lands on year by itself.
+      openYear()
     },
     // Leaving demo re-runs configure() from prefs (SPEC "Demo mode") — the real
     // ones again, now that state.exitDemo() has re-read storage — and repaints

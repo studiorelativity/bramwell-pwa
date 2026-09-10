@@ -844,12 +844,12 @@ const cases: Case[] = [
   }],
 
   // Iteration C (2026-09-05), SPEC "Settings" amended: the view a session opens in.
-  ['state: resolveLaunchView — cal/year open that view; last or absent reads lastView; absent lastView is the month', () => {
+  ['state: resolveLaunchView — cal/year open that view; last or absent reads lastView; absent lastView is the year', () => {
     const table: [Prefs, 'cal' | 'year'][] = [
-      [{}, 'cal'],
+      [{}, 'year'],
       [{ lastView: 'year' }, 'year'],
       [{ lastView: 'cal' }, 'cal'],
-      [{ defaultView: 'last' }, 'cal'],
+      [{ defaultView: 'last' }, 'year'],
       [{ defaultView: 'last', lastView: 'year' }, 'year'],
       [{ defaultView: 'cal', lastView: 'year' }, 'cal'],
       [{ defaultView: 'year', lastView: 'cal' }, 'year'],
