@@ -701,7 +701,10 @@ any code; three parallel iteration sessions run from these.
   the scrolling month, where paint does not exist. Last-used still wins
   once a session has switched. Settings labels the segment "Last used"
   rather than "Last". The strip carries a one-line mode hint so the chips
-  read as a tool, not a legend.
+  read as a tool, not a legend. `yearDirty` is declared with `yearCtl`,
+  not next to `onCacheChange`: the launch table now calls `openYear()` at
+  boot, and assigning the flag at the end of that call is a TDZ error if
+  the `let` is still below.
 - **05 gate on the phone, 2026-09-05: two findings, both to session C.**
   (1) iOS auto-zoom: form fields at 12px make Safari zoom the page 1.33× on
   focus and leave it there; the cure is 16px fields under coarse pointers,
