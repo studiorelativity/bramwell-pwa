@@ -154,14 +154,15 @@ export function savePrefs(p: Prefs): void {
   }
 }
 
-/** The view a session opens in (SPEC "Settings", amended 2026-09-05). "cal" and
+/** The view a session opens in (SPEC "Settings", amended 2026-09-10). "cal" and
  *  "year" open that view; "last" — the default for new installs, and what an
  *  absent field means — opens the view the previous session ended in, which
  *  main.ts writes to `lastView` on every switch. Absent `lastView` is the
- *  month. Pure over the prefs it is handed, so the selftest covers the table. */
+ *  year: that is the product a first session is shown. Pure over the prefs
+ *  it is handed, so the selftest covers the table. */
 export function resolveLaunchView(p: Prefs): 'cal' | 'year' {
   if (p.defaultView === 'cal' || p.defaultView === 'year') return p.defaultView
-  return p.lastView ?? 'cal'
+  return p.lastView ?? 'year'
 }
 
 // ---------- Reads ----------

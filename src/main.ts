@@ -512,7 +512,11 @@ if (new URLSearchParams(location.search).has('selftest')) {
       enterDemo()
       lastRange = { first: NaN, last: NaN }
       ctl.invalidate()
-      yearCtl?.invalidate()
+      // The landing's demo button runs after boot, so resolveLaunchView already
+      // chose a view (the month, on a cold install before 2026-09-10). The year
+      // is the product the button is demonstrating — open it here, not only at
+      // `?demo` boot where the launch table now lands on year by itself.
+      openYear()
     },
     // Leaving demo re-runs configure() from prefs (SPEC "Demo mode") — the real
     // ones again, now that state.exitDemo() has re-read storage — and repaints
@@ -588,6 +592,11 @@ if (new URLSearchParams(location.search).has('selftest')) {
   // ---- year view: mounted lazily on first toggle ----
   let yearCtl: year.YearController | null = null
   let shownYear = dayToCivil(state.today()).y
+  // Declared here, not next to onCacheChange: openYear() runs at boot when the
+  // launch table is year (2026-09-10), and assigning yearDirty at the end of
+  // that call is a TDZ error if the let is still below. Fresh installs and
+  // "Try the demo" both take that path now.
+  let yearDirty = false
   const inYear = () => !yearRoot.hidden
 
   function showYear(on: boolean): void {
@@ -725,7 +734,6 @@ if (new URLSearchParams(location.search).has('selftest')) {
   // Coalesced to one repaint per frame: opening a range starts a dozen month
   // fetches, each of which notifies as it flips to 'loading'.
   let repaint = 0
-  let yearDirty = false
   state.onCacheChange(months => {
     if (months.some(k => k.startsWith(`${shownYear}-`))) yearDirty = true
     if (repaint !== 0) return

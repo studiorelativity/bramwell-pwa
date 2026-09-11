@@ -90,11 +90,14 @@ async function probeEntry(scheme) {
     const fr = document.getElementById('firstrun')
     const now = b.state.today()
     const mk = d => { const t = new Date(d * 86400000); return t.getUTCFullYear() + '-' + String(t.getUTCMonth() + 1).padStart(2, '0') }
+    const yv = document.querySelector('.yearview')
     return {
       isDemo: b.state.isDemo(),
       search: location.search, path: location.pathname,
-      bars: document.querySelectorAll('.bar').length,
-      chips: document.querySelectorAll('.chip').length,
+      yearVisible: yv !== null && !yv.hidden,
+      hint: document.querySelector('.planhint')?.textContent ?? null,
+      cells: document.querySelectorAll('.yrcell[data-day]').length,
+      bars: document.querySelectorAll('.yrbar').length,
       firstRunAbsentOrHidden: fr === null || fr.hidden,
       pill: HIT('#demo-pill'), pillText: document.getElementById('demo-pill')?.textContent ?? null,
       avatar: HIT('#avatar'), avatarHasDot: document.querySelector('#avatar .set-avatar-dot') !== null,
@@ -117,6 +120,9 @@ async function probeSaveRefused() {
     const HIT = ${HIT}
     const frame = () => new Promise(r => requestAnimationFrame(r))
     const sleep = ms => new Promise(r => setTimeout(r, ms))
+    // Demo opens the year (SPEC 2026-09-10). This probe is a month-view save.
+    if (!document.querySelector('.yearview').hidden) document.getElementById('btn-mode').click()
+    await sleep(400)
     const onScreen = c => { const r = c.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2
       return x >= 0 && y >= 0 && x <= innerWidth && y <= innerHeight && document.elementFromPoint(x, y) !== null }
     const pick = [...document.querySelectorAll('.day[data-day]')].filter(onScreen)[3] ?? null
@@ -168,8 +174,9 @@ async function probeYear() {
     const HIT = ${HIT}
     const sleep = ms => new Promise(r => setTimeout(r, ms))
     const modeHit = HIT('#btn-mode')
-    document.getElementById('btn-mode').click()
+    if (document.querySelector('.yearview').hidden) document.getElementById('btn-mode').click()
     await sleep(400)
+    const hintAtRest = document.querySelector('.planhint')?.textContent ?? null
     const yr = document.querySelector('.yr')
     if (yr === null) return { ok: false, why: 'no year grid' }
     const b = window.bramwell
@@ -185,7 +192,7 @@ async function probeYear() {
       panelLists = document.querySelector('.yrpanel')?.querySelectorAll('.yrp-ev').length ?? null
       document.querySelector('.yearview').dispatchEvent(new PointerEvent('pointerleave'))
     }
-    const out = { ok: true, modeHit, cells: yr.querySelectorAll('.yrcell[data-day]').length, barsOnOverflow, panelLists }
+    const out = { ok: true, modeHit, hintAtRest, cells: yr.querySelectorAll('.yrcell[data-day]').length, barsOnOverflow, panelLists }
     // The planning layer (iteration A, merged under this branch): the strip reads the
     // demo's in-memory budget, and a paint is refused with the demo message BEFORE any
     // optimistic paint — the strip's figure and the grid's bars are unchanged after it.
@@ -202,6 +209,7 @@ async function probeYear() {
       chip.click()
       await sleep(100)
       out.modeAfterChip = document.querySelector('[data-mode]')?.dataset.mode ?? null
+      out.hintAfterChip = document.querySelector('.planhint')?.textContent ?? null
       // Two consecutive free days (no all-day event on either), both on screen.
       const st = window.bramwell.state
       const t = st.today()
@@ -313,7 +321,9 @@ async function probeReloadAndButton() {
     document.getElementById('fr-demo').click()
     await sleep(800)
     const fr = document.getElementById('firstrun')
-    return { isDemo: window.bramwell.state.isDemo(), firstRunHidden: fr === null || fr.hidden, bars: document.querySelectorAll('.bar').length,
+    return { isDemo: window.bramwell.state.isDemo(), firstRunHidden: fr === null || fr.hidden,
+      yearVisible: document.querySelector('.yearview') !== null && !document.querySelector('.yearview').hidden,
+      hint: document.querySelector('.planhint')?.textContent ?? null,
       pill: HIT('#demo-pill'), fab: HIT('#fab'), storage: ${STORAGE} }
   })()`)
   return { beforeReload, afterReload, viaButton }

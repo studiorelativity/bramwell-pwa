@@ -247,6 +247,12 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
   // view (SPEC "The plan strip"). Its own child so a grid rebuild never touches it.
   const strip = document.createElement('div')
   strip.className = 'planstrip'
+  const hint = document.createElement('p')
+  hint.className = 'planhint'
+  hint.setAttribute('aria-live', 'polite')
+  const head = document.createElement('div')
+  head.className = 'planhead'
+  head.append(strip, hint)
   // The grid is rebuilt as a whole, but only THIS child is replaced, so the
   // panel beside it survives a repaint (SPEC "Year view").
   const gridHost = document.createElement('div')
@@ -254,7 +260,19 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
   const panel = document.createElement('div')
   panel.className = 'yrpanel'
   panel.hidden = true
-  root.append(strip, gridHost, panel)
+  root.append(head, gridHost, panel)
+
+  function setHint(m: PlanMode): void {
+    if (m === null) {
+      hint.textContent = 'Click a colour, drag days.'
+    } else if (m.kind === 'erase') {
+      hint.textContent = 'Click a run to erase it. Esc to stop.'
+    } else {
+      const label = allCategories().find(c => c.name === m.cat)?.label ?? m.cat
+      hint.textContent = `Drag to paint ${label}. Esc to stop.`
+    }
+  }
+  setHint(null)
   /** Day the panel currently shows; null when hidden. */
   let shown: DayNumber | null = null
 
@@ -299,6 +317,7 @@ export function mount(root: HTMLElement, host: YearHost): YearController {
     onModeChange: m => {
       hidePanel()          // suppressed for the whole mode: it would flicker under a drag (SPEC)
       syncChips(m)
+      setHint(m)
     },
   })
 

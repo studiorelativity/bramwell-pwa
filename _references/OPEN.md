@@ -284,6 +284,10 @@ promoted to `DECISIONS.md` "Stage 02 gate close"; evidence in
 - **`defaultView` for a fresh install stays `cal`.** The year is the
   product now; the month view is the more finished screen. Flip after the
   polish session lands, or leave to the user. Human's call.
+  **2026-09-10 — CLOSED.** Absent `lastView` under `"last"` now opens the
+  year. Human: ship the year as the first screen, with a paint hint on the
+  strip. Returning sessions still follow `lastView`. Ruling in DECISIONS
+  "New installs open in the last-used view" (amended) and SPEC "Settings".
 - **Pane-emulated clicks on header buttons did not register (2026-09-05).**
   In the Cowork browser pane at 1440×900, synthetic clicks on "Year" and
   "Today" did nothing while `elementFromPoint` resolved to the button and

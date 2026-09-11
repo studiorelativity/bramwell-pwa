@@ -500,6 +500,7 @@ html, body {
 .set-row { display: flex; align-items: center; gap: 8px; padding: 8px 6px; min-height: 34px; }
 .set-lbl { flex: 1; min-width: 0; }
 .set-note { font-size: 12px; color: var(--ink-dim); }
+.set-row-note { margin: -4px 6px 8px; }
 .set-btn {
   font: inherit; font-size: 12px; color: var(--ink); background: var(--band-b-end);
   border: 0; border-radius: 8px; padding: 5px 9px;
@@ -703,18 +704,23 @@ button.set-fr-connect:focus-visible, button.set-fab:focus-visible { outline-colo
 .yrp-ev .ttl { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* ---------- planning layer (2026-09-05) ---------- */
-/* The strip: one row of chips between the header and the grid, "always
-   visible in the year view" (SPEC). The year view is the scroller on a phone,
-   so the strip is sticky at its top on the ground colour; z-index sits under
-   the panel (4) and over the spines (1). On a phone it scrolls sideways with
-   no scrollbar chrome; the grid below is untouched. */
+/* The sticky unit is chips + the mode hint, so the hint does not scroll
+   away on a phone (SPEC "The plan strip", 2026-09-10). z-index sits under
+   the panel (4) and over the spines (1). On a phone the chips scroll
+   sideways with no scrollbar chrome; the grid below is untouched. */
+.planhead {
+  position: sticky; top: 0; z-index: 3; background: var(--surface); flex: none;
+}
 .planstrip {
-  position: sticky; top: 0; z-index: 3; background: var(--surface);
-  display: flex; gap: 6px; padding: 8px 8px 6px; flex: none;
+  display: flex; gap: 6px; padding: 8px 8px 6px;
   overflow-x: auto; -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 .planstrip::-webkit-scrollbar { display: none; }
+.planhint {
+  margin: 0; padding: 0 8px 8px;
+  font-size: 12px; color: var(--ink-dim);
+}
 /* A chip is a resting tile: legend, ledger and palette in one (DECISIONS "The
    strip is the mode switch"). --cat resolves through the [data-cat] rule the
    bars use; Erase has none and falls back to the neutral ink. */

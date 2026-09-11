@@ -301,6 +301,9 @@ const PROBE = `(async () => {
     return pa.length === pb.length && pa.every((v, i) => Math.abs(v - pb[i]) <= TRACK_TOL_PX)
   }
   const scroller = document.querySelector('.scroller')
+  // 2026-09-10: absent lastView opens the year. This probe is the month engine;
+  // leave the year if the launch table put us there.
+  if (!document.querySelector('.yearview').hidden) document.getElementById('btn-mode').click()
   const sr = scroller.getBoundingClientRect()
   const contentCentre = sr.top + sr.height * 0.5              // SNAP_ALIGN 0.5
   const rows = () => [...document.querySelectorAll('.week')]

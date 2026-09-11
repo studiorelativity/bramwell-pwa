@@ -430,7 +430,7 @@ function buildColors(): HTMLElement {
     // A pressed button styled as the segment control, not a checkbox — iOS PWA
     // checkbox styling is the OPEN.md hazard (brief, step 6).
     const segw = el('div', 'set-seg')
-    const blk = el('button', 'set-segb plan-blocks', 'Blocks')
+    const blk = el('button', 'set-segb plan-blocks', 'Blocks plans')
     blk.type = 'button'
     blk.setAttribute('aria-pressed', String(c.blocks === true))
     blk.setAttribute('aria-label', `${c.label} blocks planning over its days`)
@@ -520,20 +520,20 @@ function buildSheet(): HTMLElement {
     state.savePrefs({ ...state.prefs(), snapStepDays: step })
     h.setSnapStep(step)
   }))
-  body.append(snap)
+  body.append(snap, el('p', 'set-note set-row-note', 'Days between 1st / 16th stops'))
 
   // --- default view ---
   // Written only; never switches the CURRENT view. It is the view a session
   // OPENS in (SPEC "Settings"), which main.ts reads at boot.
   const view = row('Default view')
-  // LABELS are Last/Month/Year — Month/Year to match the header toggle
-  // (2026-08-31), Last for the view the previous session ended in (SPEC
-  // "Settings", amended 2026-09-05). The STORED value is 'last'/'cal'/'year':
+  // LABELS are Last used/Month/Year — Month/Year to match the header toggle
+  // (2026-08-31), Last used for the view the previous session ended in (SPEC
+  // "Settings", amended 2026-09-10). The STORED value is 'last'/'cal'/'year':
   // persisted prefs, and renaming it would silently reset every existing
   // install's default view. An absent field means 'last'.
-  const VIEW_LABEL: Record<'last' | 'cal' | 'year', string> = { last: 'Last', cal: 'Month', year: 'Year' }
-  const VIEW_VALUE: Record<string, 'last' | 'cal' | 'year'> = { Last: 'last', Month: 'cal', Year: 'year' }
-  view.append(segment(['Last', 'Month', 'Year'], VIEW_LABEL[p0.defaultView ?? 'last'], v => {
+  const VIEW_LABEL: Record<'last' | 'cal' | 'year', string> = { last: 'Last used', cal: 'Month', year: 'Year' }
+  const VIEW_VALUE: Record<string, 'last' | 'cal' | 'year'> = { 'Last used': 'last', Month: 'cal', Year: 'year' }
+  view.append(segment(['Last used', 'Month', 'Year'], VIEW_LABEL[p0.defaultView ?? 'last'], v => {
     state.savePrefs({ ...state.prefs(), defaultView: VIEW_VALUE[v] ?? 'last' })
   }))
   body.append(view)
